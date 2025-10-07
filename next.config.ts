@@ -1,5 +1,3 @@
-import type { NextConfig } from "next";
-
 const nextConfig = {
   eslint: {
     // 🚀 本番ビルド時に ESLint エラーで失敗しない（暫定）
