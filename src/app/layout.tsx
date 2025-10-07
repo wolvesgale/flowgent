@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Header } from "@/components/layout/header";
+import { Toaster } from "sonner";
+import Header from '@/components/Header';
 
 export const metadata: Metadata = {
-  title: "FlowGent - EVA Management System",
-  description: "Evangelist and Innovator Management System",
+  title: "FlowGent",
+  description: "Evangelist Management System",
 };
 
 export default function RootLayout({
@@ -14,11 +15,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
-      <body className="antialiased">
+      <body className="antialiased min-h-screen">
         <Header />
-        <main className="min-h-screen bg-gray-50">
-          {children}
+        <main className="p-4 md:p-6">
+          <div className="mx-auto max-w-6xl space-y-6">
+            <div className="flowgent-card p-4 md:p-6">{children}</div>
+          </div>
         </main>
+        <Toaster />
       </body>
     </html>
   );

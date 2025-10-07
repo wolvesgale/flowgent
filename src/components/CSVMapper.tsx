@@ -1,98 +1,113 @@
-"use client";
-import Papa from "papaparse";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
+'use client';
+import Papa from 'papaparse';
+import { useState, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 
 const DB_FIELDS = [
-  { key: "recordId", label: "レコードID" },
-  { key: "firstName", label: "名" },
-  { key: "lastName", label: "姓" },
-  { key: "email", label: "Eメール" },
-  { key: "contactPref", label: "連絡手段" },
-  { key: "tags", label: "タグ（複数可）" },
-  { key: "notes", label: "ノート" },
-  { key: "strengths", label: "強み・スキル" },
-  { key: "tier", label: "ティア" },
+  { key: 'recordId', label: 'Record ID' },
+  { key: 'firstName', label: '名' },
+  { key: 'lastName', label: '姓' },
+  { key: 'email', label: 'Email' },
+  { key: 'contactPref', label: '連絡方法' },
+  { key: 'strengths', label: '強み' },
+  { key: 'notes', label: 'メモ' },
+  { key: 'tier', label: 'Tier (TIER1/TIER2)' },
+  { key: 'tags', label: 'タグ(カンマ区切り可)' },
 ];
 
-// 追加の型
 type CsvRow = Record<string, string | undefined>;
+const BATCH_SIZE = 500;
 
 export default function CSVMapper() {
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<CsvRow[]>([]);
+  const [allRows, setAllRows] = useState<CsvRow[]>([]);
   const [map, setMap] = useState<Record<string, string | string[]>>({});
   const [isImporting, setIsImporting] = useState(false);
 
-  const onFile = (f: File) => {
-    Papa.parse<CsvRow>(f, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (res) => {
-        const data = res.data ?? [];
-        setRows(data.slice(0, 200)); // 最初の200行のみ表示
-        setHeaders(res.meta.fields || []);
-        toast.success(`CSVファイルを読み込みました（${data.length}行）`);
-      },
-      error: (error) => {
-        toast.error(`CSVファイルの読み込みに失敗しました: ${error.message}`);
-      }
-    });
-  };
+  const onFile = useCallback((file: File) => {
+    try {
+      Papa.parse<CsvRow>(file, {
+        header: true,
+        worker: true,
+        skipEmptyLines: true,
+        transformHeader: (h) => (h ?? '').trim(),
+        complete: (res) => {
+          try {
+            const fields = res.meta.fields ?? [];
+            const data = (res.data ?? []).filter(Boolean).slice(0, 200);
+            const allData = (res.data ?? []).filter(Boolean);
+            setHeaders(fields);
+            setRows(data);
+            setAllRows(allData);
+            toast.success(`CSVファイルを読み込みました（${allData.length}行）`);
+          } catch (e: any) {
+            toast.error(`CSV データ処理で例外: ${e?.message ?? e}`);
+          }
+        },
+        error: (err) => {
+          toast.error(`CSV 解析に失敗しました: ${err?.message ?? err}`);
+        },
+      });
+    } catch (e: any) {
+      toast.error(`CSV 読み込みで例外: ${e?.message ?? e}`);
+    }
+  }, []);
 
-  const buildPayload = () => {
-    return rows.map(r => {
+  const buildPayload = useCallback(() => {
+    return allRows.map((r) => {
       const obj: Record<string, unknown> = {};
-      for (const f of DB_FIELDS) {
+      DB_FIELDS.forEach((f) => {
         const m = map[f.key];
-        if (!m) continue;
+        if (!m) return;
         if (Array.isArray(m)) {
-          obj[f.key] = m.map(h => (r[h] ?? '').trim()).filter(Boolean);
+          // 複数ヘッダ→結合
+          obj[f.key] = m.map((h) => (r[h] ?? '').trim()).filter(Boolean);
         } else {
-          obj[f.key] = (r[m] ?? '').trim();
+          const val = (r[m] ?? '').trim();
+          obj[f.key] = f.key === 'tags' ? val.split(',').map(s => s.trim()).filter(Boolean) : val;
         }
-      }
+      });
       return obj;
     });
-  };
+  }, [allRows, map]);
 
-  const importNow = async () => {
-    if (rows.length === 0) {
-      toast.error("CSVファイルを選択してください");
-      return;
-    }
-
-    setIsImporting(true);
-    try {
-      const payload = buildPayload();
-      const res = await fetch("/api/evangelists/import", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ rows: payload })
+  async function importInBatches(payload: any[]) {
+    for (let i = 0; i < payload.length; i += BATCH_SIZE) {
+      const chunk = payload.slice(i, i + BATCH_SIZE);
+      const res = await fetch('/api/evangelists/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({ rows: chunk }),
       });
-
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Import failed");
+        const text = await res.text();
+        throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${text}`);
       }
+    }
+  }
 
-      const result = await res.json();
-      toast.success(`インポートが完了しました（${result.count}件）`);
+  const handleImport = async () => {
+    try {
+      if (!allRows.length) return toast.error('CSV データが空です');
+      const payload = buildPayload();
+      setIsImporting(true);
+      await importInBatches(payload);
+      toast.success('インポートが完了しました');
       
       // リセット
       setHeaders([]);
       setRows([]);
+      setAllRows([]);
       setMap({});
-    } catch (error) {
-      console.error("Import error:", error);
-      toast.error(error instanceof Error ? error.message : "インポートに失敗しました");
+    } catch (e: any) {
+      toast.error(`インポートエラー: ${e?.message ?? e}`);
     } finally {
       setIsImporting(false);
     }
@@ -117,9 +132,9 @@ export default function CSVMapper() {
               />
             </div>
             
-            {rows.length > 0 && (
+            {allRows.length > 0 && (
               <div className="text-sm text-muted-foreground">
-                {rows.length}行のデータが読み込まれました（最初の200行を表示）
+                {allRows.length}行のデータが読み込まれました（最初の200行を表示）
               </div>
             )}
           </div>
@@ -237,12 +252,12 @@ export default function CSVMapper() {
 
       {headers.length > 0 && (
         <div className="flex justify-end">
-          <Button 
-            onClick={importNow} 
-            disabled={isImporting || rows.length === 0}
-            size="lg"
+          <Button
+            onClick={handleImport}
+            disabled={allRows.length === 0 || isImporting}
+            className="w-full"
           >
-            {isImporting ? "インポート中..." : "インポート"}
+            {isImporting ? 'インポート中...' : `${allRows.length}件をインポート`}
           </Button>
         </div>
       )}

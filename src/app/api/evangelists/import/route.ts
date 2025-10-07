@@ -4,6 +4,9 @@ import { cookies } from 'next/headers';
 import { prisma } from "@/lib/prisma";
 import { SessionData } from '@/lib/session';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 async function getSessionUserOrThrow() {
   const session = await getIronSession<SessionData>(await cookies(), {
     password: process.env.SESSION_PASSWORD!,
