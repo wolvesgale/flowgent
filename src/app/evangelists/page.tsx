@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,15 +50,7 @@ export default function EvangelistsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const itemsPerPage = 10
 
-  useEffect(() => {
-    fetchUsers()
-  }, [])
-
-  useEffect(() => {
-    fetchEvangelists()
-  }, [currentPage, searchTerm, sortBy, sortOrder, tierFilter, tagFilter, assignedCsFilter, staleFilter])
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/users')
       if (response.ok) {
@@ -68,9 +60,9 @@ export default function EvangelistsPage() {
     } catch (error) {
       console.error('Failed to fetch users:', error)
     }
-  }
+  }, [])
 
-  const fetchEvangelists = async () => {
+  const fetchEvangelists = useCallback(async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams({
@@ -96,7 +88,15 @@ export default function EvangelistsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPage, searchTerm, sortBy, sortOrder, tierFilter, tagFilter, assignedCsFilter, staleFilter])
+
+  useEffect(() => {
+    void fetchUsers()
+  }, [fetchUsers])
+
+  useEffect(() => {
+    void fetchEvangelists()
+  }, [fetchEvangelists])
 
   const handleSort = (field: 'name' | 'tier' | 'createdAt') => {
     if (sortBy === field) {

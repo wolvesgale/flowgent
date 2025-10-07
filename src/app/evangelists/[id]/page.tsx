@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -87,14 +87,7 @@ export default function EvangelistDetailPage() {
   })
   const [isAddingMeeting, setIsAddingMeeting] = useState(false)
 
-  useEffect(() => {
-    if (params.id) {
-      fetchEvangelistData()
-      fetchUsers()
-    }
-  }, [params.id])
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/users?role=CS')
       if (response.ok) {
@@ -104,9 +97,9 @@ export default function EvangelistDetailPage() {
     } catch (error) {
       console.error('Failed to fetch users:', error)
     }
-  }
+  }, [])
 
-  const fetchEvangelistData = async () => {
+  const fetchEvangelistData = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
@@ -131,7 +124,14 @@ export default function EvangelistDetailPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    if (params.id) {
+      void fetchEvangelistData()
+      void fetchUsers()
+    }
+  }, [params.id, fetchEvangelistData, fetchUsers])
 
   const handleSave = async () => {
     try {

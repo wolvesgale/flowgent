@@ -20,18 +20,21 @@ const DB_FIELDS = [
   { key: "tier", label: "ティア" },
 ];
 
+// 追加の型
+type CsvRow = Record<string, string | undefined>;
+
 export default function CSVMapper() {
   const [headers, setHeaders] = useState<string[]>([]);
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<CsvRow[]>([]);
   const [map, setMap] = useState<Record<string, string | string[]>>({});
   const [isImporting, setIsImporting] = useState(false);
 
   const onFile = (f: File) => {
-    Papa.parse(f, {
+    Papa.parse<CsvRow>(f, {
       header: true,
       skipEmptyLines: true,
       complete: (res) => {
-        const data = res.data as any[];
+        const data = res.data ?? [];
         setRows(data.slice(0, 200)); // 最初の200行のみ表示
         setHeaders(res.meta.fields || []);
         toast.success(`CSVファイルを読み込みました（${data.length}行）`);
@@ -44,14 +47,14 @@ export default function CSVMapper() {
 
   const buildPayload = () => {
     return rows.map(r => {
-      const obj: any = {};
+      const obj: Record<string, unknown> = {};
       for (const f of DB_FIELDS) {
         const m = map[f.key];
         if (!m) continue;
         if (Array.isArray(m)) {
-          obj[f.key] = m.map(h => r[h]).filter(Boolean);
+          obj[f.key] = m.map(h => (r[h] ?? '').trim()).filter(Boolean);
         } else {
-          obj[f.key] = r[m];
+          obj[f.key] = (r[m] ?? '').trim();
         }
       }
       return obj;
