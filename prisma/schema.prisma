@@ -1,14 +1,18 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // 任意：migrateの安定化用（Non-poolingがある場合）
+  // directUrl = env("DIRECT_URL")
 }
+
 
 model User {
   id        String  @id @default(cuid())
@@ -18,7 +22,7 @@ model User {
   password  String  // ハッシュ
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   // Relations
   assignedEvangelists Evangelist[]
 }
