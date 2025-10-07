@@ -46,16 +46,18 @@ export default function CSVMapper() {
             setRows(data);
             setAllRows(allData);
             toast.success(`CSVファイルを読み込みました（${allData.length}行）`);
-          } catch (e: any) {
-            toast.error(`CSV データ処理で例外: ${e?.message ?? e}`);
+          } catch (e: unknown) {
+            const errorMessage = e instanceof Error ? e.message : String(e);
+            toast.error(`CSV データ処理で例外: ${errorMessage}`);
           }
         },
         error: (err) => {
           toast.error(`CSV 解析に失敗しました: ${err?.message ?? err}`);
         },
       });
-    } catch (e: any) {
-      toast.error(`CSV 読み込みで例外: ${e?.message ?? e}`);
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      toast.error(`CSV 読み込みで例外: ${errorMessage}`);
     }
   }, []);
 
@@ -77,7 +79,7 @@ export default function CSVMapper() {
     });
   }, [allRows, map]);
 
-  async function importInBatches(payload: any[]) {
+  async function importInBatches(payload: Record<string, unknown>[]) {
     for (let i = 0; i < payload.length; i += BATCH_SIZE) {
       const chunk = payload.slice(i, i + BATCH_SIZE);
       const res = await fetch('/api/evangelists/import', {
@@ -106,8 +108,9 @@ export default function CSVMapper() {
       setRows([]);
       setAllRows([]);
       setMap({});
-    } catch (e: any) {
-      toast.error(`インポートエラー: ${e?.message ?? e}`);
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      toast.error(`インポートエラー: ${errorMessage}`);
     } finally {
       setIsImporting(false);
     }

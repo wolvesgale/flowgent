@@ -8,7 +8,7 @@ export const revalidate = 0;
 export default async function UsersPage() {
   try {
     await requireAdmin();
-  } catch (error) {
+  } catch {
     redirect('/login');
   }
 
