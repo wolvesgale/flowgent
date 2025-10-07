@@ -32,20 +32,33 @@ export default function CSVMapper() {
 
   const onFile = useCallback((file: File) => {
     try {
-      Papa.parse<CsvRow>(file, {
+      Papa.parse<Record<string, string>>(file, {
         header: true,
         worker: true,
         skipEmptyLines: true,
-        transformHeader: (h) => (h ?? '').trim(),
+        // transformHeader削除 - workerでは関数を渡せない
         complete: (res) => {
           try {
-            const fields = res.meta.fields ?? [];
-            const data = (res.data ?? []).filter(Boolean).slice(0, 200);
-            const allData = (res.data ?? []).filter(Boolean);
+            // 手動でヘッダと値を正規化
+            const rawFields = res.meta.fields ?? [];
+            const fields = rawFields.map((h) => (h ?? '').trim());
+            const rawData = (res.data ?? []).filter(Boolean);
+            
+            const data = rawData.map(row => {
+              const out: Record<string, string> = {};
+              fields.forEach((h) => {
+                const originalKey = rawFields[fields.indexOf(h)];
+                out[h] = (row[originalKey] ?? '').trim();
+              });
+              return out;
+            });
+            
+            const displayData = data.slice(0, 200);
+            
             setHeaders(fields);
-            setRows(data);
-            setAllRows(allData);
-            toast.success(`CSVファイルを読み込みました（${allData.length}行）`);
+            setRows(displayData);
+            setAllRows(data);
+            toast.success(`CSVファイルを読み込みました（${data.length}行）`);
           } catch (e: unknown) {
             const errorMessage = e instanceof Error ? e.message : String(e);
             toast.error(`CSV データ処理で例外: ${errorMessage}`);
