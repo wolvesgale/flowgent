@@ -46,7 +46,17 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit
 
     // 検索条件の構築
-    const where: any = {}
+    interface WhereInput {
+      OR?: Array<{
+        name?: { contains: string; mode: 'insensitive' }
+        email?: { contains: string; mode: 'insensitive' }
+        company?: { contains: string; mode: 'insensitive' }
+      }>
+      status?: string
+      requiresIntroduction?: boolean
+    }
+    
+    const where: WhereInput = {}
     
     if (search) {
       where.OR = [

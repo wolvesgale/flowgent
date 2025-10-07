@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
         skip,
         take: limit,
         include: {
-          assignedUser: {
+          assignedCs: {
             select: {
               name: true,
             },

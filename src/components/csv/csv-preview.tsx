@@ -85,7 +85,7 @@ export default function CSVPreview({ onImport }: CSVPreviewProps) {
           required: field.required
         }))
         setMapping(initialMapping)
-      } catch (err) {
+      } catch {
         setError('CSVファイルの読み込みに失敗しました')
       }
     }
@@ -114,7 +114,7 @@ export default function CSVPreview({ onImport }: CSVPreviewProps) {
 
     try {
       await onImport(csvData, mapping)
-    } catch (err) {
+    } catch {
       setError('インポートに失敗しました')
     } finally {
       setIsLoading(false)

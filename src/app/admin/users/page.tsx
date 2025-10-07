@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -48,7 +48,7 @@ export default function AdminUsersPage() {
   })
 
   // ユーザー一覧取得
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams()
@@ -66,7 +66,11 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [searchTerm, roleFilter])
+
+  useEffect(() => {
+    void fetchUsers()
+  }, [fetchUsers])
 
   // 新規ユーザー作成
   const handleCreateUser = async () => {
@@ -82,7 +86,7 @@ export default function AdminUsersPage() {
       toast.success('ユーザーを作成しました')
       setIsCreateDialogOpen(false)
       setNewUser({ name: '', email: '', password: '', role: 'USER' })
-      fetchUsers()
+      void fetchUsers()
     } catch (error) {
       console.error('Error creating user:', error)
       toast.error('ユーザーの作成に失敗しました')
@@ -105,7 +109,7 @@ export default function AdminUsersPage() {
       toast.success('ユーザー情報を更新しました')
       setIsEditDialogOpen(false)
       setSelectedUser(null)
-      fetchUsers()
+      void fetchUsers()
     } catch (error) {
       console.error('Error updating user:', error)
       toast.error('ユーザー情報の更新に失敗しました')
@@ -124,7 +128,7 @@ export default function AdminUsersPage() {
       if (!response.ok) throw new Error('Failed to delete user')
 
       toast.success('ユーザーを削除しました')
-      fetchUsers()
+      void fetchUsers()
     } catch (error) {
       console.error('Error deleting user:', error)
       toast.error('ユーザーの削除に失敗しました')
@@ -194,8 +198,8 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
-    fetchUsers()
-  }, [searchTerm, roleFilter])
+    void fetchUsers()
+  }, [fetchUsers])
 
   return (
     <div className="container mx-auto py-6">

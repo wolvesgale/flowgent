@@ -12,13 +12,13 @@ const updateEvangelistSchema = z.object({
   contactPref: z.string().optional(),
   strengths: z.string().optional(),
   notes: z.string().optional(),
-  tier: z.enum(['BRONZE', 'SILVER', 'GOLD']).optional(),
+  tier: z.enum(['TIER1', 'TIER2']).optional(),
 })
 
 // GET /api/evangelists/[id] - EVA詳細取得
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getIronSession<SessionData>(await cookies(), {
@@ -30,8 +30,10 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { id } = await params
+
     const evangelist = await prisma.evangelist.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         assignedCs: {
           select: {
@@ -59,7 +61,7 @@ export async function GET(
 // PUT /api/evangelists/[id] - EVA情報更新
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getIronSession<SessionData>(await cookies(), {
@@ -71,6 +73,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { id } = await params
     const body = await request.json()
     
     // バリデーション
@@ -86,7 +89,7 @@ export async function PUT(
 
     // EVAが存在するかチェック
     const existingEvangelist = await prisma.evangelist.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!existingEvangelist) {
@@ -95,7 +98,7 @@ export async function PUT(
 
     // EVA情報を更新
     const updatedEvangelist = await prisma.evangelist.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         firstName: evangelistData.firstName,
         lastName: evangelistData.lastName,
@@ -129,7 +132,7 @@ export async function PUT(
 // DELETE /api/evangelists/[id] - EVA削除
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getIronSession<SessionData>(await cookies(), {
@@ -141,9 +144,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { id } = await params
+
     // EVAが存在するかチェック
     const existingEvangelist = await prisma.evangelist.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!existingEvangelist) {
@@ -152,12 +157,12 @@ export async function DELETE(
 
     // 関連する面談記録も削除
     await prisma.meeting.deleteMany({
-      where: { evangelistId: params.id },
+      where: { evangelistId: id },
     })
 
     // EVAを削除
     await prisma.evangelist.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Evangelist deleted successfully' })

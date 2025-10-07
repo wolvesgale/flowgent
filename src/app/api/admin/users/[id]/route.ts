@@ -39,7 +39,7 @@ async function checkAdminPermission() {
 // GET /api/admin/users/[id] - ユーザー詳細取得
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authCheck = await checkAdminPermission()
@@ -47,8 +47,10 @@ export async function GET(
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
 
+    const { id } = await params
+
     const user = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         name: true,
@@ -85,13 +87,15 @@ export async function GET(
 // PUT /api/admin/users/[id] - ユーザー更新
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authCheck = await checkAdminPermission()
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
+
+    const { id } = await params
 
     const body = await request.json()
     
@@ -108,7 +112,7 @@ export async function PUT(
 
     // ユーザーが存在するかチェック
     const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!existingUser) {
@@ -120,7 +124,7 @@ export async function PUT(
       const emailExists = await prisma.user.findFirst({
         where: {
           email: userData.email,
-          id: { not: params.id },
+          id: { not: id },
         },
       })
 
@@ -133,18 +137,25 @@ export async function PUT(
     }
 
     // 更新データを準備
-    const updateData: any = {}
+    interface UpdateData {
+      name?: string
+      email?: string
+      role?: 'ADMIN' | 'CS'
+      password?: string
+      updatedAt: Date
+    }
+    
+    const updateData: UpdateData = { updatedAt: new Date() }
     if (userData.name) updateData.name = userData.name
     if (userData.email) updateData.email = userData.email
     if (userData.role) updateData.role = userData.role
     if (userData.password) {
       updateData.password = await bcrypt.hash(userData.password, 12)
     }
-    updateData.updatedAt = new Date()
 
     // ユーザーを更新
     const updatedUser = await prisma.user.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       select: {
         id: true,
@@ -169,7 +180,7 @@ export async function PUT(
 // DELETE /api/admin/users/[id] - ユーザー削除
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const authCheck = await checkAdminPermission()
@@ -177,9 +188,11 @@ export async function DELETE(
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
 
+    const { id } = await params
+
     // ユーザーが存在するかチェック
     const existingUser = await prisma.user.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         assignedEvangelists: true,
       },
@@ -190,7 +203,7 @@ export async function DELETE(
     }
 
     // 自分自身を削除しようとしていないかチェック
-    if (params.id === authCheck.userId) {
+    if (id === authCheck.userId) {
       return NextResponse.json(
         { error: 'Cannot delete your own account' },
         { status: 400 }
@@ -210,7 +223,7 @@ export async function DELETE(
 
     // ユーザーを削除
     await prisma.user.delete({
-      where: { id: params.id },
+      where: { id },
     })
 
     return NextResponse.json({ message: 'User deleted successfully' })

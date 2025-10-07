@@ -15,7 +15,7 @@ const createMeetingSchema = z.object({
 // GET /api/evangelists/[id]/meetings - 面談履歴取得
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getIronSession<SessionData>(await cookies(), {
@@ -27,9 +27,11 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { id } = await params
+
     // EVAが存在するかチェック
     const evangelist = await prisma.evangelist.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!evangelist) {
@@ -38,7 +40,7 @@ export async function GET(
 
     // 面談履歴を取得（新しい順）
     const meetings = await prisma.meeting.findMany({
-      where: { evangelistId: params.id },
+      where: { evangelistId: id },
       orderBy: { createdAt: 'desc' },
     })
 
@@ -55,7 +57,7 @@ export async function GET(
 // POST /api/evangelists/[id]/meetings - 面談記録作成
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getIronSession<SessionData>(await cookies(), {
@@ -66,6 +68,8 @@ export async function POST(
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const { id } = await params
 
     const body = await request.json()
     
@@ -82,7 +86,7 @@ export async function POST(
 
     // EVAが存在するかチェック
     const evangelist = await prisma.evangelist.findUnique({
-      where: { id: params.id },
+      where: { id },
     })
 
     if (!evangelist) {
@@ -92,13 +96,12 @@ export async function POST(
     // 面談記録を作成
     const meeting = await prisma.meeting.create({
       data: {
-        evangelistId: params.id,
+        evangelistId: id,
         date: new Date(),
         isFirst: meetingData.isFirst,
         summary: meetingData.summary,
         nextActions: meetingData.nextActions,
         contactMethod: meetingData.contactMethod,
-        createdBy: session.userId,
       },
     })
 

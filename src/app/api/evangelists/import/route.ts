@@ -31,7 +31,19 @@ export async function POST(req: NextRequest) {
     const { rows } = await req.json(); // すでにクライアントでマッピング済み [{recordId, firstName,...}]
     if (!Array.isArray(rows)) return NextResponse.json({ error: "invalid" }, { status: 400 });
 
-    const ops = rows.map((r: any) =>
+    interface ImportRow {
+      recordId?: string
+      firstName?: string
+      lastName?: string
+      email?: string
+      contactPref?: string
+      strengths?: string
+      notes?: string
+      tier?: string
+      tags?: string[] | string
+    }
+
+    const ops = rows.map((r: ImportRow) =>
       prisma.evangelist.upsert({
         where: { email: r.email ?? "__no_email__" }, // email優先
         create: {
@@ -42,7 +54,7 @@ export async function POST(req: NextRequest) {
           contactPref: r.contactPref || null,
           strengths: r.strengths || null,
           notes: r.notes || null,
-          tier: r.tier || "TIER2",
+          tier: (r.tier as 'TIER1' | 'TIER2') || "TIER2",
           tags: Array.isArray(r.tags) ? JSON.stringify(r.tags) : (r.tags ? JSON.stringify([r.tags]) : null),
           assignedCsId: user.role === 'CS' ? user.userId : null,
         },
@@ -53,7 +65,7 @@ export async function POST(req: NextRequest) {
           contactPref: r.contactPref || undefined,
           strengths: r.strengths || undefined,
           notes: r.notes || undefined,
-          tier: r.tier || undefined,
+          tier: (r.tier as 'TIER1' | 'TIER2') || undefined,
           tags: Array.isArray(r.tags) ? JSON.stringify(r.tags) : (r.tags ? JSON.stringify([r.tags]) : undefined),
         }
       })

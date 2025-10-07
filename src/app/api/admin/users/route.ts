@@ -13,13 +13,6 @@ const createUserSchema = z.object({
   role: z.enum(['ADMIN', 'CS']).default('CS'),
 })
 
-const updateUserSchema = z.object({
-  name: z.string().min(1, 'Name is required').optional(),
-  email: z.string().email('Invalid email format').optional(),
-  password: z.string().min(6, 'Password must be at least 6 characters').optional(),
-  role: z.enum(['ADMIN', 'CS']).optional(),
-})
-
 // 管理者権限チェック
 async function checkAdminPermission() {
   const session = await getIronSession<SessionData>(await cookies(), {
@@ -60,7 +53,15 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit
 
     // 検索条件を構築
-    const where: any = {}
+    interface WhereInput {
+      OR?: Array<{
+        name?: { contains: string; mode: 'insensitive' }
+        email?: { contains: string; mode: 'insensitive' }
+      }>
+      role?: 'ADMIN' | 'CS'
+    }
+    
+    const where: WhereInput = {}
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },

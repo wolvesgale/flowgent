@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const meeting = await prisma.meeting.create({
       data: {
-        evangelistId: parseInt(body.evangelistId),
+        evangelistId: body.evangelistId,
         date: body.date ? new Date(body.date) : new Date(),
         isFirst: !!body.isFirst,
         summary: body.summary || null,
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
 
     const meetings = await prisma.meeting.findMany({
       where: {
-        evangelistId: parseInt(evangelistId),
+        evangelistId: evangelistId,
       },
       orderBy: {
         date: "desc",

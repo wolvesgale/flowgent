@@ -38,7 +38,7 @@ export default function LoginPage() {
         const data = await response.json();
         setError(data.error || 'ログインに失敗しました');
       }
-    } catch (error) {
+    } catch {
       setError('ネットワークエラーが発生しました');
     } finally {
       setIsLoading(false);

@@ -50,7 +50,7 @@ export async function GET() {
       // 今週の面談予定数（仮実装）
       prisma.meeting.count({
         where: {
-          scheduledAt: {
+          date: {
             gte: new Date(new Date().setDate(new Date().getDate() - new Date().getDay())), // 今週の開始
             lt: new Date(new Date().setDate(new Date().getDate() - new Date().getDay() + 7)) // 来週の開始
           }
