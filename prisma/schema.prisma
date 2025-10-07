@@ -52,6 +52,19 @@ model Evangelist {
   lastName     String?
   email        String?  @unique
   contactPref  String?  // 連絡手段の希望
+  supportPriority String?
+  pattern       String?
+  meetingStatus String?
+  registrationStatus String?
+  lineRegistered String?
+  phoneNumber  String?
+  acquisitionSource String?
+  facebookUrl  String?
+  listAcquired String?
+  matchingListUrl String?
+  contactOwner String?
+  marketingContactStatus String?
+  sourceCreatedAt DateTime?
   strengths    String?  // 強み・専門分野（初回面談で入力）
   notes        String?  // 備考
   tier         Tier     @default(TIER2)
