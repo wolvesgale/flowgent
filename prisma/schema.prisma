@@ -1,0 +1,81 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String  @id @default(cuid())
+  role      Role
+  name      String
+  email     String  @unique
+  password  String  // ハッシュ
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  assignedEvangelists Evangelist[]
+}
+
+enum Role {
+  ADMIN
+  CS
+}
+
+model Innovator {
+  id                   Int      @id @default(autoincrement())
+  name                 String
+  email                String   @unique
+  company              String
+  position             String
+  status               String   @default("ACTIVE") // ACTIVE, INACTIVE
+  requiresIntroduction Boolean  @default(false) // 「紹介必須」フラグ
+  notes                String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model Evangelist {
+  id           String   @id @default(cuid())
+  recordId     String?  @unique // CSV由来のID
+  firstName    String?
+  lastName     String?
+  email        String?  @unique
+  contactPref  String?  // 連絡手段の希望
+  strengths    String?  // 強み・専門分野（初回面談で入力）
+  notes        String?  // 備考
+  tier         Tier     @default(TIER2)
+  assignedCsId String?
+  assignedCs   User?    @relation(fields: [assignedCsId], references: [id])
+  tags         String?  // JSON文字列として保存（配列をJSONで格納）
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  meetings Meeting[]
+
+  @@map("evangelists")
+}
+
+enum Tier {
+  TIER1
+  TIER2
+}
+
+model Meeting {
+  id            String   @id @default(cuid())
+  evangelistId  String
+  evangelist    Evangelist @relation(fields: [evangelistId], references: [id])
+  date          DateTime @default(now())
+  isFirst       Boolean  @default(false)
+  summary       String?  // 前回サマリー or 今回メモ
+  nextActions   String?  // 次回アクション
+  contactMethod String?  // 面談で確認
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

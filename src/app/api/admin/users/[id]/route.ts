@@ -1,0 +1,224 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getIronSession } from 'iron-session'
+import { cookies } from 'next/headers'
+import { prisma } from '@/lib/prisma'
+import { SessionData } from '@/lib/session'
+import { z } from 'zod'
+import bcrypt from 'bcryptjs'
+
+const updateUserSchema = z.object({
+  name: z.string().min(1, 'Name is required').optional(),
+  email: z.string().email('Invalid email format').optional(),
+  password: z.string().min(6, 'Password must be at least 6 characters').optional(),
+  role: z.enum(['ADMIN', 'CS']).optional(),
+})
+
+// 管理者権限チェック
+async function checkAdminPermission() {
+  const session = await getIronSession<SessionData>(await cookies(), {
+    password: process.env.SESSION_PASSWORD!,
+    cookieName: 'flowgent-session',
+  })
+
+  if (!session.isLoggedIn || !session.userId) {
+    return { authorized: false, error: 'Unauthorized', status: 401 }
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { role: true },
+  })
+
+  if (!user || user.role !== 'ADMIN') {
+    return { authorized: false, error: 'Admin access required', status: 403 }
+  }
+
+  return { authorized: true, userId: session.userId }
+}
+
+// GET /api/admin/users/[id] - ユーザー詳細取得
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const authCheck = await checkAdminPermission()
+    if (!authCheck.authorized) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: params.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+        assignedEvangelists: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            tier: true,
+          },
+        },
+      },
+    })
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    return NextResponse.json(user)
+  } catch (error) {
+    console.error('Error fetching user:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// PUT /api/admin/users/[id] - ユーザー更新
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const authCheck = await checkAdminPermission()
+    if (!authCheck.authorized) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
+    }
+
+    const body = await request.json()
+    
+    // バリデーション
+    const validationResult = updateUserSchema.safeParse(body)
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { error: 'Invalid request data', issues: validationResult.error.issues },
+        { status: 400 }
+      )
+    }
+
+    const userData = validationResult.data
+
+    // ユーザーが存在するかチェック
+    const existingUser = await prisma.user.findUnique({
+      where: { id: params.id },
+    })
+
+    if (!existingUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // メールアドレスの重複チェック（自分以外）
+    if (userData.email) {
+      const emailExists = await prisma.user.findFirst({
+        where: {
+          email: userData.email,
+          id: { not: params.id },
+        },
+      })
+
+      if (emailExists) {
+        return NextResponse.json(
+          { error: 'Email already exists' },
+          { status: 409 }
+        )
+      }
+    }
+
+    // 更新データを準備
+    const updateData: any = {}
+    if (userData.name) updateData.name = userData.name
+    if (userData.email) updateData.email = userData.email
+    if (userData.role) updateData.role = userData.role
+    if (userData.password) {
+      updateData.password = await bcrypt.hash(userData.password, 12)
+    }
+    updateData.updatedAt = new Date()
+
+    // ユーザーを更新
+    const updatedUser = await prisma.user.update({
+      where: { id: params.id },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    return NextResponse.json(updatedUser)
+  } catch (error) {
+    console.error('Error updating user:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE /api/admin/users/[id] - ユーザー削除
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const authCheck = await checkAdminPermission()
+    if (!authCheck.authorized) {
+      return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
+    }
+
+    // ユーザーが存在するかチェック
+    const existingUser = await prisma.user.findUnique({
+      where: { id: params.id },
+      include: {
+        assignedEvangelists: true,
+      },
+    })
+
+    if (!existingUser) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    // 自分自身を削除しようとしていないかチェック
+    if (params.id === authCheck.userId) {
+      return NextResponse.json(
+        { error: 'Cannot delete your own account' },
+        { status: 400 }
+      )
+    }
+
+    // 割り当てられたEVAがある場合は警告
+    if (existingUser.assignedEvangelists.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Cannot delete user with assigned evangelists',
+          assignedCount: existingUser.assignedEvangelists.length 
+        },
+        { status: 400 }
+      )
+    }
+
+    // ユーザーを削除
+    await prisma.user.delete({
+      where: { id: params.id },
+    })
+
+    return NextResponse.json({ message: 'User deleted successfully' })
+  } catch (error) {
+    console.error('Error deleting user:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}

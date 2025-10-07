@@ -1,0 +1,126 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getIronSession } from 'iron-session'
+import { cookies } from 'next/headers'
+import { prisma } from '@/lib/prisma'
+import { SessionData } from '@/lib/session'
+
+export async function GET(request: NextRequest) {
+  try {
+    // セッション確認
+    const session = await getIronSession<SessionData>(await cookies(), {
+      password: process.env.SESSION_PASSWORD!,
+      cookieName: 'flowgent-session',
+    })
+
+    if (!session.isLoggedIn) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // クエリパラメータの取得
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '10')
+    const search = searchParams.get('search') || ''
+    const sortBy = searchParams.get('sortBy') || 'createdAt'
+    const sortOrder = searchParams.get('sortOrder') || 'desc'
+    const status = searchParams.get('status') || ''
+    const stale = searchParams.get('stale') // M3: stale=7 for meetings older than 7 days
+    const tag = searchParams.get('tag') // M3: tag filtering
+    const assignedCsId = searchParams.get('assignedCsId') // M3: assigned CS filtering
+
+    const skip = (page - 1) * limit
+
+    // 検索条件の構築
+    const where: any = {}
+    
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { company: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+
+    if (status && status !== 'ALL') {
+      where.status = status
+    }
+
+    // M3: Advanced filtering
+    if (stale) {
+      const staleDays = parseInt(stale)
+      const staleDate = new Date()
+      staleDate.setDate(staleDate.getDate() - staleDays)
+      
+      where.OR = [
+        // No meetings at all
+        { meetings: { none: {} } },
+        // Latest meeting is older than stale days
+        {
+          meetings: {
+            every: {
+              date: {
+                lt: staleDate
+              }
+            }
+          }
+        }
+      ]
+    }
+
+    if (tag) {
+      // Tags are stored as JSON string, so we need to use contains
+      where.tags = {
+        contains: tag
+      }
+    }
+
+    if (assignedCsId) {
+      where.assignedUserId = parseInt(assignedCsId)
+    }
+
+    // ソート条件の構築
+    let orderBy: any = {}
+    if (sortBy === 'name') {
+      orderBy = [{ firstName: sortOrder }, { lastName: sortOrder }]
+    } else {
+      orderBy = { [sortBy]: sortOrder }
+    }
+
+    // データ取得
+    const [evangelists, total] = await Promise.all([
+      prisma.evangelist.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          assignedUser: {
+            select: {
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              meetings: true,
+            },
+          },
+        },
+      }),
+      prisma.evangelist.count({ where }),
+    ])
+
+    return NextResponse.json({
+      evangelists,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    })
+  } catch (error) {
+    console.error('Failed to fetch evangelists:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
