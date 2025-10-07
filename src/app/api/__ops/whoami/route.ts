@@ -1,39 +1,15 @@
-import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/session';
-
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+import { NextResponse } from 'next/server';
+import { getSession } from '@/lib/session';
+
 export async function GET() {
   try {
-    const session = await getSession();
-
-    if (!session.isLoggedIn) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        email: session.email,
-        role: session.role,
-        name: session.name,
-        userId: session.userId,
-      },
-      { 
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-        },
-      }
-    );
-  } catch (error) {
-    console.error('WhoAmI error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    const user = await getSession();
+    return NextResponse.json({ ok: true, user });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : 'error';
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
 }
