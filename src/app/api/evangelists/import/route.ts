@@ -152,8 +152,10 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return prisma.evangelist.create({ data: createData });
-    });
+      // recordId / email が無い行は新規作成（重複は運用で回避）
+      acc.push(prisma.evangelist.create({ data: createData }));
+      return acc;
+    }, [] as PrismaPromise<unknown>[]);
 
     await prisma.$transaction(operations);
     return NextResponse.json({ ok: true, count: operations.length });
