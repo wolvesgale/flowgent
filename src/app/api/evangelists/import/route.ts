@@ -4,7 +4,7 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions } from '@/lib/session-config';
-import type { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import type { SessionData } from '@/lib/session';
 
 export const runtime = 'nodejs';
@@ -78,20 +78,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'invalid' }, { status: 400 });
     }
 
-    const records = rows as ImportRow[]
-
-    const invalidIndex = records.findIndex((r) => {
-      const first = r.firstName?.trim()
-      const last = r.lastName?.trim()
-      return !first || !last
-    })
-
-    if (invalidIndex !== -1) {
-      return NextResponse.json(
-        { error: `Row ${invalidIndex + 1} is missing required first or last name` },
-        { status: 400 },
-      )
-    }
+    const records = rows as ImportRow[];
+    let processedCount = 0;
+    let skippedCount = 0;
+    let duplicateConflicts = 0;
 
     const buildCreateData = (r: ImportRow) => ({
       recordId: r.recordId || null,
@@ -155,39 +145,62 @@ export async function POST(req: NextRequest) {
       // 既存の assignedCsId は基本触らない（暗黙更新を避ける）
     });
 
-    const operations = records.reduce<Prisma.PrismaPromise<unknown>[]>((acc, r) => {
-      const createData = buildCreateData(r);
-      const updateData = buildUpdateData(r);
+    for (const r of records) {
+      const firstName = r.firstName?.trim() ?? '';
+      const lastName = r.lastName?.trim() ?? '';
 
-      if (r.recordId) {
-        acc.push(
-          prisma.evangelist.upsert({
+      if (!firstName || !lastName) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const normalizedRow: ImportRow = { ...r, firstName, lastName };
+      const createData = buildCreateData(normalizedRow);
+      const updateData = buildUpdateData(normalizedRow);
+
+      try {
+        if (r.recordId) {
+          await prisma.evangelist.upsert({
             where: { recordId: r.recordId },
             create: createData,
             update: updateData,
-          }),
-        );
-        return acc;
-      }
+          });
+          processedCount += 1;
+          continue;
+        }
 
-      if (r.email) {
-        acc.push(
-          prisma.evangelist.upsert({
+        if (r.email) {
+          await prisma.evangelist.upsert({
             where: { email: r.email },
             create: createData,
             update: updateData,
-          }),
-        );
-        return acc;
+          });
+          processedCount += 1;
+          continue;
+        }
+
+        // recordId / email が無い行は新規作成（重複は運用で回避）
+        await prisma.evangelist.create({ data: createData });
+        processedCount += 1;
+      } catch (dbError) {
+        if (
+          dbError instanceof PrismaClientKnownRequestError &&
+          dbError.code === 'P2002'
+        ) {
+          duplicateConflicts += 1;
+          continue;
+        }
+
+        throw dbError;
       }
+    }
 
-      // recordId / email が無い行は新規作成（重複は運用で回避）
-      acc.push(prisma.evangelist.create({ data: createData }));
-      return acc;
-    }, []);
-
-    await prisma.$transaction(operations);
-    return NextResponse.json({ ok: true, count: (rows as unknown[]).length });
+    return NextResponse.json({
+      ok: true,
+      count: processedCount,
+      skippedCount: skippedCount + duplicateConflicts,
+      duplicateCount: duplicateConflicts,
+    });
   } catch (error) {
     console.error('CSV import error:', error);
     if (error instanceof Error && error.message === 'Unauthorized') {
@@ -195,6 +208,24 @@ export async function POST(req: NextRequest) {
     }
     if (error instanceof Error && error.message === 'Forbidden') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (error instanceof PrismaClientKnownRequestError) {
+      if (error.code === 'P2021') {
+        return NextResponse.json(
+          {
+            error: 'Database table is missing. Please run prisma migrate deploy on the configured database.',
+            code: 'MISSING_TABLE',
+          },
+          { status: 500 },
+        );
+      }
+
+      if (error.code === 'P1001') {
+        return NextResponse.json(
+          { error: 'Database connection failed. Verify DATABASE_URL configuration.', code: 'DB_UNAVAILABLE' },
+          { status: 503 },
+        );
+      }
     }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

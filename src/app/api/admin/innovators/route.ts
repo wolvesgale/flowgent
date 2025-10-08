@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { sessionOptions } from '@/lib/session-config'
 import type { SessionData } from '@/lib/session'
 import { z } from 'zod'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { PrismaClientInitializationError } from '@prisma/client/runtime/library'
 
 // バリデーションスキーマ
 const innovatorSchema = z.object({
@@ -80,6 +82,20 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Failed to fetch innovators:', error)
+    if (error instanceof PrismaClientKnownRequestError) {
+      if (error.code === 'P2021') {
+        return NextResponse.json(
+          { error: 'Innovator table is not available. Please run migrations on the database.' },
+          { status: 500 }
+        )
+      }
+    }
+    if (error instanceof PrismaClientInitializationError) {
+      return NextResponse.json(
+        { error: 'Database connection failed. Check DATABASE_URL configuration.' },
+        { status: 503 }
+      )
+    }
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -113,6 +129,26 @@ export async function POST(request: NextRequest) {
     }
 
     console.error('Failed to create innovator:', error)
+    if (error instanceof PrismaClientKnownRequestError) {
+      if (error.code === 'P2021') {
+        return NextResponse.json(
+          { error: 'Innovator table is not available. Please run migrations on the database.' },
+          { status: 500 }
+        )
+      }
+      if (error.code === 'P2002') {
+        return NextResponse.json(
+          { error: '同じ企業名またはURLのイノベータが既に存在します' },
+          { status: 409 }
+        )
+      }
+    }
+    if (error instanceof PrismaClientInitializationError) {
+      return NextResponse.json(
+        { error: 'Database connection failed. Check DATABASE_URL configuration.' },
+        { status: 503 }
+      )
+    }
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
