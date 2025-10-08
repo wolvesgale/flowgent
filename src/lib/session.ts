@@ -1,7 +1,7 @@
 import { getIronSession, type IronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import type { NextRequest, NextResponse } from 'next/server';
+import { NextResponse, type NextRequest, type NextResponse as NextResponseType } from 'next/server';
 
 export interface SessionData {
   userId?: string;
@@ -91,11 +91,20 @@ function ensureSessionDefaults(session: IronSession<SessionData>) {
   return session;
 }
 
-export async function getSession(request?: NextRequest, response?: NextResponse) {
+export async function getSession(
+  request?: NextRequest,
+  response?: NextResponseType,
+) {
   const cookieName = resolveCookieName();
 
   if (request && response) {
     const session = await getIronSession<SessionData>(request, response, buildSessionOptions(cookieName));
+    return ensureSessionDefaults(session);
+  }
+
+  if (request && !response) {
+    const workingResponse = new NextResponse();
+    const session = await getIronSession<SessionData>(request, workingResponse, buildSessionOptions(cookieName));
     return ensureSessionDefaults(session);
   }
 

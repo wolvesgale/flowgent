@@ -12,8 +12,8 @@ const createUserSchema = z.object({
 })
 
 // 管理者権限チェック
-async function checkAdminPermission() {
-  const session = await getSession()
+async function checkAdminPermission(request: NextRequest) {
+  const session = await getSession(request)
 
   if (!session.isLoggedIn || !session.userId) {
     return { authorized: false, error: 'Unauthorized', status: 401 }
@@ -34,7 +34,7 @@ async function checkAdminPermission() {
 // GET /api/admin/users - ユーザー一覧取得
 export async function GET(request: NextRequest) {
   try {
-    const authCheck = await checkAdminPermission()
+    const authCheck = await checkAdminPermission(request)
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/users - ユーザー作成
 export async function POST(request: NextRequest) {
   try {
-    const authCheck = await checkAdminPermission()
+    const authCheck = await checkAdminPermission(request)
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }

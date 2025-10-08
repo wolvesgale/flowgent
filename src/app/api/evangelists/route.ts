@@ -33,7 +33,7 @@ interface WhereInput {
 export async function GET(request: NextRequest) {
   try {
     // セッション確認
-    const session = await getSession()
+    const session = await getSession(request)
 
     if (!session.isLoggedIn) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

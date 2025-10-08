@@ -11,8 +11,8 @@ const innovatorSchema = z.object({
   domain: z.enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE']),
 })
 
-async function checkAdminPermission() {
-  const session = await getSession()
+async function checkAdminPermission(request: NextRequest) {
+  const session = await getSession(request)
 
   if (!session.isLoggedIn || session.role !== 'ADMIN') {
     return false
@@ -23,7 +23,7 @@ async function checkAdminPermission() {
 export async function GET(request: NextRequest) {
   try {
     // 管理者権限チェック
-    if (!(await checkAdminPermission())) {
+    if (!(await checkAdminPermission(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // 管理者権限チェック
-    if (!(await checkAdminPermission())) {
+    if (!(await checkAdminPermission(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

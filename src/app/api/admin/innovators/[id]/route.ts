@@ -13,8 +13,8 @@ const innovatorUpdateSchema = z.object({
   message: 'No update fields provided',
 })
 
-async function checkAdminPermission() {
-  const session = await getSession()
+async function checkAdminPermission(request: NextRequest) {
+  const session = await getSession(request)
 
   if (!session.isLoggedIn || session.role !== 'ADMIN') {
     return false
@@ -28,7 +28,7 @@ export async function PUT(
 ) {
   try {
     // 管理者権限チェック
-    if (!(await checkAdminPermission())) {
+    if (!(await checkAdminPermission(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -82,7 +82,7 @@ export async function DELETE(
 ) {
   try {
     // 管理者権限チェック
-    if (!(await checkAdminPermission())) {
+    if (!(await checkAdminPermission(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
