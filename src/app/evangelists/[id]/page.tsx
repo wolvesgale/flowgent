@@ -27,29 +27,70 @@ import {
 
 interface Evangelist {
   id: string
-  recordId?: string
-  firstName?: string
-  lastName?: string
-  email?: string
-  contactPref?: string
-  strengths?: string
-  notes?: string
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+  contactPreference?: string | null
+  strength?: string | null
+  notes?: string | null
   tier: 'TIER1' | 'TIER2'
-  tags?: string
-  assignedUserId?: number
-  assignedUser?: {
-    id: number
+  assignedCsId?: string | null
+  assignedCs?: {
+    id: string
     name: string
-  }
+  } | null
+  phase?: string | null
   createdAt: string
   updatedAt: string
 }
 
 interface User {
-  id: number
+  id: string
   name: string
   role: 'ADMIN' | 'CS'
 }
+
+type EditFormState = {
+  firstName: string
+  lastName: string
+  email: string
+  contactPreference?: string | null
+  strength?: string | null
+  phase?: string | null
+  notes: string
+  tier: 'TIER1' | 'TIER2'
+  assignedCsId?: string | null
+}
+
+const STRENGTH_OPTIONS = [
+  { value: 'HR', label: '人事' },
+  { value: 'IT', label: 'IT' },
+  { value: 'ACCOUNTING', label: '会計' },
+  { value: 'ADVERTISING', label: '広告' },
+  { value: 'MANAGEMENT', label: '経営' },
+  { value: 'SALES', label: '営業' },
+  { value: 'MANUFACTURING', label: '製造' },
+  { value: 'MEDICAL', label: '医療' },
+  { value: 'FINANCE', label: '金融' },
+] as const
+
+const CONTACT_OPTIONS = [
+  { value: 'FACEBOOK', label: 'Facebook' },
+  { value: 'LINE', label: 'LINE' },
+  { value: 'EMAIL', label: 'メール' },
+  { value: 'PHONE', label: '電話' },
+  { value: 'SLACK', label: 'Slack' },
+] as const
+
+const PHASE_OPTIONS = [
+  { value: 'FIRST_CONTACT', label: '初回' },
+  { value: 'REGISTERED', label: '登録' },
+  { value: 'LIST_SHARED', label: 'リスト提供' },
+  { value: 'CANDIDATE_SELECTION', label: '候補抽出' },
+  { value: 'INNOVATOR_REVIEW', label: 'イノベータ確認' },
+  { value: 'INTRODUCING', label: '紹介中' },
+  { value: 'FOLLOW_UP', label: '継続中' },
+] as const
 
 interface Meeting {
   id: string
@@ -76,7 +117,17 @@ export default function EvangelistDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<Partial<Evangelist>>({})
+  const [editForm, setEditForm] = useState<EditFormState>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    contactPreference: undefined,
+    strength: undefined,
+    phase: undefined,
+    notes: '',
+    tier: 'TIER2',
+    assignedCsId: undefined,
+  })
 
   // 新しい面談記録用の状態
   const [newMeeting, setNewMeeting] = useState({
@@ -89,10 +140,12 @@ export default function EvangelistDetailPage() {
 
   const fetchUsers = useCallback(async () => {
     try {
-      const response = await fetch('/api/admin/users?role=CS')
+      const response = await fetch('/api/admin/users?role=CS', {
+        credentials: 'include',
+      })
       if (response.ok) {
         const data = await response.json()
-        setUsers(data.users || [])
+        setUsers((data.users || []) as User[])
       }
     } catch (error) {
       console.error('Failed to fetch users:', error)
@@ -105,16 +158,30 @@ export default function EvangelistDetailPage() {
       setError(null)
 
       // EVA詳細データを取得
-      const evangelistResponse = await fetch(`/api/evangelists/${params.id}`)
+      const evangelistResponse = await fetch(`/api/evangelists/${params.id}`, {
+        credentials: 'include',
+      })
       if (!evangelistResponse.ok) {
         throw new Error('EVAデータの取得に失敗しました')
       }
-      const evangelistData = await evangelistResponse.json()
+      const evangelistData: Evangelist = await evangelistResponse.json()
       setEvangelist(evangelistData)
-      setEditForm(evangelistData)
+      setEditForm({
+        firstName: evangelistData.firstName ?? '',
+        lastName: evangelistData.lastName ?? '',
+        email: evangelistData.email ?? '',
+        contactPreference: evangelistData.contactPreference ?? undefined,
+        strength: evangelistData.strength ?? undefined,
+        phase: evangelistData.phase ?? undefined,
+        notes: evangelistData.notes ?? '',
+        tier: evangelistData.tier,
+        assignedCsId: evangelistData.assignedCsId ?? undefined,
+      })
 
       // 面談履歴を取得
-      const meetingsResponse = await fetch(`/api/evangelists/${params.id}/meetings`)
+      const meetingsResponse = await fetch(`/api/evangelists/${params.id}/meetings`, {
+        credentials: 'include',
+      })
       if (meetingsResponse.ok) {
         const meetingsData = await meetingsResponse.json()
         setMeetings(meetingsData)
@@ -135,20 +202,44 @@ export default function EvangelistDetailPage() {
 
   const handleSave = async () => {
     try {
+      const payload = {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        email: editForm.email,
+        contactPreference: editForm.contactPreference ?? null,
+        strength: editForm.strength ?? null,
+        phase: editForm.phase,
+        notes: editForm.notes,
+        tier: editForm.tier,
+        assignedCsId: editForm.assignedCsId ?? null,
+      }
+
       const response = await fetch(`/api/evangelists/${params.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(editForm),
+        credentials: 'include',
+        body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
         throw new Error('更新に失敗しました')
       }
 
-      const updatedData = await response.json()
+      const updatedData: Evangelist = await response.json()
       setEvangelist(updatedData)
+      setEditForm({
+        firstName: updatedData.firstName ?? '',
+        lastName: updatedData.lastName ?? '',
+        email: updatedData.email ?? '',
+        contactPreference: updatedData.contactPreference ?? undefined,
+        strength: updatedData.strength ?? undefined,
+        phase: updatedData.phase ?? undefined,
+        notes: updatedData.notes ?? '',
+        tier: updatedData.tier,
+        assignedCsId: updatedData.assignedCsId ?? undefined,
+      })
       setIsEditing(false)
       setError(null)
     } catch (err) {
@@ -163,6 +254,7 @@ export default function EvangelistDetailPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify(newMeeting),
       })
 
@@ -257,7 +349,19 @@ export default function EvangelistDetailPage() {
                 size="sm"
                 onClick={() => {
                   setIsEditing(false)
-                  setEditForm(evangelist)
+                  if (evangelist) {
+                    setEditForm({
+                      firstName: evangelist.firstName ?? '',
+                      lastName: evangelist.lastName ?? '',
+                      email: evangelist.email ?? '',
+                      contactPreference: evangelist.contactPreference ?? undefined,
+                      strength: evangelist.strength ?? undefined,
+                      phase: evangelist.phase ?? undefined,
+                      notes: evangelist.notes ?? '',
+                      tier: evangelist.tier,
+                      assignedCsId: evangelist.assignedCsId ?? undefined,
+                    })
+                  }
                 }}
                 className="flex items-center gap-2"
               >
@@ -337,13 +441,31 @@ export default function EvangelistDetailPage() {
                     連絡先
                   </Label>
                   {isEditing ? (
-                    <Input
-                      value={editForm.contactPref || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, contactPref: e.target.value }))}
-                      placeholder="電話番号など"
-                    />
+                    <Select
+                      value={editForm.contactPreference ?? ''}
+                      onValueChange={(value) =>
+                        setEditForm(prev => ({
+                          ...prev,
+                          contactPreference: value || null,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="連絡手段を選択" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white text-slate-900">
+                        <SelectItem value="">未設定</SelectItem>
+                        {CONTACT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
-                    <p className="text-sm">{evangelist.contactPref || '未設定'}</p>
+                    <p className="text-sm">
+                      {CONTACT_OPTIONS.find(option => option.value === evangelist.contactPreference)?.label || '未設定'}
+                    </p>
                   )}
                 </div>
 
@@ -375,14 +497,62 @@ export default function EvangelistDetailPage() {
               <div className="space-y-2">
                 <Label>強み・専門分野</Label>
                 {isEditing ? (
-                  <Textarea
-                    value={editForm.strengths || ''}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, strengths: e.target.value }))}
-                    placeholder="強みや専門分野を入力"
-                    rows={3}
-                  />
+                  <Select
+                    value={editForm.strength ?? ''}
+                    onValueChange={(value) =>
+                      setEditForm(prev => ({
+                        ...prev,
+                        strength: value || null,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="bg-white">
+                      <SelectValue placeholder="強みを選択" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value="">未設定</SelectItem>
+                      {STRENGTH_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 ) : (
-                  <p className="text-sm whitespace-pre-wrap">{evangelist.strengths || '未設定'}</p>
+                  <p className="text-sm whitespace-pre-wrap">
+                    {STRENGTH_OPTIONS.find(option => option.value === evangelist.strength)?.label || '未設定'}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>フェーズ</Label>
+                {isEditing ? (
+                  <Select
+                    value={editForm.phase ?? ''}
+                    onValueChange={(value) =>
+                      setEditForm(prev => ({
+                        ...prev,
+                        phase: value || null,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="bg-white">
+                      <SelectValue placeholder="フェーズを選択" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value="">未設定</SelectItem>
+                      {PHASE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap">
+                    {PHASE_OPTIONS.find(option => option.value === evangelist.phase)?.label || '未設定'}
+                  </p>
                 )}
               </div>
 
@@ -415,11 +585,11 @@ export default function EvangelistDetailPage() {
                 <div className="space-y-2">
                   <Label>担当CS</Label>
                   <Select
-                    value={editForm.assignedUserId?.toString() || ''}
-                    onValueChange={(value) => 
-                      setEditForm(prev => ({ 
-                        ...prev, 
-                        assignedUserId: value ? parseInt(value) : undefined 
+                    value={editForm.assignedCsId ?? ''}
+                    onValueChange={(value) =>
+                      setEditForm(prev => ({
+                        ...prev,
+                        assignedCsId: value || null,
                       }))
                     }
                   >
@@ -429,8 +599,8 @@ export default function EvangelistDetailPage() {
                     <SelectContent>
                       <SelectItem value="">未割り当て</SelectItem>
                       {users.map((user) => (
-                        <SelectItem key={user.id} value={user.id.toString()}>
-                          {user.name}
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name}（{user.role === 'ADMIN' ? '管理者' : 'CS'}）
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -438,7 +608,7 @@ export default function EvangelistDetailPage() {
                 </div>
               ) : (
                 <p className="text-sm">
-                  {evangelist.assignedUser ? evangelist.assignedUser.name : '未割り当て'}
+                  {evangelist.assignedCs ? evangelist.assignedCs.name : '未割り当て'}
                 </p>
               )}
             </CardContent>

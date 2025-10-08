@@ -29,7 +29,7 @@ interface WhereInput {
   tags?: {
     contains: string
   }
-  assignedUserId?: number
+  assignedCsId?: string
 }
 
 export async function GET(request: NextRequest) {
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || ''
     const stale = searchParams.get('stale') // M3: stale=7 for meetings older than 7 days
     const tag = searchParams.get('tag') // M3: tag filtering
-    const assignedCsId = searchParams.get('assignedCsId') // M3: assigned CS filtering
+    const assignedCsId = searchParams.get('assignedCsId') // 担当CSフィルタ
 
     const skip = (page - 1) * limit
 
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (assignedCsId) {
-      where.assignedUserId = parseInt(assignedCsId)
+      where.assignedCsId = assignedCsId
     }
 
     // ソート条件の構築
@@ -125,6 +125,7 @@ export async function GET(request: NextRequest) {
         include: {
           assignedCs: {
             select: {
+              id: true,
               name: true,
             },
           },

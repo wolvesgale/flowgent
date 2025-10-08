@@ -7,13 +7,12 @@ import { z } from 'zod'
 
 // バリデーションスキーマ
 const innovatorUpdateSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  email: z.string().email('Invalid email format'),
-  company: z.string().min(1, 'Company is required'),
-  position: z.string().min(1, 'Position is required'),
-  status: z.enum(['ACTIVE', 'INACTIVE']),
-  requiresIntroduction: z.boolean(),
-  notes: z.string().optional(),
+  company: z.string().min(1, 'Company is required').optional(),
+  url: z.union([z.string().url('Invalid URL'), z.literal('')]).optional().transform((value) => (value === '' ? undefined : value)),
+  introductionPoint: z.string().optional(),
+  domain: z.enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE']).optional(),
+}).refine((data) => Object.keys(data).length > 0, {
+  message: 'No update fields provided',
 })
 
 async function checkAdminPermission() {
@@ -49,7 +48,6 @@ export async function PUT(
     // バリデーション
     const validatedData = innovatorUpdateSchema.parse(body)
 
-    // 存在チェック
     const existingInnovator = await prisma.innovator.findUnique({
       where: { id }
     })
@@ -61,21 +59,6 @@ export async function PUT(
       )
     }
 
-    // メールアドレスの重複チェック（自分以外）
-    if (validatedData.email !== existingInnovator.email) {
-      const emailExists = await prisma.innovator.findUnique({
-        where: { email: validatedData.email }
-      })
-
-      if (emailExists) {
-        return NextResponse.json(
-          { error: 'Email already exists' },
-          { status: 400 }
-        )
-      }
-    }
-
-    // イノベータ更新
     const updatedInnovator = await prisma.innovator.update({
       where: { id },
       data: validatedData,
