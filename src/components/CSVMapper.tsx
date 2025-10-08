@@ -10,10 +10,16 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { UploadCloud, ListChecks, Table as TableIcon, Info, ShieldAlert } from 'lucide-react';
 
+type DbField = {
+  key: string;
+  label: string;
+  isEssential?: boolean;
+};
+
 const DB_FIELDS = [
   { key: 'recordId', label: 'レコードID' },
-  { key: 'firstName', label: '名' },
-  { key: 'lastName', label: '姓' },
+  { key: 'firstName', label: '名', isEssential: true },
+  { key: 'lastName', label: '姓', isEssential: true },
   { key: 'supportPriority', label: 'サポート優先度' },
   { key: 'email', label: 'メールアドレス' },
   { key: 'pattern', label: 'パターン' },
@@ -33,7 +39,7 @@ const DB_FIELDS = [
   { key: 'notes', label: 'メモ' },
   { key: 'tier', label: 'Tier (TIER1/TIER2)' },
   { key: 'tags', label: 'タグ(カンマ区切り可)' },
-] as const;
+] as const satisfies readonly DbField[];
 
 const MULTI_VALUE_FIELDS = new Set(['tags']);
 
@@ -198,7 +204,12 @@ export default function CSVMapper() {
     });
   }, [allRows, headerLookup, map]);
 
-  async function importInBatches(payload: Record<string, unknown>[]) {
+  async function importInBatches(
+    payload: Record<string, unknown>[],
+  ): Promise<{ processed: number; skipped: number }> {
+    let processed = 0;
+    let skipped = 0;
+
     for (let i = 0; i < payload.length; i += BATCH_SIZE) {
       const chunk = payload.slice(i, i + BATCH_SIZE);
       const res = await fetch('/api/evangelists/import', {
@@ -214,7 +225,28 @@ export default function CSVMapper() {
         const text = await res.text();
         throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${text || res.statusText}`);
       }
+
+      let processedInBatch = chunk.length;
+      let skippedInBatch = 0;
+
+      const data = (await res.json().catch(() => null)) as
+        | { count?: number; skippedCount?: number }
+        | null;
+
+      if (data) {
+        if (typeof data.count === 'number') {
+          processedInBatch = data.count;
+        }
+        if (typeof data.skippedCount === 'number') {
+          skippedInBatch = data.skippedCount;
+        }
+      }
+
+      processed += processedInBatch;
+      skipped += skippedInBatch;
     }
+
+    return { processed, skipped };
   }
 
   const handleImport = async () => {
@@ -240,22 +272,43 @@ export default function CSVMapper() {
       );
       if (meaningfulRows.length === 0) return toast.error('選択した列に値が見つかりませんでした');
 
-      const invalidRows = meaningfulRows.filter(
-        (row) => {
+      type PayloadRow = Record<string, unknown> & {
+        firstName?: unknown;
+        lastName?: unknown;
+      };
+
+      const { validRows, skippedRows } = (meaningfulRows as PayloadRow[]).reduce<{
+        validRows: Record<string, unknown>[];
+        skippedRows: number;
+      }>((acc, row) => {
           const firstName = typeof row.firstName === 'string' ? row.firstName.trim() : '';
           const lastName = typeof row.lastName === 'string' ? row.lastName.trim() : '';
-          return firstName.length === 0 || lastName.length === 0;
+
+          if (!firstName || !lastName) {
+            acc.skippedRows += 1;
+            return acc;
+          }
+
+          acc.validRows.push({ ...row, firstName, lastName });
+          return acc;
         },
+        { validRows: [] as Record<string, unknown>[], skippedRows: 0 },
       );
 
-      if (invalidRows.length > 0) {
-        return toast.error('名と姓が入力されていない行があります');
+      if (validRows.length === 0) {
+        return toast.error('名と姓が入力されていないため、インポート可能な行がありません');
       }
 
       setIsImporting(true);
-      await importInBatches(meaningfulRows);
-      toast.success(`${meaningfulRows.length} 件のインポートが完了しました`);
-      setLastImportCount(meaningfulRows.length);
+      const { processed, skipped } = await importInBatches(validRows);
+      const totalSkipped = skippedRows + skipped;
+
+      if (totalSkipped > 0) {
+        toast.success(`${processed} 件のインポートが完了しました（${totalSkipped} 件をスキップ）`);
+      } else {
+        toast.success(`${processed} 件のインポートが完了しました`);
+      }
+      setLastImportCount(processed);
 
       // リセット
       setHeaders([]);
