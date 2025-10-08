@@ -40,10 +40,10 @@ export default function EvangelistImportPage() {
             <div className="mt-4 p-4 bg-muted rounded-lg">
               <h4 className="font-medium mb-2">注意事項：</h4>
               <ul className="text-sm space-y-1 text-muted-foreground">
-                <li>• 同じメールアドレスのデータは上書きされます（メールアドレスが無い場合は新規作成）</li>
+                <li>• 同じメールアドレスまたはレコードIDのデータは上書きされます（どちらも無い場合は新規作成）</li>
                 <li>• 最大200行まで一度にインポート可能です</li>
-                <li>• 必須フィールド：姓、名（メールアドレスは任意）</li>
-                <li>• 取り込み対象：強み・領域・登録有無・リスト提出有無・前回面談・Tier</li>
+                <li>• 必須フィールド：姓、名（メールアドレスと前回面談日時は任意）</li>
+                <li>• 取り込み対象：姓、名、メールアドレス、前回面談日時のみ</li>
               </ul>
             </div>
           </CardContent>

@@ -14,13 +14,8 @@ const DB_FIELDS = [
   { key: 'recordId', label: 'レコードID（任意）' },
   { key: 'lastName', label: '姓（必須）' },
   { key: 'firstName', label: '名（必須）' },
-  { key: 'email', label: 'メールアドレス' },
-  { key: 'tier', label: 'Tier (TIER1/TIER2)' },
-  { key: 'strengths', label: '強み' },
-  { key: 'pattern', label: '領域' },
-  { key: 'registrationStatus', label: '登録有無' },
-  { key: 'listAcquired', label: 'リスト提出有無' },
-  { key: 'meetingStatus', label: '前回面談' },
+  { key: 'email', label: 'メールアドレス（任意）' },
+  { key: 'meetingStatus', label: '前回面談日時' },
 ] as const;
 
 const REQUIRED_FIELDS = ['lastName', 'firstName'] as const;
@@ -152,12 +147,6 @@ export default function CSVMapper() {
           if (REQUIRED_FIELDS.includes(field.key as (typeof REQUIRED_FIELDS)[number])) {
             invalidRows.push(index + 1);
           }
-          return;
-        }
-
-        if (field.key === 'tier') {
-          const normalized = value.toUpperCase();
-          record[field.key] = normalized === 'TIER1' || normalized === 'TIER2' ? normalized : value;
           return;
         }
 
@@ -296,7 +285,7 @@ export default function CSVMapper() {
                 <CardTitle>取り込みフィールドのマッピング</CardTitle>
               </div>
               <CardDescription className="text-slate-600">
-                右側のプルダウンから CSV の列を選択してください。姓と名は必須で、メールアドレスは任意項目です。
+                右側のプルダウンから CSV の列を選択してください。姓と名は必須で、メールアドレスと前回面談日時は任意です。
               </CardDescription>
             </div>
             <ListChecks className="h-6 w-6 text-purple-600" />
@@ -340,7 +329,7 @@ export default function CSVMapper() {
                       }}
                     >
                       <SelectTrigger className="w-full bg-white text-slate-900">
-                        <SelectValue placeholder="（単一列を選択）" />
+                        <SelectValue className="text-slate-900" placeholder="（単一列を選択）" />
                       </SelectTrigger>
                       <SelectContent className="bg-white text-slate-900">
                         <SelectItem value="__CLEAR__">（選択解除）</SelectItem>

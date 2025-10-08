@@ -339,8 +339,8 @@ export default function EvangelistsPage() {
                             handleAssign(evangelist.id, value)
                           }}
                         >
-                          <SelectTrigger className="bg-white">
-                            <SelectValue placeholder="未割り当て" />
+                          <SelectTrigger className="bg-white text-slate-900">
+                            <SelectValue className="text-slate-900" placeholder="未割り当て" />
                           </SelectTrigger>
                           <SelectContent className="bg-white text-slate-900">
                             <SelectItem value="">未割り当て</SelectItem>

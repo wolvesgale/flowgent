@@ -259,10 +259,10 @@ export default function UsersPageContent() {
                   役割
                 </Label>
                 <Select value={newUser.role} onValueChange={(value: 'ADMIN' | 'CS' | 'USER') => setNewUser({ ...newUser, role: value })}>
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue />
+                  <SelectTrigger className="col-span-3 bg-white text-slate-900">
+                    <SelectValue className="text-slate-900" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white text-slate-900">
                     <SelectItem value="USER">USER</SelectItem>
                     <SelectItem value="CS">CS</SelectItem>
                     <SelectItem value="ADMIN">ADMIN</SelectItem>
@@ -296,10 +296,10 @@ export default function UsersPageContent() {
               </div>
             </div>
             <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="役割で絞り込み" />
+              <SelectTrigger className="w-[180px] bg-white text-slate-900">
+                <SelectValue className="text-slate-900" placeholder="役割で絞り込み" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white text-slate-900">
                 <SelectItem value="all">すべての役割</SelectItem>
                 <SelectItem value="ADMIN">ADMIN</SelectItem>
                 <SelectItem value="CS">CS</SelectItem>
@@ -413,10 +413,10 @@ export default function UsersPageContent() {
                 役割
               </Label>
               <Select value={editUser.role} onValueChange={(value: 'ADMIN' | 'CS' | 'USER') => setEditUser({ ...editUser, role: value })}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue />
+                <SelectTrigger className="col-span-3 bg-white text-slate-900">
+                  <SelectValue className="text-slate-900" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-white text-slate-900">
                   <SelectItem value="USER">USER</SelectItem>
                   <SelectItem value="CS">CS</SelectItem>
                   <SelectItem value="ADMIN">ADMIN</SelectItem>

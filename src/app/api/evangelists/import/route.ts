@@ -32,11 +32,6 @@ type ImportRow = {
   firstName?: string;
   lastName?: string;
   email?: string;
-  tier?: string;
-  strengths?: string;
-  pattern?: string;
-  registrationStatus?: string;
-  listAcquired?: string;
   meetingStatus?: string;
 };
 
@@ -45,11 +40,6 @@ type SanitizedRow = {
   firstName: string;
   lastName: string;
   email: string | null;
-  tier: string | null;
-  strengths: string | null;
-  pattern: string | null;
-  registrationStatus: string | null;
-  listAcquired: string | null;
   meetingStatus: string | null;
 };
 
@@ -58,12 +48,6 @@ function normalizeString(value?: unknown): string | null {
   const asString = typeof value === 'string' ? value : String(value);
   const trimmed = asString.trim();
   return trimmed.length > 0 ? trimmed : null;
-}
-
-function normalizeTier(input?: string | null): 'TIER1' | 'TIER2' | null {
-  if (!input) return null;
-  const up = String(input).toUpperCase();
-  return up === 'TIER1' || up === 'TIER2' ? up : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -83,11 +67,6 @@ export async function POST(req: NextRequest) {
       firstName: normalizeString(row.firstName),
       lastName: normalizeString(row.lastName),
       email: normalizeString(row.email),
-      tier: normalizeString(row.tier),
-      strengths: normalizeString(row.strengths),
-      pattern: normalizeString(row.pattern),
-      registrationStatus: normalizeString(row.registrationStatus),
-      listAcquired: normalizeString(row.listAcquired),
       meetingStatus: normalizeString(row.meetingStatus),
     }));
 
@@ -107,11 +86,6 @@ export async function POST(req: NextRequest) {
       firstName: row.firstName!,
       lastName: row.lastName!,
       email: row.email,
-      tier: row.tier,
-      strengths: row.strengths,
-      pattern: row.pattern,
-      registrationStatus: row.registrationStatus,
-      listAcquired: row.listAcquired,
       meetingStatus: row.meetingStatus,
     }));
 
@@ -124,12 +98,7 @@ export async function POST(req: NextRequest) {
       firstName: r.firstName,
       lastName: r.lastName,
       email: r.email ?? null,
-      strengths: r.strengths ?? null,
-      pattern: r.pattern ?? null,
-      registrationStatus: r.registrationStatus ?? null,
-      listAcquired: r.listAcquired ?? null,
       meetingStatus: r.meetingStatus ?? null,
-      tier: normalizeTier(r.tier) ?? 'TIER2',
       assignedCsId: null,
     });
 
@@ -138,12 +107,7 @@ export async function POST(req: NextRequest) {
       firstName: r.firstName,
       lastName: r.lastName,
       email: r.email ?? undefined,
-      strengths: r.strengths ?? undefined,
-      pattern: r.pattern ?? undefined,
-      registrationStatus: r.registrationStatus ?? undefined,
-      listAcquired: r.listAcquired ?? undefined,
       meetingStatus: r.meetingStatus ?? undefined,
-      tier: normalizeTier(r.tier) ?? undefined,
     });
 
     const operations: PrismaPromise<unknown>[] = sanitizedRows.map((row) => {

@@ -32,6 +32,10 @@ interface Evangelist {
   email?: string | null
   contactPreference?: string | null
   strength?: string | null
+  pattern?: string | null
+  registrationStatus?: string | null
+  listAcquired?: string | null
+  meetingStatus?: string | null
   notes?: string | null
   tier: 'TIER1' | 'TIER2'
   assignedCsId?: string | null
@@ -56,6 +60,10 @@ type EditFormState = {
   email: string
   contactPreference?: string | null
   strength?: string | null
+  pattern?: string | null
+  registrationStatus?: string | null
+  listAcquired?: string | null
+  meetingStatus?: string | null
   phase?: string | null
   notes: string
   tier: 'TIER1' | 'TIER2'
@@ -123,6 +131,10 @@ export default function EvangelistDetailPage() {
     email: '',
     contactPreference: undefined,
     strength: undefined,
+    pattern: undefined,
+    registrationStatus: undefined,
+    listAcquired: undefined,
+    meetingStatus: undefined,
     phase: undefined,
     notes: '',
     tier: 'TIER2',
@@ -172,6 +184,10 @@ export default function EvangelistDetailPage() {
         email: evangelistData.email ?? '',
         contactPreference: evangelistData.contactPreference ?? undefined,
         strength: evangelistData.strength ?? undefined,
+        pattern: evangelistData.pattern ?? undefined,
+        registrationStatus: evangelistData.registrationStatus ?? undefined,
+        listAcquired: evangelistData.listAcquired ?? undefined,
+        meetingStatus: evangelistData.meetingStatus ?? undefined,
         phase: evangelistData.phase ?? undefined,
         notes: evangelistData.notes ?? '',
         tier: evangelistData.tier,
@@ -205,6 +221,10 @@ export default function EvangelistDetailPage() {
       const trimmedFirstName = editForm.firstName.trim()
       const trimmedLastName = editForm.lastName.trim()
       const trimmedEmail = editForm.email.trim()
+      const trimmedPattern = editForm.pattern?.trim() ?? ''
+      const trimmedRegistrationStatus = editForm.registrationStatus?.trim() ?? ''
+      const trimmedListAcquired = editForm.listAcquired?.trim() ?? ''
+      const trimmedMeetingStatus = editForm.meetingStatus?.trim() ?? ''
 
       const payload = {
         ...(trimmedFirstName ? { firstName: trimmedFirstName } : {}),
@@ -212,6 +232,10 @@ export default function EvangelistDetailPage() {
         ...(trimmedEmail ? { email: trimmedEmail } : {}),
         contactPreference: editForm.contactPreference ?? null,
         strength: editForm.strength ?? null,
+        pattern: trimmedPattern || null,
+        registrationStatus: trimmedRegistrationStatus || null,
+        listAcquired: trimmedListAcquired || null,
+        meetingStatus: trimmedMeetingStatus || null,
         phase: editForm.phase,
         notes: editForm.notes,
         tier: editForm.tier,
@@ -239,6 +263,10 @@ export default function EvangelistDetailPage() {
         email: updatedData.email ?? '',
         contactPreference: updatedData.contactPreference ?? undefined,
         strength: updatedData.strength ?? undefined,
+        pattern: updatedData.pattern ?? undefined,
+        registrationStatus: updatedData.registrationStatus ?? undefined,
+        listAcquired: updatedData.listAcquired ?? undefined,
+        meetingStatus: updatedData.meetingStatus ?? undefined,
         phase: updatedData.phase ?? undefined,
         notes: updatedData.notes ?? '',
         tier: updatedData.tier,
@@ -360,6 +388,10 @@ export default function EvangelistDetailPage() {
                       email: evangelist.email ?? '',
                       contactPreference: evangelist.contactPreference ?? undefined,
                       strength: evangelist.strength ?? undefined,
+                      pattern: evangelist.pattern ?? undefined,
+                      registrationStatus: evangelist.registrationStatus ?? undefined,
+                      listAcquired: evangelist.listAcquired ?? undefined,
+                      meetingStatus: evangelist.meetingStatus ?? undefined,
                       phase: evangelist.phase ?? undefined,
                       notes: evangelist.notes ?? '',
                       tier: evangelist.tier,
@@ -454,11 +486,11 @@ export default function EvangelistDetailPage() {
                         }))
                       }
                     >
-                      <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="連絡手段を選択" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white text-slate-900">
-                        <SelectItem value="">未設定</SelectItem>
+                    <SelectTrigger className="bg-white text-slate-900">
+                      <SelectValue className="text-slate-900" placeholder="連絡手段を選択" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value="">未設定</SelectItem>
                         {CONTACT_OPTIONS.map((option) => (
                           <SelectItem key={option.value} value={option.value}>
                             {option.label}
@@ -482,11 +514,11 @@ export default function EvangelistDetailPage() {
                         setEditForm(prev => ({ ...prev, tier: value }))
                       }
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="TIER1">TIER1</SelectItem>
+                    <SelectTrigger className="text-slate-900">
+                      <SelectValue className="text-slate-900" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value="TIER1">TIER1</SelectItem>
                         <SelectItem value="TIER2">TIER2</SelectItem>
                       </SelectContent>
                     </Select>
@@ -510,8 +542,8 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="強みを選択" />
+                    <SelectTrigger className="bg-white text-slate-900">
+                      <SelectValue className="text-slate-900" placeholder="強みを選択" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-slate-900">
                       <SelectItem value="">未設定</SelectItem>
@@ -541,8 +573,8 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="フェーズを選択" />
+                    <SelectTrigger className="bg-white text-slate-900">
+                      <SelectValue className="text-slate-900" placeholder="フェーズを選択" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-slate-900">
                       <SelectItem value="">未設定</SelectItem>
@@ -558,6 +590,60 @@ export default function EvangelistDetailPage() {
                     {PHASE_OPTIONS.find(option => option.value === evangelist.phase)?.label || '未設定'}
                   </p>
                 )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>領域</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editForm.pattern ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, pattern: e.target.value }))}
+                      placeholder="例：IT、人事 など"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.pattern || '未設定'}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>登録有無</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editForm.registrationStatus ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, registrationStatus: e.target.value }))}
+                      placeholder="例：登録済 / 未登録"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.registrationStatus || '未設定'}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>リスト提出有無</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editForm.listAcquired ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, listAcquired: e.target.value }))}
+                      placeholder="例：提出済 / 未提出"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.listAcquired || '未設定'}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>前回面談日時</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editForm.meetingStatus ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, meetingStatus: e.target.value }))}
+                      placeholder="例：2024-03-15"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.meetingStatus || '未設定'}</p>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -597,10 +683,10 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="CSを選択してください" />
+                    <SelectTrigger className="text-slate-900">
+                      <SelectValue className="text-slate-900" placeholder="CSを選択してください" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-white text-slate-900">
                       <SelectItem value="">未割り当て</SelectItem>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
