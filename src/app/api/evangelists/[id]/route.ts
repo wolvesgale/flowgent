@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const updateEvangelistSchema = z
   .object({
@@ -18,8 +19,30 @@ const updateEvangelistSchema = z
       .enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE'])
       .optional()
       .nullable(),
+    pattern: z.string().min(1).optional().nullable(),
+    registrationStatus: z.string().min(1).optional().nullable(),
+    listAcquired: z.string().min(1).optional().nullable(),
+    meetingStatus: z.string().min(1).optional().nullable(),
+    nextActionNote: z.string().min(1).optional().nullable(),
+    nextActionDueOn: z.string().min(1).optional().nullable(),
     phase: z
-      .enum(['FIRST_CONTACT', 'REGISTERED', 'LIST_SHARED', 'CANDIDATE_SELECTION', 'INNOVATOR_REVIEW', 'INTRODUCING', 'FOLLOW_UP'])
+      .enum([
+        'INQUIRY',
+        'FIRST_MEETING',
+        'REGISTERED',
+        'LIST_MATCHING',
+        'INNOVATOR_CONFIRM',
+        'INTRODUCTION',
+        'DEAL_SETTING',
+        'FIRST_RESULT',
+        'CONTINUOUS_PROPOSAL',
+        'FIRST_CONTACT',
+        'LIST_SHARED',
+        'CANDIDATE_SELECTION',
+        'INNOVATOR_REVIEW',
+        'INTRODUCING',
+        'FOLLOW_UP',
+      ])
       .optional(),
     notes: z.string().optional().nullable(),
     tier: z.enum(['TIER1', 'TIER2']).optional(),
@@ -35,10 +58,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), {
-      password: process.env.SESSION_PASSWORD!,
-      cookieName: 'flowgent-session',
-    })
+    const session = await getSession(request)
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -78,10 +98,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), {
-      password: process.env.SESSION_PASSWORD!,
-      cookieName: 'flowgent-session',
-    })
+    const session = await getSession(request)
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -133,6 +150,28 @@ export async function PUT(
       updateData.strength = evangelistData.strength ?? null
     }
 
+    if (evangelistData.pattern !== undefined) {
+      updateData.pattern = evangelistData.pattern ?? null
+    }
+
+    if (evangelistData.registrationStatus !== undefined) {
+      updateData.registrationStatus = evangelistData.registrationStatus ?? null
+    }
+
+    if (evangelistData.listAcquired !== undefined) {
+      updateData.listAcquired = evangelistData.listAcquired ?? null
+    }
+
+    if (evangelistData.meetingStatus !== undefined) {
+      updateData.meetingStatus = evangelistData.meetingStatus ?? null
+    }
+    if (evangelistData.nextActionNote !== undefined) {
+      updateData.meetingStatus = evangelistData.nextActionNote ?? null
+    }
+    if (evangelistData.nextActionDueOn !== undefined) {
+      updateData.supportPriority = evangelistData.nextActionDueOn ?? null
+    }
+
     if (evangelistData.phase !== undefined) {
       updateData.phase = evangelistData.phase
     }
@@ -178,10 +217,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), {
-      password: process.env.SESSION_PASSWORD!,
-      cookieName: 'flowgent-session',
-    })
+    const session = await getSession(request)
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

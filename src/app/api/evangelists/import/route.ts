@@ -1,77 +1,50 @@
 // src/app/api/evangelists/import/route.ts
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-import { getIronSession } from 'iron-session';
-import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
-import type { SessionData } from '@/lib/session';
+import { getSession } from '@/lib/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-async function getSessionUserOrThrow(): Promise<SessionData> {
-  const session = await getIronSession<SessionData>(await cookies(), {
-    password: process.env.SESSION_PASSWORD!,
-    cookieName: 'flowgent-session',
-  });
-  if (!session.isLoggedIn || !session.userId) {
-    throw new Error('Unauthorized');
-  }
-  return session;
-}
-
-function requireRole(user: SessionData, roles: string[]) {
-  if (!roles.includes(user.role || '')) {
-    throw new Error('Forbidden');
-  }
-}
-
-// クライアント側 CSV マッピング後の行型（main 仕様）
+// クライアント側 CSV マッピング後の行型
 type ImportRow = {
-  // 識別系
-  recordId?: string;
-  email?: string;
-
-  // プロフィール/状態系
+  __lineNumber?: number;
   firstName?: string;
   lastName?: string;
-  contactPref?: string;
-  supportPriority?: string;
-  pattern?: string;
-  meetingStatus?: string;
-  registrationStatus?: string;
-  lineRegistered?: string;
-  phoneNumber?: string;
-  acquisitionSource?: string;
-  facebookUrl?: string;
-  listAcquired?: string;
-  matchingListUrl?: string;
-  contactOwner?: string;
-  marketingContactStatus?: string;
-  sourceCreatedAt?: string; // CSVは文字列で来る想定
-  strengths?: string;
-  notes?: string;
-  tier?: string;            // "TIER1" | "TIER2" 以外は無視
-  tags?: string[] | string; // UIで配列/文字列どちらでも
+  email?: string;
 };
 
-function parseSourceCreatedAt(value?: string | null): Date | null {
-  if (!value) return null;
-  // 例: "2025/10/06 12:34" → "2025-10-06T12:34"
-  const normalized = value.replace(/\//g, '-').replace(' ', 'T');
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime()) ? null : date;
+type SanitizedRow = {
+  lineNumber: number;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+};
+
+function normalizeString(value?: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const asString = typeof value === 'string' ? value : String(value);
+  const trimmed = asString.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-function normalizeTier(input?: string | null): 'TIER1' | 'TIER2' | null {
-  if (!input) return null;
-  const up = String(input).toUpperCase();
-  return up === 'TIER1' || up === 'TIER2' ? up : null;
+function normalizeEmail(value?: unknown): string | null {
+  const normalized = normalizeString(value);
+  return normalized ? normalized.toLowerCase() : null;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getSessionUserOrThrow();
-    requireRole(user, ['ADMIN', 'CS']);
+    const session = await getSession(req);
+
+    if (!session.isLoggedIn || !session.userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.role !== 'ADMIN' && session.role !== 'CS') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await req.json();
     const rows: unknown = (body ?? {}).rows;
@@ -79,108 +52,79 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'invalid' }, { status: 400 });
     }
 
-    const buildCreateData = (r: ImportRow) => ({
-      recordId: r.recordId || null,
-      firstName: r.firstName || null,
-      lastName: r.lastName || null,
-      email: r.email || null,
-      contactPref: r.contactPref || null,
-      supportPriority: r.supportPriority || null,
-      pattern: r.pattern || null,
-      meetingStatus: r.meetingStatus || null,
-      registrationStatus: r.registrationStatus || null,
-      lineRegistered: r.lineRegistered || null,
-      phoneNumber: r.phoneNumber || null,
-      acquisitionSource: r.acquisitionSource || null,
-      facebookUrl: r.facebookUrl || null,
-      listAcquired: r.listAcquired || null,
-      matchingListUrl: r.matchingListUrl || null,
-      contactOwner: r.contactOwner || null,
-      marketingContactStatus: r.marketingContactStatus || null,
-      sourceCreatedAt: parseSourceCreatedAt(r.sourceCreatedAt) || null,
-      strengths: r.strengths || null,
-      notes: r.notes || null,
-      tier: normalizeTier(r.tier) ?? 'TIER2',
-      tags: Array.isArray(r.tags)
-        ? JSON.stringify(r.tags)
-        : r.tags
-          ? JSON.stringify([r.tags])
-          : null,
-      // CS であれば自動割当、Admin は空で作る
-      assignedCsId: user.role === 'CS' ? user.userId : null,
-    });
+    const prelimRows = (rows as ImportRow[]).map((row, index) => ({
+      lineNumber:
+        typeof row.__lineNumber === 'number' && Number.isFinite(row.__lineNumber)
+          ? Math.max(1, Math.floor(row.__lineNumber))
+          : index + 1,
+      firstName: normalizeString(row.firstName),
+      lastName: normalizeString(row.lastName),
+      email: normalizeEmail(row.email),
+    }));
 
-    const buildUpdateData = (r: ImportRow) => ({
-      recordId: r.recordId || undefined,
-      firstName: r.firstName || undefined,
-      lastName: r.lastName || undefined,
-      email: r.email || undefined,
-      contactPref: r.contactPref || undefined,
-      supportPriority: r.supportPriority || undefined,
-      pattern: r.pattern || undefined,
-      meetingStatus: r.meetingStatus || undefined,
-      registrationStatus: r.registrationStatus || undefined,
-      lineRegistered: r.lineRegistered || undefined,
-      phoneNumber: r.phoneNumber || undefined,
-      acquisitionSource: r.acquisitionSource || undefined,
-      facebookUrl: r.facebookUrl || undefined,
-      listAcquired: r.listAcquired || undefined,
-      matchingListUrl: r.matchingListUrl || undefined,
-      contactOwner: r.contactOwner || undefined,
-      marketingContactStatus: r.marketingContactStatus || undefined,
-      sourceCreatedAt: parseSourceCreatedAt(r.sourceCreatedAt) || undefined,
-      strengths: r.strengths || undefined,
-      notes: r.notes || undefined,
-      tier: normalizeTier(r.tier) || undefined,
-      tags: Array.isArray(r.tags)
-        ? JSON.stringify(r.tags)
-        : r.tags
-          ? JSON.stringify([r.tags])
-          : undefined,
-      // 既存の assignedCsId は基本触らない（暗黙更新を避ける）
-    });
+    const sanitizedRows: SanitizedRow[] = [];
+    const skippedRowNumbers: number[] = [];
 
-    const operations = (rows as ImportRow[]).reduce((acc, r) => {
-      const createData = buildCreateData(r);
-      const updateData = buildUpdateData(r);
-
-      if (r.recordId) {
-        acc.push(
-          prisma.evangelist.upsert({
-            where: { recordId: r.recordId },
-            create: createData,
-            update: updateData,
-          }),
-        );
-        return acc;
+    prelimRows.forEach((row) => {
+      if (!row.firstName || !row.lastName) {
+        skippedRowNumbers.push(row.lineNumber);
+        return;
       }
 
-      if (r.email) {
-        acc.push(
-          prisma.evangelist.upsert({
-            where: { email: r.email },
-            create: createData,
-            update: updateData,
-          }),
-        );
-        return acc;
+      sanitizedRows.push({
+        lineNumber: row.lineNumber,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        email: row.email,
+      });
+    });
+
+    if (sanitizedRows.length === 0) {
+      return NextResponse.json({ ok: true, count: 0, skippedRowNumbers }, { status: 200 });
+    }
+
+    const failedRowNumbers: number[] = [];
+    let successCount = 0;
+
+    for (const row of sanitizedRows) {
+      try {
+        if (row.email) {
+          await prisma.evangelist.upsert({
+            where: { email: row.email },
+            update: {
+              firstName: row.firstName,
+              lastName: row.lastName,
+            },
+            create: {
+              firstName: row.firstName,
+              lastName: row.lastName,
+              email: row.email,
+              assignedCsId: null,
+            },
+          });
+        } else {
+          await prisma.evangelist.create({
+            data: {
+              firstName: row.firstName,
+              lastName: row.lastName,
+              assignedCsId: null,
+            },
+          });
+        }
+
+        successCount += 1;
+      } catch (err) {
+        console.error('CSV row import error:', {
+          lineNumber: row.lineNumber,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        failedRowNumbers.push(row.lineNumber);
       }
+    }
 
-      // recordId / email が無い行は新規作成（重複は運用で回避）
-      acc.push(prisma.evangelist.create({ data: createData }));
-      return acc;
-    }, [] as Promise<unknown>[]);
-
-    await prisma.$transaction(operations);
-    return NextResponse.json({ ok: true, count: (rows as unknown[]).length });
+    return NextResponse.json({ ok: true, count: successCount, skippedRowNumbers, failedRowNumbers });
   } catch (error) {
     console.error('CSV import error:', error);
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    if (error instanceof Error && error.message === 'Forbidden') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
