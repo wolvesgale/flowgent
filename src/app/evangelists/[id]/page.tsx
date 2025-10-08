@@ -30,7 +30,7 @@ interface Evangelist {
   firstName?: string | null
   lastName?: string | null
   email?: string | null
-  contactPreference?: string | null
+  contactMethod?: string | null
   strength?: string | null
   notes?: string | null
   tier: 'TIER1' | 'TIER2'
@@ -39,7 +39,10 @@ interface Evangelist {
     id: string
     name: string
   } | null
-  phase?: string | null
+  managementPhase?: string | null
+  listProvided?: boolean | null
+  nextAction?: string | null
+  nextActionDueOn?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -54,12 +57,15 @@ type EditFormState = {
   firstName: string
   lastName: string
   email: string
-  contactPreference?: string | null
+  contactMethod?: string | null
   strength?: string | null
-  phase?: string | null
+  managementPhase?: string | null
   notes: string
   tier: 'TIER1' | 'TIER2'
   assignedCsId?: string | null
+  listProvided: boolean
+  nextAction: string
+  nextActionDueOn: string
 }
 
 const STRENGTH_OPTIONS = [
@@ -83,13 +89,15 @@ const CONTACT_OPTIONS = [
 ] as const
 
 const PHASE_OPTIONS = [
-  { value: 'FIRST_CONTACT', label: '初回' },
+  { value: 'INQUIRY', label: '問い合わせ' },
+  { value: 'FIRST_MEETING', label: '初回面談' },
   { value: 'REGISTERED', label: '登録' },
-  { value: 'LIST_SHARED', label: 'リスト提供' },
-  { value: 'CANDIDATE_SELECTION', label: '候補抽出' },
+  { value: 'LIST_PROVIDED', label: 'リスト提供/突合' },
   { value: 'INNOVATOR_REVIEW', label: 'イノベータ確認' },
-  { value: 'INTRODUCING', label: '紹介中' },
-  { value: 'FOLLOW_UP', label: '継続中' },
+  { value: 'INTRODUCTION_STARTED', label: '紹介開始' },
+  { value: 'MEETING_SCHEDULED', label: '商談設定' },
+  { value: 'FIRST_RESULT', label: '初回実績' },
+  { value: 'CONTINUED_PROPOSAL', label: '継続提案' },
 ] as const
 
 interface Meeting {
@@ -108,6 +116,13 @@ const TIER_COLORS = {
   TIER2: 'bg-gray-100 text-gray-800'
 }
 
+const formatDate = (value?: string | null) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleDateString('ja-JP')
+}
+
 export default function EvangelistDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -121,12 +136,15 @@ export default function EvangelistDetailPage() {
     firstName: '',
     lastName: '',
     email: '',
-    contactPreference: undefined,
+    contactMethod: undefined,
     strength: undefined,
-    phase: undefined,
+    managementPhase: undefined,
     notes: '',
     tier: 'TIER2',
     assignedCsId: undefined,
+    listProvided: false,
+    nextAction: '',
+    nextActionDueOn: '',
   })
 
   // 新しい面談記録用の状態
@@ -170,12 +188,17 @@ export default function EvangelistDetailPage() {
         firstName: evangelistData.firstName ?? '',
         lastName: evangelistData.lastName ?? '',
         email: evangelistData.email ?? '',
-        contactPreference: evangelistData.contactPreference ?? undefined,
+        contactMethod: evangelistData.contactMethod ?? undefined,
         strength: evangelistData.strength ?? undefined,
-        phase: evangelistData.phase ?? undefined,
+        managementPhase: evangelistData.managementPhase ?? undefined,
         notes: evangelistData.notes ?? '',
         tier: evangelistData.tier,
         assignedCsId: evangelistData.assignedCsId ?? undefined,
+        listProvided: Boolean(evangelistData.listProvided),
+        nextAction: evangelistData.nextAction ?? '',
+        nextActionDueOn: evangelistData.nextActionDueOn
+          ? evangelistData.nextActionDueOn.slice(0, 10)
+          : '',
       })
 
       // 面談履歴を取得
@@ -206,12 +229,17 @@ export default function EvangelistDetailPage() {
         firstName: editForm.firstName,
         lastName: editForm.lastName,
         email: editForm.email,
-        contactPreference: editForm.contactPreference ?? null,
+        contactMethod: editForm.contactMethod ?? null,
         strength: editForm.strength ?? null,
-        phase: editForm.phase,
+        managementPhase: editForm.managementPhase ?? null,
         notes: editForm.notes,
         tier: editForm.tier,
         assignedCsId: editForm.assignedCsId ?? null,
+        listProvided: editForm.listProvided,
+        nextAction: editForm.nextAction ? editForm.nextAction : null,
+        nextActionDueOn: editForm.nextActionDueOn
+          ? new Date(editForm.nextActionDueOn).toISOString()
+          : null,
       }
 
       const response = await fetch(`/api/evangelists/${params.id}`, {
@@ -233,12 +261,17 @@ export default function EvangelistDetailPage() {
         firstName: updatedData.firstName ?? '',
         lastName: updatedData.lastName ?? '',
         email: updatedData.email ?? '',
-        contactPreference: updatedData.contactPreference ?? undefined,
+        contactMethod: updatedData.contactMethod ?? undefined,
         strength: updatedData.strength ?? undefined,
-        phase: updatedData.phase ?? undefined,
+        managementPhase: updatedData.managementPhase ?? undefined,
         notes: updatedData.notes ?? '',
         tier: updatedData.tier,
         assignedCsId: updatedData.assignedCsId ?? undefined,
+        listProvided: Boolean(updatedData.listProvided),
+        nextAction: updatedData.nextAction ?? '',
+        nextActionDueOn: updatedData.nextActionDueOn
+          ? updatedData.nextActionDueOn.slice(0, 10)
+          : '',
       })
       setIsEditing(false)
       setError(null)
@@ -354,12 +387,17 @@ export default function EvangelistDetailPage() {
                       firstName: evangelist.firstName ?? '',
                       lastName: evangelist.lastName ?? '',
                       email: evangelist.email ?? '',
-                      contactPreference: evangelist.contactPreference ?? undefined,
+                      contactMethod: evangelist.contactMethod ?? undefined,
                       strength: evangelist.strength ?? undefined,
-                      phase: evangelist.phase ?? undefined,
+                      managementPhase: evangelist.managementPhase ?? undefined,
                       notes: evangelist.notes ?? '',
                       tier: evangelist.tier,
                       assignedCsId: evangelist.assignedCsId ?? undefined,
+                      listProvided: Boolean(evangelist.listProvided),
+                      nextAction: evangelist.nextAction ?? '',
+                      nextActionDueOn: evangelist.nextActionDueOn
+                        ? evangelist.nextActionDueOn.slice(0, 10)
+                        : '',
                     })
                   }
                 }}
@@ -442,11 +480,11 @@ export default function EvangelistDetailPage() {
                   </Label>
                   {isEditing ? (
                     <Select
-                      value={editForm.contactPreference ?? ''}
+                      value={editForm.contactMethod ?? ''}
                       onValueChange={(value) =>
                         setEditForm(prev => ({
                           ...prev,
-                          contactPreference: value || null,
+                          contactMethod: value || null,
                         }))
                       }
                     >
@@ -464,7 +502,7 @@ export default function EvangelistDetailPage() {
                     </Select>
                   ) : (
                     <p className="text-sm">
-                      {CONTACT_OPTIONS.find(option => option.value === evangelist.contactPreference)?.label || '未設定'}
+                      {CONTACT_OPTIONS.find(option => option.value === evangelist.contactMethod)?.label || '未設定'}
                     </p>
                   )}
                 </div>
@@ -526,14 +564,14 @@ export default function EvangelistDetailPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>フェーズ</Label>
+                <Label>管理フェーズ</Label>
                 {isEditing ? (
                   <Select
-                    value={editForm.phase ?? ''}
+                    value={editForm.managementPhase ?? ''}
                     onValueChange={(value) =>
                       setEditForm(prev => ({
                         ...prev,
-                        phase: value || null,
+                        managementPhase: value || null,
                       }))
                     }
                   >
@@ -551,8 +589,60 @@ export default function EvangelistDetailPage() {
                   </Select>
                 ) : (
                   <p className="text-sm whitespace-pre-wrap">
-                    {PHASE_OPTIONS.find(option => option.value === evangelist.phase)?.label || '未設定'}
+                    {PHASE_OPTIONS.find(option => option.value === evangelist.managementPhase)?.label || '未設定'}
                   </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>リスト提供</Label>
+                {isEditing ? (
+                  <Select
+                    value={editForm.listProvided ? 'true' : 'false'}
+                    onValueChange={(value) =>
+                      setEditForm(prev => ({
+                        ...prev,
+                        listProvided: value === 'true',
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value="true">済</SelectItem>
+                      <SelectItem value="false">未</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{evangelist.listProvided ? '済' : '未'}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>ネクストアクション</Label>
+                {isEditing ? (
+                  <Textarea
+                    value={editForm.nextAction}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, nextAction: e.target.value }))}
+                    placeholder="次のアクションを入力"
+                    rows={3}
+                  />
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap">{evangelist.nextAction || '未設定'}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>NA期日</Label>
+                {isEditing ? (
+                  <Input
+                    type="date"
+                    value={editForm.nextActionDueOn}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, nextActionDueOn: e.target.value }))}
+                  />
+                ) : (
+                  <p className="text-sm">{formatDate(evangelist.nextActionDueOn) || '未設定'}</p>
                 )}
               </div>
 
