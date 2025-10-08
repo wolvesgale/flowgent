@@ -13,7 +13,6 @@ async function getSessionUserOrThrow(): Promise<SessionData> {
     password: process.env.SESSION_PASSWORD!,
     cookieName: 'flowgent-session',
   });
-
   if (!session.isLoggedIn || !session.userId) {
     throw new Error('Unauthorized');
   }
@@ -26,6 +25,7 @@ function requireRole(user: SessionData, roles: string[]) {
   }
 }
 
+// クライアント側 CSV マッピング後の行型（main 仕様）
 type ImportRow = {
   // 識別系
   recordId?: string;
@@ -50,7 +50,7 @@ type ImportRow = {
   sourceCreatedAt?: string; // CSVは文字列で来る想定
   strengths?: string;
   notes?: string;
-  tier?: string;            // "TIER1" | "TIER2"
+  tier?: string;            // "TIER1" | "TIER2" 以外は無視
   tags?: string[] | string; // UIで配列/文字列どちらでも
 };
 
@@ -65,8 +65,7 @@ function parseSourceCreatedAt(value?: string | null): Date | null {
 function normalizeTier(input?: string | null): 'TIER1' | 'TIER2' | null {
   if (!input) return null;
   const up = String(input).toUpperCase();
-  if (up === 'TIER1' || up === 'TIER2') return up;
-  return null;
+  return up === 'TIER1' || up === 'TIER2' ? up : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -76,7 +75,6 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const rows: unknown = (body ?? {}).rows;
-
     if (!Array.isArray(rows)) {
       return NextResponse.json({ error: 'invalid' }, { status: 400 });
     }
@@ -168,13 +166,12 @@ export async function POST(req: NextRequest) {
         return acc;
       }
 
-      // recordId / email が無い行は新規作成（重複の可能性は運用で回避）
+      // recordId / email が無い行は新規作成（重複は運用で回避）
       acc.push(prisma.evangelist.create({ data: createData }));
       return acc;
     }, [] as Promise<unknown>[]);
 
     await prisma.$transaction(operations);
-
     return NextResponse.json({ ok: true, count: (rows as unknown[]).length });
   } catch (error) {
     console.error('CSV import error:', error);

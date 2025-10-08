@@ -67,21 +67,19 @@ export default function CSVMapper() {
   const onFile = useCallback((file: File) => {
     try {
       const canUseWorker = typeof window !== 'undefined' && typeof Worker !== 'undefined';
-
       Papa.parse<(string | number | boolean | null)[]>(file, {
         header: false,
-        worker: canUseWorker,            // structured clone 安全
+        worker: canUseWorker,          // 可能ならWebWorkerでパース
         skipEmptyLines: 'greedy',
         complete: (res) => {
           try {
-            const parsedRows = (res.data ?? []).filter((row): row is (string | number | boolean | null)[] =>
-              Array.isArray(row),
+            const parsedRows = (res.data ?? []).filter(
+              (row): row is (string | number | boolean | null)[] => Array.isArray(row),
             );
             if (parsedRows.length === 0) {
               toast.error('CSV にヘッダ行が見つかりません');
               return;
             }
-
             const rawHeaderRow = parsedRows[0] ?? [];
             const dataRows = parsedRows.slice(1);
             if (dataRows.length === 0) {
@@ -122,7 +120,6 @@ export default function CSVMapper() {
             setAllRows(normalizedRows);
             setMap({});
             setLastImportCount(null);
-
             toast.success(`CSVファイルを読み込みました（${normalizedRows.length}行）`);
           } catch (e: unknown) {
             toast.error(`CSV データ処理で例外: ${e instanceof Error ? e.message : String(e)}`);
@@ -281,7 +278,6 @@ export default function CSVMapper() {
               className="mt-2 bg-white"
             />
           </div>
-
           {allRows.length > 0 && (
             <div className="flex items-center gap-2 rounded-md border border-purple-100 bg-purple-50 px-3 py-2 text-sm text-purple-800">
               <Info className="h-4 w-4" />
@@ -467,9 +463,7 @@ export default function CSVMapper() {
                 </tbody>
               </table>
             </div>
-            {rows.length > 5 && (
-              <div className="mt-3 text-sm text-slate-500">...他 {rows.length - 5} 行</div>
-            )}
+            {rows.length > 5 && <div className="mt-3 text-sm text-slate-500">...他 {rows.length - 5} 行</div>}
           </CardContent>
         </Card>
       )}

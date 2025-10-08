@@ -1,16 +1,12 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 // prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  // 任意：migrateの安定化用（Non-poolingがある場合）
-  // directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // directUrl = env("DIRECT_URL") // 任意
 }
 
 model User {
@@ -32,13 +28,13 @@ enum Role {
 }
 
 model Innovator {
-  id                Int             @id @default(autoincrement())
+  id                Int      @id @default(autoincrement())
   company           String
   url               String?
   introductionPoint String?
   domain            BusinessDomain
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Evangelist {
@@ -80,7 +76,7 @@ enum Tier {
   TIER2
 }
 
-// 以下の enum は将来の型厳格化・UI 用に残しています（現状は使用していません）
+// 以下の enum は将来の型厳格化/UI向けに残置（現状の列は String を使用）
 enum EvangelistStrength {
   HR
   IT
@@ -92,7 +88,6 @@ enum EvangelistStrength {
   MEDICAL
   FINANCE
 }
-
 enum ContactPreference {
   FACEBOOK
   LINE
@@ -100,7 +95,6 @@ enum ContactPreference {
   PHONE
   SLACK
 }
-
 enum EvangelistPhase {
   FIRST_CONTACT
   REGISTERED
