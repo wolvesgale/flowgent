@@ -13,13 +13,12 @@ datasource db {
   // directUrl = env("DIRECT_URL")
 }
 
-
 model User {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   role      Role
   name      String
-  email     String  @unique
-  password  String  // ハッシュ
+  email     String   @unique
+  password  String   // ハッシュ
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -33,48 +32,45 @@ enum Role {
 }
 
 model Innovator {
-  id                   Int      @id @default(autoincrement())
-  name                 String
-  email                String   @unique
-  company              String
-  position             String
-  status               String   @default("ACTIVE") // ACTIVE, INACTIVE
-  requiresIntroduction Boolean  @default(false) // 「紹介必須」フラグ
-  notes                String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                Int             @id @default(autoincrement())
+  company           String
+  url               String?
+  introductionPoint String?
+  domain            BusinessDomain
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 }
 
 model Evangelist {
-  id           String   @id @default(cuid())
-  recordId     String?  @unique // CSV由来のID
-  firstName    String?
-  lastName     String?
-  email        String?  @unique
-  contactPref  String?  // 連絡手段の希望
-  supportPriority String?
-  pattern       String?
-  meetingStatus String?
-  registrationStatus String?
-  lineRegistered String?
-  phoneNumber  String?
-  acquisitionSource String?
-  facebookUrl  String?
-  listAcquired String?
-  matchingListUrl String?
-  contactOwner String?
+  id                     String   @id @default(cuid())
+  recordId               String?  @unique // CSV由来のID
+  firstName              String?
+  lastName               String?
+  email                  String?  @unique
+  contactPref            String?  // 連絡手段の希望
+  supportPriority        String?
+  pattern                String?
+  meetingStatus          String?
+  registrationStatus     String?
+  lineRegistered         String?
+  phoneNumber            String?
+  acquisitionSource      String?
+  facebookUrl            String?
+  listAcquired           String?
+  matchingListUrl        String?
+  contactOwner           String?
   marketingContactStatus String?
-  sourceCreatedAt DateTime?
-  strengths    String?  // 強み・専門分野（初回面談で入力）
-  notes        String?  // 備考
-  tier         Tier     @default(TIER2)
-  assignedCsId String?
-  assignedCs   User?    @relation(fields: [assignedCsId], references: [id])
-  tags         String?  // JSON文字列として保存（配列をJSONで格納）
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  sourceCreatedAt        DateTime?
+  strengths              String?  // 強み・専門分野（初回面談で入力）
+  notes                  String?  // 備考
+  tier                   Tier     @default(TIER2)
+  assignedCsId           String?
+  assignedCs             User?    @relation(fields: [assignedCsId], references: [id])
+  tags                   String?  // JSON文字列として保存（配列をJSONで格納）
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  meetings Meeting[]
+  meetings               Meeting[]
 
   @@map("evangelists")
 }
@@ -84,15 +80,58 @@ enum Tier {
   TIER2
 }
 
+// 以下の enum は将来の型厳格化・UI 用に残しています（現状は使用していません）
+enum EvangelistStrength {
+  HR
+  IT
+  ACCOUNTING
+  ADVERTISING
+  MANAGEMENT
+  SALES
+  MANUFACTURING
+  MEDICAL
+  FINANCE
+}
+
+enum ContactPreference {
+  FACEBOOK
+  LINE
+  EMAIL
+  PHONE
+  SLACK
+}
+
+enum EvangelistPhase {
+  FIRST_CONTACT
+  REGISTERED
+  LIST_SHARED
+  CANDIDATE_SELECTION
+  INNOVATOR_REVIEW
+  INTRODUCING
+  FOLLOW_UP
+}
+
+enum BusinessDomain {
+  HR
+  IT
+  ACCOUNTING
+  ADVERTISING
+  MANAGEMENT
+  SALES
+  MANUFACTURING
+  MEDICAL
+  FINANCE
+}
+
 model Meeting {
-  id            String   @id @default(cuid())
+  id            String     @id @default(cuid())
   evangelistId  String
   evangelist    Evangelist @relation(fields: [evangelistId], references: [id])
-  date          DateTime @default(now())
-  isFirst       Boolean  @default(false)
-  summary       String?  // 前回サマリー or 今回メモ
-  nextActions   String?  // 次回アクション
-  contactMethod String?  // 面談で確認
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  date          DateTime   @default(now())
+  isFirst       Boolean    @default(false)
+  summary       String?    // 前回サマリー or 今回メモ
+  nextActions   String?    // 次回アクション
+  contactMethod String?    // 面談で確認
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 }

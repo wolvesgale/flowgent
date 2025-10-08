@@ -7,13 +7,10 @@ import { z } from 'zod'
 
 // バリデーションスキーマ
 const innovatorSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  email: z.string().email('Invalid email format'),
   company: z.string().min(1, 'Company is required'),
-  position: z.string().min(1, 'Position is required'),
-  status: z.enum(['ACTIVE', 'INACTIVE']),
-  requiresIntroduction: z.boolean(),
-  notes: z.string().optional(),
+  url: z.string().url('Invalid URL').optional().or(z.literal('')).transform((value) => value || undefined),
+  introductionPoint: z.string().optional(),
+  domain: z.enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE']),
 })
 
 async function checkAdminPermission() {
@@ -40,38 +37,30 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const search = searchParams.get('search') || ''
-    const status = searchParams.get('status') || ''
-    const requiresIntroduction = searchParams.get('requiresIntroduction') || ''
+    const domain = searchParams.get('domain') || ''
 
     const skip = (page - 1) * limit
 
     // 検索条件の構築
     interface WhereInput {
       OR?: Array<{
-        name?: { contains: string; mode: 'insensitive' }
-        email?: { contains: string; mode: 'insensitive' }
         company?: { contains: string; mode: 'insensitive' }
+        introductionPoint?: { contains: string; mode: 'insensitive' }
       }>
-      status?: string
-      requiresIntroduction?: boolean
+      domain?: 'HR' | 'IT' | 'ACCOUNTING' | 'ADVERTISING' | 'MANAGEMENT' | 'SALES' | 'MANUFACTURING' | 'MEDICAL' | 'FINANCE'
     }
     
     const where: WhereInput = {}
     
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
         { company: { contains: search, mode: 'insensitive' } },
+        { introductionPoint: { contains: search, mode: 'insensitive' } },
       ]
     }
 
-    if (status && status !== 'ALL') {
-      where.status = status
-    }
-
-    if (requiresIntroduction && requiresIntroduction !== '') {
-      where.requiresIntroduction = requiresIntroduction === 'true'
+    if (domain && domain !== 'ALL') {
+      where.domain = domain as WhereInput['domain']
     }
 
     // データ取得
@@ -112,19 +101,6 @@ export async function POST(request: NextRequest) {
     // バリデーション
     const validatedData = innovatorSchema.parse(body)
 
-    // メールアドレスの重複チェック
-    const existingInnovator = await prisma.innovator.findUnique({
-      where: { email: validatedData.email }
-    })
-
-    if (existingInnovator) {
-      return NextResponse.json(
-        { error: 'Email already exists' },
-        { status: 400 }
-      )
-    }
-
-    // イノベータ作成
     const innovator = await prisma.innovator.create({
       data: validatedData,
     })

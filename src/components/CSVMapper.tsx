@@ -89,7 +89,7 @@ export default function CSVMapper() {
               return;
             }
 
-            // ヘッダ整形（空は「列n」に置換して空valueを作らない）
+            // ヘッダ整形（空は「列n」）
             const initialHeaders: HeaderInfo[] = rawHeaderRow.map((value, index) => {
               const rawValue = value == null ? '' : String(value);
               const trimmed = rawValue.trim();
@@ -97,7 +97,7 @@ export default function CSVMapper() {
               return { id: `col_${index}`, label, raw: rawValue, index };
             });
 
-            // データ側にヘッダ数より多い列があればヘッダを増やす
+            // データ側列が多い場合はヘッダを追加
             const maxColumns = dataRows.reduce(
               (max, row) => Math.max(max, row.length),
               initialHeaders.length,
@@ -197,7 +197,7 @@ export default function CSVMapper() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        credentials: 'include', // 401回避
+        credentials: 'include', // 401回避（Cookie送信）
         body: JSON.stringify({ rows: chunk }),
       });
       if (!res.ok) {
@@ -334,6 +334,7 @@ export default function CSVMapper() {
                       )}
                     </div>
 
+                    {/* 単一列マッピング（Radix Select: 空値禁止→未選択は undefined を使う） */}
                     <Select
                       value={
                         Array.isArray(selected)
@@ -369,6 +370,7 @@ export default function CSVMapper() {
                       </SelectContent>
                     </Select>
 
+                    {/* タグのみ複数列対応 */}
                     {field.key === 'tags' && (
                       <details className="mt-2">
                         <summary className="cursor-pointer text-sm text-slate-600">タグに使う列を複数選択</summary>
@@ -482,16 +484,12 @@ export default function CSVMapper() {
                 <CardTitle>インポートを実行</CardTitle>
               </div>
               <CardDescription className="text-slate-600">
-                インポート後は割り当てられていないEVAに対して CS を設定できます。
+                インポートには管理者または CS 権限のアカウントが必要です。
               </CardDescription>
             </div>
             <ShieldAlert className="h-6 w-6 text-purple-600" />
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              インポートには管理者または CS 権限のアカウントが必要です。
-            </div>
-
             <Button
               onClick={handleImport}
               disabled={allRows.length === 0 || isImporting}
