@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getIronSession } from 'iron-session'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { SessionData } from '@/lib/session'
+import { sessionOptions } from '@/lib/session-config'
+import type { SessionData } from '@/lib/session'
 
 interface WhereInput {
   OR?: Array<{
@@ -35,10 +36,7 @@ interface WhereInput {
 export async function GET(request: NextRequest) {
   try {
     // セッション確認
-    const session = await getIronSession<SessionData>(await cookies(), {
-      password: process.env.SESSION_PASSWORD!,
-      cookieName: 'flowgent-session',
-    })
+    const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
 
     if (!session.isLoggedIn) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

@@ -3,16 +3,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
+import { sessionOptions } from '@/lib/session-config';
+import type { Prisma } from '@prisma/client';
 import type { SessionData } from '@/lib/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 async function getSessionUserOrThrow(): Promise<SessionData> {
-  const session = await getIronSession<SessionData>(await cookies(), {
-    password: process.env.SESSION_PASSWORD!,
-    cookieName: 'flowgent-session',
-  });
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.isLoggedIn || !session.userId) {
     throw new Error('Unauthorized');
   }
@@ -140,7 +139,7 @@ export async function POST(req: NextRequest) {
       // 既存の assignedCsId は基本触らない（暗黙更新を避ける）
     });
 
-    const operations = (rows as ImportRow[]).reduce((acc, r) => {
+    const operations = (rows as ImportRow[]).reduce<Prisma.PrismaPromise<unknown>[]>((acc, r) => {
       const createData = buildCreateData(r);
       const updateData = buildUpdateData(r);
 
@@ -169,7 +168,7 @@ export async function POST(req: NextRequest) {
       // recordId / email が無い行は新規作成（重複は運用で回避）
       acc.push(prisma.evangelist.create({ data: createData }));
       return acc;
-    }, [] as Promise<unknown>[]);
+    }, []);
 
     await prisma.$transaction(operations);
     return NextResponse.json({ ok: true, count: (rows as unknown[]).length });

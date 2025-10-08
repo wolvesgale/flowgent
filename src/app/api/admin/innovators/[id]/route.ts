@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getIronSession } from 'iron-session'
 import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { SessionData } from '@/lib/session'
+import { sessionOptions } from '@/lib/session-config'
+import type { SessionData } from '@/lib/session'
 import { z } from 'zod'
 
 // バリデーションスキーマ
@@ -16,10 +17,7 @@ const innovatorUpdateSchema = z.object({
 })
 
 async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), {
-    password: process.env.SESSION_PASSWORD!,
-    cookieName: 'flowgent-session',
-  })
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
 
   if (!session.isLoggedIn || session.role !== 'ADMIN') {
     return false
