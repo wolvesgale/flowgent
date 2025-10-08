@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
+import type { PrismaPromise } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import type { SessionData } from '@/lib/session';
 
