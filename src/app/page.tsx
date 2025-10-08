@@ -34,16 +34,26 @@ export default function DashboardPage() {
     const fetchUserAndStats = async () => {
       try {
         // ユーザー情報を取得
-        const userResponse = await fetch('/api/auth/me');
+        const userResponse = await fetch('/api/auth/me', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
         if (!userResponse.ok) {
           router.push('/login');
           return;
         }
-        const userData = await userResponse.json();
-        setUser(userData);
+        const userPayload: { user?: User } = await userResponse.json();
+        if (!userPayload.user) {
+          router.push('/login');
+          return;
+        }
+        setUser(userPayload.user);
 
         // ダッシュボード統計を取得
-        const statsResponse = await fetch('/api/dashboard/stats');
+        const statsResponse = await fetch('/api/dashboard/stats', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
           setStats(statsData);
@@ -89,14 +99,17 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 text-white">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <h1 className="text-3xl font-bold mb-2">
           ダッシュボード
         </h1>
-        <p className="text-gray-600">
-          こんにちは、{user.name}さん ({user.role === 'ADMIN' ? '管理者' : 'CS'})
-        </p>
+        <div className="flex items-center gap-2 text-sm opacity-90">
+          <span>こんにちは、{user.name}さん</span>
+          <Badge variant="secondary" className="bg-white/20 text-white">
+            {user.role === 'ADMIN' ? '管理者' : 'CS'}
+          </Badge>
+        </div>
       </div>
 
       {/* 統計カード */}
