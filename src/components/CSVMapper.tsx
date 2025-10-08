@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { UploadCloud, ListChecks, Table as TableIcon, Info, ShieldAlert } from 'lucide-react';
 
 const DB_FIELDS = [
+  { key: 'recordId', label: 'レコードID（任意）' },
   { key: 'lastName', label: '姓（必須）' },
   { key: 'firstName', label: '名（必須）' },
   { key: 'email', label: 'メールアドレス' },
