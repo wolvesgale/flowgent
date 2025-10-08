@@ -7,23 +7,58 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Search, Plus, ArrowUpDown, X } from 'lucide-react'
+import { toast } from 'sonner'
+
+const STRENGTH_LABELS = {
+  HR: '人事',
+  IT: 'IT',
+  ACCOUNTING: '会計',
+  ADVERTISING: '広告',
+  MANAGEMENT: '経営',
+  SALES: '営業',
+  MANUFACTURING: '製造',
+  MEDICAL: '医療',
+  FINANCE: '金融',
+} as const
+
+const CONTACT_LABELS = {
+  FACEBOOK: 'Facebook',
+  LINE: 'LINE',
+  EMAIL: 'メール',
+  PHONE: '電話',
+  SLACK: 'Slack',
+} as const
+
+const PHASE_LABELS = {
+  FIRST_CONTACT: '初回',
+  REGISTERED: '登録',
+  LIST_SHARED: 'リスト提供',
+  CANDIDATE_SELECTION: '候補抽出',
+  INNOVATOR_REVIEW: 'イノベータ確認',
+  INTRODUCING: '紹介中',
+  FOLLOW_UP: '継続中',
+} as const
+
+type StrengthKey = keyof typeof STRENGTH_LABELS
+type ContactKey = keyof typeof CONTACT_LABELS
+type PhaseKey = keyof typeof PHASE_LABELS
 
 interface Evangelist {
-  id: number
-  recordId?: string
-  firstName?: string
-  lastName?: string
-  email?: string
-  contactPref?: string
-  strengths?: string
-  notes?: string
+  id: string
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+  strength?: StrengthKey | null
+  contactPreference?: ContactKey | null
+  phase?: PhaseKey | null
   tier: 'TIER1' | 'TIER2'
-  tags?: string
-  assignedUserId?: number
-  assignedUser?: {
+  assignedCsId?: string | null
+  assignedCs?: {
+    id: string
     name: string
-  }
+  } | null
   createdAt: string
   _count: {
     meetings: number
@@ -31,8 +66,9 @@ interface Evangelist {
 }
 
 interface User {
-  id: number
+  id: string
   name: string
+  role: 'ADMIN' | 'CS'
 }
 
 export default function EvangelistsPage() {
@@ -40,10 +76,9 @@ export default function EvangelistsPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [sortBy, setSortBy] = useState<'name' | 'tier' | 'createdAt'>('createdAt')
+  const [sortBy, setSortBy] = useState<'name' | 'createdAt'>('createdAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [tierFilter, setTierFilter] = useState<'ALL' | 'TIER1' | 'TIER2'>('ALL')
-  const [tagFilter, setTagFilter] = useState('')
   const [assignedCsFilter, setAssignedCsFilter] = useState('')
   const [staleFilter, setStaleFilter] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -52,10 +87,12 @@ export default function EvangelistsPage() {
 
   const fetchUsers = useCallback(async () => {
     try {
-      const response = await fetch('/api/admin/users')
+      const response = await fetch('/api/admin/users?limit=100', {
+        credentials: 'include',
+      })
       if (response.ok) {
         const data = await response.json()
-        setUsers(data.users || [])
+        setUsers((data.users || []) as User[])
       }
     } catch (error) {
       console.error('Failed to fetch users:', error)
@@ -72,12 +109,13 @@ export default function EvangelistsPage() {
         sortBy,
         sortOrder,
         ...(tierFilter !== 'ALL' && { tier: tierFilter }),
-        ...(tagFilter && { tag: tagFilter }),
         ...(assignedCsFilter && { assignedCsId: assignedCsFilter }),
         ...(staleFilter && { stale: staleFilter }),
       })
 
-      const response = await fetch(`/api/evangelists?${params}`)
+      const response = await fetch(`/api/evangelists?${params}` , {
+        credentials: 'include',
+      })
       if (response.ok) {
         const data = await response.json()
         setEvangelists(data.evangelists)
@@ -88,7 +126,7 @@ export default function EvangelistsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentPage, searchTerm, sortBy, sortOrder, tierFilter, tagFilter, assignedCsFilter, staleFilter])
+  }, [currentPage, searchTerm, sortBy, sortOrder, tierFilter, assignedCsFilter, staleFilter])
 
   useEffect(() => {
     void fetchUsers()
@@ -98,7 +136,7 @@ export default function EvangelistsPage() {
     void fetchEvangelists()
   }, [fetchEvangelists])
 
-  const handleSort = (field: 'name' | 'tier' | 'createdAt') => {
+  const handleSort = (field: 'name' | 'createdAt') => {
     if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
     } else {
@@ -107,8 +145,38 @@ export default function EvangelistsPage() {
     }
   }
 
-  const getTierBadgeVariant = (tier: string) => {
-    return tier === 'TIER1' ? 'default' : 'secondary'
+  const handleAssign = async (evangelistId: string, newAssignee: string) => {
+    try {
+      const response = await fetch(`/api/evangelists/${evangelistId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ assignedCsId: newAssignee || null }),
+      })
+
+      if (!response.ok) {
+        throw new Error('担当CSの更新に失敗しました')
+      }
+
+      const updated: Evangelist = await response.json()
+      setEvangelists((prev) =>
+        prev.map((evangelist) =>
+          evangelist.id === evangelistId
+            ? {
+                ...evangelist,
+                assignedCsId: updated.assignedCsId ?? null,
+                assignedCs: updated.assignedCs ?? null,
+              }
+            : evangelist
+        )
+      )
+      toast.success('担当CSを更新しました')
+    } catch (error) {
+      console.error('Failed to assign CS:', error)
+      toast.error('担当CSの更新に失敗しました')
+    }
   }
 
   const formatDate = (dateString: string) => {
@@ -118,22 +186,12 @@ export default function EvangelistsPage() {
   const clearFilters = () => {
     setSearchTerm('')
     setTierFilter('ALL')
-    setTagFilter('')
     setAssignedCsFilter('')
     setStaleFilter('')
     setCurrentPage(1)
   }
 
-  const hasActiveFilters = searchTerm || tierFilter !== 'ALL' || tagFilter || assignedCsFilter || staleFilter
-
-  const parseTags = (tagsString?: string): string[] => {
-    if (!tagsString) return []
-    try {
-      return JSON.parse(tagsString)
-    } catch {
-      return []
-    }
-  }
+  const hasActiveFilters = searchTerm || tierFilter !== 'ALL' || assignedCsFilter || staleFilter
 
   return (
     <div className="container mx-auto py-6">
@@ -178,7 +236,7 @@ export default function EvangelistsPage() {
               )}
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <select
                 value={tierFilter}
                 onChange={(e) => setTierFilter(e.target.value as 'ALL' | 'TIER1' | 'TIER2')}
@@ -189,12 +247,6 @@ export default function EvangelistsPage() {
                 <option value="TIER2">TIER2</option>
               </select>
 
-              <Input
-                placeholder="タグで絞り込み..."
-                value={tagFilter}
-                onChange={(e) => setTagFilter(e.target.value)}
-              />
-
               <select
                 value={assignedCsFilter}
                 onChange={(e) => setAssignedCsFilter(e.target.value)}
@@ -202,8 +254,8 @@ export default function EvangelistsPage() {
               >
                 <option value="">全ての担当CS</option>
                 {users.map((user) => (
-                  <option key={user.id} value={user.id.toString()}>
-                    {user.name}
+                  <option key={user.id} value={user.id}>
+                    {user.name}（{user.role === 'ADMIN' ? '管理者' : 'CS'}）
                   </option>
                 ))}
               </select>
@@ -240,19 +292,10 @@ export default function EvangelistsPage() {
                       </Button>
                     </TableHead>
                     <TableHead>メールアドレス</TableHead>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort('tier')}
-                        className="h-auto p-0 font-semibold"
-                      >
-                        Tier
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>タグ</TableHead>
+                    <TableHead>強み</TableHead>
+                    <TableHead>フェーズ</TableHead>
+                    <TableHead>連絡手段</TableHead>
                     <TableHead>担当CS</TableHead>
-                    <TableHead>ミーティング数</TableHead>
                     <TableHead>
                       <Button
                         variant="ghost"
@@ -274,23 +317,41 @@ export default function EvangelistsPage() {
                       </TableCell>
                       <TableCell>{evangelist.email}</TableCell>
                       <TableCell>
-                        <Badge variant={getTierBadgeVariant(evangelist.tier)}>
-                          {evangelist.tier}
-                        </Badge>
+                        {evangelist.strength ? STRENGTH_LABELS[evangelist.strength] : '—'}
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {parseTags(evangelist.tags).map((tag, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
+                        {evangelist.phase ? (
+                          <Badge variant="outline" className="border-purple-300 bg-purple-50 text-purple-700">
+                            {PHASE_LABELS[evangelist.phase]}
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-slate-500">未設定</span>
+                        )}
                       </TableCell>
                       <TableCell>
-                        {evangelist.assignedUser?.name || '未割り当て'}
+                        {evangelist.contactPreference ? CONTACT_LABELS[evangelist.contactPreference] : '—'}
                       </TableCell>
-                      <TableCell>{evangelist._count.meetings}</TableCell>
+                      <TableCell className="min-w-[180px]">
+                        <Select
+                          value={evangelist.assignedCsId ?? ''}
+                          onValueChange={(value) => {
+                            if ((evangelist.assignedCsId ?? '') === value) return
+                            handleAssign(evangelist.id, value)
+                          }}
+                        >
+                          <SelectTrigger className="bg-white">
+                            <SelectValue placeholder="未割り当て" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white text-slate-900">
+                            <SelectItem value="">未割り当て</SelectItem>
+                            {users.map((user) => (
+                              <SelectItem key={user.id} value={user.id}>
+                                {user.name}（{user.role === 'ADMIN' ? '管理者' : 'CS'}）
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                       <TableCell>{formatDate(evangelist.createdAt)}</TableCell>
                       <TableCell>
                         <Link href={`/evangelists/${evangelist.id}`}>

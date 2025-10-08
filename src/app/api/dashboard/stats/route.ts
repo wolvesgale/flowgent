@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getIronSession } from 'iron-session'
 import { cookies } from 'next/headers'
+import { EvangelistStrength } from '@prisma/client'
+
 import { prisma } from '@/lib/prisma'
 import { SessionData } from '@/lib/session'
 
@@ -60,9 +62,8 @@ export async function GET() {
       // 紹介必須イノベータ数
       prisma.innovator.count({
         where: {
-          requiresIntroduction: true,
-          status: 'ACTIVE'
-        }
+          introductionPoint: null,
+        },
       }),
 
       // 要フォローEVA数（30日以上面談なし）
@@ -90,11 +91,9 @@ export async function GET() {
       // ITタグ持ちEVA数
       prisma.evangelist.count({
         where: {
-          tags: {
-            contains: 'IT'
-          }
-        }
-      })
+          strength: EvangelistStrength.IT,
+        },
+      }),
     ])
 
     return NextResponse.json({
