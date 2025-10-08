@@ -129,9 +129,11 @@ export default function CSVMapper() {
   }, []);
 
   const buildPayload = useCallback(() => {
-    const invalidRows: number[] = [];
-    const records = allRows.map((row, index) => {
+    const skippedRows: number[] = [];
+
+    const records = allRows.reduce<Record<string, unknown>[]>((acc, row, index) => {
       const record: Record<string, unknown> = {};
+      let hasMeaningfulValue = false;
 
       DB_FIELDS.forEach((field) => {
         const mapping = map[field.key];
@@ -144,13 +146,11 @@ export default function CSVMapper() {
         const value = raw == null ? '' : String(raw).trim();
 
         if (!value) {
-          if (REQUIRED_FIELDS.includes(field.key as (typeof REQUIRED_FIELDS)[number])) {
-            invalidRows.push(index + 1);
-          }
           return;
         }
 
         record[field.key] = value;
+        hasMeaningfulValue = true;
       });
 
       const hasAllRequired = REQUIRED_FIELDS.every((key) => {
@@ -162,14 +162,20 @@ export default function CSVMapper() {
         return Boolean(raw != null && String(raw).trim());
       });
 
-      if (!hasAllRequired && !invalidRows.includes(index + 1)) {
-        invalidRows.push(index + 1);
+      if (!hasAllRequired) {
+        skippedRows.push(index + 1);
+        return acc;
       }
 
-      return record;
-    });
+      if (!hasMeaningfulValue) {
+        return acc;
+      }
 
-    return { records, invalidRows };
+      acc.push(record);
+      return acc;
+    }, []);
+
+    return { records, skippedRows };
   }, [allRows, headerLookup, map]);
 
   async function importInBatches(payload: Record<string, unknown>[]) {
@@ -198,26 +204,27 @@ export default function CSVMapper() {
       const requiredMapped = REQUIRED_FIELDS.every((key) => Boolean(map[key]));
       if (!requiredMapped) return toast.error('姓と名の取り込み先を必ず選択してください');
 
-      const { records, invalidRows } = buildPayload();
-      if (invalidRows.length > 0) {
-        const sample = invalidRows.slice(0, 5).join(', ');
-        const suffix = invalidRows.length > 5 ? ' など' : '';
-        return toast.error(`必須項目（姓・名）が空の行があります: ${sample}${suffix}`);
+      const { records, skippedRows } = buildPayload();
+
+      if (records.length === 0) {
+        if (skippedRows.length > 0) {
+          const sample = skippedRows.slice(0, 5).join(', ');
+          const suffix = skippedRows.length > 5 ? ' など' : '';
+          return toast.error(`必須項目（姓・名）が空の行のみでした: ${sample}${suffix}`);
+        }
+        return toast.error('選択した列に値が見つかりませんでした');
       }
 
-      const meaningfulRows = records.filter((row) =>
-        Object.values(row).some((value) => {
-          if (Array.isArray(value)) return value.length > 0;
-          if (value === null || value === undefined) return false;
-          return String(value).trim().length > 0;
-        }),
-      );
-      if (meaningfulRows.length === 0) return toast.error('選択した列に値が見つかりませんでした');
-
       setIsImporting(true);
-      await importInBatches(meaningfulRows);
-      toast.success(`${meaningfulRows.length} 件のインポートが完了しました`);
-      setLastImportCount(meaningfulRows.length);
+      await importInBatches(records);
+      toast.success(`${records.length} 件のインポートが完了しました`);
+      setLastImportCount(records.length);
+
+      if (skippedRows.length > 0) {
+        const sample = skippedRows.slice(0, 5).join(', ');
+        const suffix = skippedRows.length > 5 ? ' など' : '';
+        toast.message(`必須項目が空のため ${skippedRows.length} 行をスキップしました（行: ${sample}${suffix}）`);
+      }
 
       // リセット
       setHeaders([]);

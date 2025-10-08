@@ -70,27 +70,26 @@ export async function POST(req: NextRequest) {
       meetingStatus: normalizeString(row.meetingStatus),
     }));
 
-    const invalidRows = prelimRows
-      .filter((row) => !row.firstName || !row.lastName)
-      .map((row) => row.index + 1);
+    const sanitizedRows: SanitizedRow[] = [];
+    const skippedRowNumbers: number[] = [];
 
-    if (invalidRows.length > 0) {
-      return NextResponse.json(
-        { error: 'Missing required fields', rows: invalidRows },
-        { status: 400 },
-      );
-    }
+    prelimRows.forEach((row) => {
+      if (!row.firstName || !row.lastName) {
+        skippedRowNumbers.push(row.index + 1);
+        return;
+      }
 
-    const sanitizedRows: SanitizedRow[] = prelimRows.map((row) => ({
-      recordId: row.recordId,
-      firstName: row.firstName!,
-      lastName: row.lastName!,
-      email: row.email,
-      meetingStatus: row.meetingStatus,
-    }));
+      sanitizedRows.push({
+        recordId: row.recordId,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        email: row.email,
+        meetingStatus: row.meetingStatus,
+      });
+    });
 
     if (sanitizedRows.length === 0) {
-      return NextResponse.json({ error: 'No valid rows provided' }, { status: 400 });
+      return NextResponse.json({ ok: true, count: 0, skippedRowNumbers }, { status: 200 });
     }
 
     const buildCreateData = (r: SanitizedRow) => ({
@@ -134,7 +133,7 @@ export async function POST(req: NextRequest) {
     });
 
     await prisma.$transaction(operations);
-    return NextResponse.json({ ok: true, count: operations.length });
+    return NextResponse.json({ ok: true, count: operations.length, skippedRowNumbers });
   } catch (error) {
     console.error('CSV import error:', error);
     if (error instanceof Error && error.message === 'Unauthorized') {
