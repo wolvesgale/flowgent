@@ -28,7 +28,6 @@ function requireRole(user: SessionData, roles: string[]) {
 
 // クライアント側 CSV マッピング後の行型
 type ImportRow = {
-  recordId?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -41,7 +40,6 @@ type ImportRow = {
 };
 
 type SanitizedRow = {
-  recordId: string | null;
   firstName: string;
   lastName: string;
   email: string | null;
@@ -79,7 +77,6 @@ export async function POST(req: NextRequest) {
 
     const prelimRows = (rows as ImportRow[]).map((row, index) => ({
       index,
-      recordId: normalizeString(row.recordId),
       firstName: normalizeString(row.firstName),
       lastName: normalizeString(row.lastName),
       email: normalizeString(row.email),
@@ -103,7 +100,6 @@ export async function POST(req: NextRequest) {
     }
 
     const sanitizedRows: SanitizedRow[] = prelimRows.map((row) => ({
-      recordId: row.recordId,
       firstName: row.firstName!,
       lastName: row.lastName!,
       email: row.email,
@@ -120,7 +116,6 @@ export async function POST(req: NextRequest) {
     }
 
     const buildCreateData = (r: SanitizedRow) => ({
-      recordId: r.recordId ?? null,
       firstName: r.firstName,
       lastName: r.lastName,
       email: r.email ?? null,
@@ -134,7 +129,6 @@ export async function POST(req: NextRequest) {
     });
 
     const buildUpdateData = (r: SanitizedRow) => ({
-      recordId: r.recordId ?? undefined,
       firstName: r.firstName,
       lastName: r.lastName,
       email: r.email ?? undefined,
@@ -146,38 +140,22 @@ export async function POST(req: NextRequest) {
       tier: normalizeTier(r.tier) ?? undefined,
     });
 
-    const operations = sanitizedRows.reduce<PrismaPromise<unknown>[]>(
-      (acc, row) => {
-        const createData = buildCreateData(row);
-        const updateData = buildUpdateData(row);
+    const operations: PrismaPromise<unknown>[] = sanitizedRows.map((row) => {
+      const createData = buildCreateData(row);
+      const updateData = buildUpdateData(row);
 
-        if (row.recordId) {
-          acc.push(
-            prisma.evangelist.upsert({
-              where: { recordId: row.recordId },
-              create: createData,
-              update: updateData,
-            }),
-          );
-          return acc;
-        }
+      if (row.email) {
+        return prisma.evangelist.upsert({
+          where: { email: row.email },
+          create: createData,
+          update: updateData,
+        });
+      }
 
-        if (row.email) {
-          acc.push(
-            prisma.evangelist.upsert({
-              where: { email: row.email },
-              create: createData,
-              update: updateData,
-            }),
-          );
-          return acc;
-        }
-
-        acc.push(prisma.evangelist.create({ data: createData }));
-        return acc;
-      },
-      [] as PrismaPromise<unknown>[],
-    );
+      // recordId / email が無い行は新規作成（重複は運用で回避）
+      acc.push(prisma.evangelist.create({ data: createData }));
+      return acc;
+    }, [] as PrismaPromise<unknown>[]);
 
     await prisma.$transaction(operations);
     return NextResponse.json({ ok: true, count: operations.length });
