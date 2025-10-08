@@ -1,25 +1,20 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 // prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  // 任意：migrateの安定化用（Non-poolingがある場合）
-  // directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // directUrl = env("DIRECT_URL") // 任意
 }
 
-
 model User {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   role      Role
   name      String
-  email     String  @unique
-  password  String  // ハッシュ
+  email     String   @unique
+  password  String   // ハッシュ
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -33,33 +28,45 @@ enum Role {
 }
 
 model Innovator {
-  id                Int             @id @default(autoincrement())
+  id                Int      @id @default(autoincrement())
   company           String
   url               String?
   introductionPoint String?
   domain            BusinessDomain
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Evangelist {
-  id                String             @id @default(cuid())
-  recordId          String?            @unique // CSV由来のID
-  firstName         String?
-  lastName          String?
-  email             String?            @unique
-  strength          EvangelistStrength?
-  contactPreference ContactPreference?
-  phase             EvangelistPhase    @default(FIRST_CONTACT)
-  notes             String?
-  tier              Tier               @default(TIER2)
-  assignedCsId      String?
-  assignedCs        User?              @relation(fields: [assignedCsId], references: [id])
-  tags              String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  id                     String   @id @default(cuid())
+  recordId               String?  @unique // CSV由来のID
+  firstName              String?
+  lastName               String?
+  email                  String?  @unique
+  contactPref            String?  // 連絡手段の希望
+  supportPriority        String?
+  pattern                String?
+  meetingStatus          String?
+  registrationStatus     String?
+  lineRegistered         String?
+  phoneNumber            String?
+  acquisitionSource      String?
+  facebookUrl            String?
+  listAcquired           String?
+  matchingListUrl        String?
+  contactOwner           String?
+  marketingContactStatus String?
+  sourceCreatedAt        DateTime?
+  strengths              String?  // 強み・専門分野（初回面談で入力）
+  notes                  String?  // 備考
+  tier                   Tier     @default(TIER2)
+  assignedCsId           String?
+  assignedCs             User?    @relation(fields: [assignedCsId], references: [id])
+  tags                   String?  // JSON文字列として保存（配列をJSONで格納）
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  meetings Meeting[]
+  meetings               Meeting[]
 
   @@map("evangelists")
 }
@@ -69,6 +76,7 @@ enum Tier {
   TIER2
 }
 
+// 以下の enum は将来の型厳格化/UI向けに残置（現状の列は String を使用）
 enum EvangelistStrength {
   HR
   IT
@@ -80,7 +88,6 @@ enum EvangelistStrength {
   MEDICAL
   FINANCE
 }
-
 enum ContactPreference {
   FACEBOOK
   LINE
@@ -88,7 +95,6 @@ enum ContactPreference {
   PHONE
   SLACK
 }
-
 enum EvangelistPhase {
   FIRST_CONTACT
   REGISTERED
@@ -112,14 +118,14 @@ enum BusinessDomain {
 }
 
 model Meeting {
-  id            String   @id @default(cuid())
+  id            String     @id @default(cuid())
   evangelistId  String
   evangelist    Evangelist @relation(fields: [evangelistId], references: [id])
-  date          DateTime @default(now())
-  isFirst       Boolean  @default(false)
-  summary       String?  // 前回サマリー or 今回メモ
-  nextActions   String?  // 次回アクション
-  contactMethod String?  // 面談で確認
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  date          DateTime   @default(now())
+  isFirst       Boolean    @default(false)
+  summary       String?    // 前回サマリー or 今回メモ
+  nextActions   String?    // 次回アクション
+  contactMethod String?    // 面談で確認
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 }
