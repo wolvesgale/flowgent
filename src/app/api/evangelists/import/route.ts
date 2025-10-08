@@ -33,7 +33,7 @@ type ImportRow = {
   // プロフィール/状態系
   firstName?: string;
   lastName?: string;
-  contactPref?: string;
+  contactMethod?: string;
   supportPriority?: string;
   pattern?: string;
   meetingStatus?: string;
@@ -47,7 +47,7 @@ type ImportRow = {
   contactOwner?: string;
   marketingContactStatus?: string;
   sourceCreatedAt?: string; // CSVは文字列で来る想定
-  strengths?: string;
+  strength?: string;
   notes?: string;
   tier?: string;            // "TIER1" | "TIER2" 以外は無視
   tags?: string[] | string; // UIで配列/文字列どちらでも
@@ -78,12 +78,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'invalid' }, { status: 400 });
     }
 
+    const records = rows as ImportRow[]
+
+    const invalidIndex = records.findIndex((r) => {
+      const first = r.firstName?.trim()
+      const last = r.lastName?.trim()
+      return !first || !last
+    })
+
+    if (invalidIndex !== -1) {
+      return NextResponse.json(
+        { error: `Row ${invalidIndex + 1} is missing required first or last name` },
+        { status: 400 },
+      )
+    }
+
     const buildCreateData = (r: ImportRow) => ({
       recordId: r.recordId || null,
       firstName: r.firstName || null,
       lastName: r.lastName || null,
       email: r.email || null,
-      contactPref: r.contactPref || null,
+      contactMethod: r.contactMethod || null,
       supportPriority: r.supportPriority || null,
       pattern: r.pattern || null,
       meetingStatus: r.meetingStatus || null,
@@ -93,11 +108,12 @@ export async function POST(req: NextRequest) {
       acquisitionSource: r.acquisitionSource || null,
       facebookUrl: r.facebookUrl || null,
       listAcquired: r.listAcquired || null,
+      listProvided: false,
       matchingListUrl: r.matchingListUrl || null,
       contactOwner: r.contactOwner || null,
       marketingContactStatus: r.marketingContactStatus || null,
       sourceCreatedAt: parseSourceCreatedAt(r.sourceCreatedAt) || null,
-      strengths: r.strengths || null,
+      strength: r.strength || null,
       notes: r.notes || null,
       tier: normalizeTier(r.tier) ?? 'TIER2',
       tags: Array.isArray(r.tags)
@@ -114,7 +130,7 @@ export async function POST(req: NextRequest) {
       firstName: r.firstName || undefined,
       lastName: r.lastName || undefined,
       email: r.email || undefined,
-      contactPref: r.contactPref || undefined,
+      contactMethod: r.contactMethod || undefined,
       supportPriority: r.supportPriority || undefined,
       pattern: r.pattern || undefined,
       meetingStatus: r.meetingStatus || undefined,
@@ -128,7 +144,7 @@ export async function POST(req: NextRequest) {
       contactOwner: r.contactOwner || undefined,
       marketingContactStatus: r.marketingContactStatus || undefined,
       sourceCreatedAt: parseSourceCreatedAt(r.sourceCreatedAt) || undefined,
-      strengths: r.strengths || undefined,
+      strength: r.strength || undefined,
       notes: r.notes || undefined,
       tier: normalizeTier(r.tier) || undefined,
       tags: Array.isArray(r.tags)
@@ -139,7 +155,7 @@ export async function POST(req: NextRequest) {
       // 既存の assignedCsId は基本触らない（暗黙更新を避ける）
     });
 
-    const operations = (rows as ImportRow[]).reduce<Prisma.PrismaPromise<unknown>[]>((acc, r) => {
+    const operations = records.reduce<Prisma.PrismaPromise<unknown>[]>((acc, r) => {
       const createData = buildCreateData(r);
       const updateData = buildUpdateData(r);
 

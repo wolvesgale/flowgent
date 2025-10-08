@@ -17,7 +17,7 @@ const DB_FIELDS = [
   { key: 'supportPriority', label: 'サポート優先度' },
   { key: 'email', label: 'メールアドレス' },
   { key: 'pattern', label: 'パターン' },
-  { key: 'contactPref', label: '連絡手段' },
+  { key: 'contactMethod', label: '連絡手段' },
   { key: 'meetingStatus', label: '面談状況' },
   { key: 'registrationStatus', label: '登録状況' },
   { key: 'lineRegistered', label: 'LINE登録' },
@@ -29,7 +29,7 @@ const DB_FIELDS = [
   { key: 'contactOwner', label: 'コンタクト担当者' },
   { key: 'sourceCreatedAt', label: '作成日 (YYYY-MM-DD HH:mm)' },
   { key: 'marketingContactStatus', label: 'マーケティングコンタクトステータス' },
-  { key: 'strengths', label: '強み' },
+  { key: 'strength', label: '強み' },
   { key: 'notes', label: 'メモ' },
   { key: 'tier', label: 'Tier (TIER1/TIER2)' },
   { key: 'tags', label: 'タグ(カンマ区切り可)' },
@@ -221,6 +221,10 @@ export default function CSVMapper() {
     try {
       if (!allRows.length) return toast.error('CSV データが空です');
 
+      if (!map.firstName || !map.lastName) {
+        return toast.error('名と姓の列は必須です');
+      }
+
       const hasMapping = Object.values(map).some((v) =>
         Array.isArray(v) ? v.length > 0 : Boolean(v && v.length > 0),
       );
@@ -235,6 +239,18 @@ export default function CSVMapper() {
         }),
       );
       if (meaningfulRows.length === 0) return toast.error('選択した列に値が見つかりませんでした');
+
+      const invalidRows = meaningfulRows.filter(
+        (row) => {
+          const firstName = typeof row.firstName === 'string' ? row.firstName.trim() : '';
+          const lastName = typeof row.lastName === 'string' ? row.lastName.trim() : '';
+          return firstName.length === 0 || lastName.length === 0;
+        },
+      );
+
+      if (invalidRows.length > 0) {
+        return toast.error('名と姓が入力されていない行があります');
+      }
 
       setIsImporting(true);
       await importInBatches(meaningfulRows);

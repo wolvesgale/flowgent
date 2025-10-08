@@ -6,25 +6,38 @@ import { sessionOptions } from '@/lib/session-config'
 import type { SessionData } from '@/lib/session'
 import { z } from 'zod'
 
+const contactMethodEnum = ['FACEBOOK', 'LINE', 'EMAIL', 'PHONE', 'SLACK'] as const
+const strengthEnum = ['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE'] as const
+const managementPhaseEnum = [
+  'INQUIRY',
+  'FIRST_MEETING',
+  'REGISTERED',
+  'LIST_PROVIDED',
+  'INNOVATOR_REVIEW',
+  'INTRODUCTION_STARTED',
+  'MEETING_SCHEDULED',
+  'FIRST_RESULT',
+  'CONTINUED_PROPOSAL',
+] as const
+
 const updateEvangelistSchema = z
   .object({
     firstName: z.string().min(1, 'First name is required').optional(),
     lastName: z.string().min(1, 'Last name is required').optional(),
-    email: z.string().email('Invalid email format').optional(),
-    contactPreference: z
-      .enum(['FACEBOOK', 'LINE', 'EMAIL', 'PHONE', 'SLACK'])
-      .optional()
-      .nullable(),
-    strength: z
-      .enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE'])
-      .optional()
-      .nullable(),
-    phase: z
-      .enum(['FIRST_CONTACT', 'REGISTERED', 'LIST_SHARED', 'CANDIDATE_SELECTION', 'INNOVATOR_REVIEW', 'INTRODUCING', 'FOLLOW_UP'])
-      .optional(),
+    email: z.string().email('Invalid email format').optional().nullable(),
+    contactMethod: z.enum(contactMethodEnum).optional().nullable(),
+    strength: z.enum(strengthEnum).optional().nullable(),
+    managementPhase: z.enum(managementPhaseEnum).optional().nullable(),
     notes: z.string().optional().nullable(),
     tier: z.enum(['TIER1', 'TIER2']).optional(),
     assignedCsId: z.string().min(1, 'Assigned CS is required').optional().nullable(),
+    listProvided: z.boolean().optional(),
+    nextAction: z.string().optional().nullable(),
+    nextActionDueOn: z
+      .string()
+      .datetime({ message: 'Invalid date format' })
+      .optional()
+      .nullable(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'No update fields provided',
@@ -120,16 +133,16 @@ export async function PUT(
       updateData.email = evangelistData.email
     }
 
-    if (evangelistData.contactPreference !== undefined) {
-      updateData.contactPreference = evangelistData.contactPreference ?? null
+    if (evangelistData.contactMethod !== undefined) {
+      updateData.contactMethod = evangelistData.contactMethod ?? null
     }
 
     if (evangelistData.strength !== undefined) {
       updateData.strength = evangelistData.strength ?? null
     }
 
-    if (evangelistData.phase !== undefined) {
-      updateData.phase = evangelistData.phase
+    if (evangelistData.managementPhase !== undefined) {
+      updateData.managementPhase = evangelistData.managementPhase ?? null
     }
 
     if (evangelistData.notes !== undefined) {
@@ -142,6 +155,20 @@ export async function PUT(
 
     if (evangelistData.assignedCsId !== undefined) {
       updateData.assignedCsId = evangelistData.assignedCsId ?? null
+    }
+
+    if (evangelistData.listProvided !== undefined) {
+      updateData.listProvided = evangelistData.listProvided
+    }
+
+    if (evangelistData.nextAction !== undefined) {
+      updateData.nextAction = evangelistData.nextAction ?? null
+    }
+
+    if (evangelistData.nextActionDueOn !== undefined) {
+      updateData.nextActionDueOn = evangelistData.nextActionDueOn
+        ? new Date(evangelistData.nextActionDueOn)
+        : null
     }
 
     const updatedEvangelist = await prisma.evangelist.update({

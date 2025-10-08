@@ -43,7 +43,7 @@ model Evangelist {
   firstName              String?
   lastName               String?
   email                  String?  @unique
-  contactPref            String?  // 連絡手段の希望
+  contactMethod          String?  @map("contactPref") // 連絡手段の希望
   supportPriority        String?
   pattern                String?
   meetingStatus          String?
@@ -53,12 +53,16 @@ model Evangelist {
   acquisitionSource      String?
   facebookUrl            String?
   listAcquired           String?
+  listProvided           Boolean   @default(false)
   matchingListUrl        String?
   contactOwner           String?
   marketingContactStatus String?
   sourceCreatedAt        DateTime?
-  strengths              String?  // 強み・専門分野（初回面談で入力）
+  strength               String?  @map("strengths") // 強み・専門分野（初回面談で入力）
   notes                  String?  // 備考
+  nextAction             String?
+  nextActionDueOn        DateTime?
+  managementPhase        String?
   tier                   Tier     @default(TIER2)
   assignedCsId           String?
   assignedCs             User?    @relation(fields: [assignedCsId], references: [id])
