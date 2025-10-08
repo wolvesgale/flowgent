@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 
@@ -14,11 +12,8 @@ const createUserSchema = z.object({
 })
 
 // 管理者権限チェック
-async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), {
-    password: process.env.SESSION_PASSWORD!,
-    cookieName: 'flowgent-session',
-  })
+async function checkAdminPermission(request: NextRequest) {
+  const session = await getSession(request)
 
   if (!session.isLoggedIn || !session.userId) {
     return { authorized: false, error: 'Unauthorized', status: 401 }
@@ -39,7 +34,7 @@ async function checkAdminPermission() {
 // GET /api/admin/users - ユーザー一覧取得
 export async function GET(request: NextRequest) {
   try {
-    const authCheck = await checkAdminPermission()
+    const authCheck = await checkAdminPermission(request)
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
@@ -117,7 +112,7 @@ export async function GET(request: NextRequest) {
 // POST /api/admin/users - ユーザー作成
 export async function POST(request: NextRequest) {
   try {
-    const authCheck = await checkAdminPermission()
+    const authCheck = await checkAdminPermission(request)
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
@@ -134,10 +129,12 @@ export async function POST(request: NextRequest) {
     }
 
     const userData = validationResult.data
+    const normalizedEmail = userData.email.trim().toLowerCase()
+    const normalizedName = userData.name.trim()
 
     // メールアドレスの重複チェック
     const existingUser = await prisma.user.findUnique({
-      where: { email: userData.email },
+      where: { email: normalizedEmail },
     })
 
     if (existingUser) {
@@ -153,8 +150,8 @@ export async function POST(request: NextRequest) {
     // ユーザーを作成
     const user = await prisma.user.create({
       data: {
-        name: userData.name,
-        email: userData.email,
+        name: normalizedName,
+        email: normalizedEmail,
         password: hashedPassword,
         role: userData.role,
       },

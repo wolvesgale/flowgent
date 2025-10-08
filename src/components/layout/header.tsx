@@ -33,6 +33,7 @@ export function Header() {
     try {
       const response = await fetch('/api/auth/me', {
         cache: 'no-store',
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await response.json();
@@ -49,6 +50,7 @@ export function Header() {
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
+        credentials: 'include',
       });
       setUser(null);
       router.push('/login');
@@ -113,24 +115,35 @@ export function Header() {
             )}
           </nav>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="flex items-center space-x-2">
-                <User className="h-4 w-4" />
-                <span>{user.name}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                設定
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleLogout}>
-                <LogOut className="mr-2 h-4 w-4" />
-                ログアウト
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              className="hidden md:inline-flex items-center gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              ログアウト
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center space-x-2">
+                  <User className="h-4 w-4" />
+                  <span>{user.name}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem>
+                  <Settings className="mr-2 h-4 w-4" />
+                  設定
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout} className="md:hidden">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  ログアウト
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
     </header>

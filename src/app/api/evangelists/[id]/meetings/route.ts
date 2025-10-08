@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
 
 const createMeetingSchema = z.object({
@@ -18,10 +16,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), {
-      password: process.env.SESSION_PASSWORD!,
-      cookieName: 'flowgent-session',
-    })
+    const session = await getSession(request)
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -60,10 +55,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), {
-      password: process.env.SESSION_PASSWORD!,
-      cookieName: 'flowgent-session',
-    })
+    const session = await getSession(request)
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
