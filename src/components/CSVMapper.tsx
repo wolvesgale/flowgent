@@ -10,10 +10,16 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { UploadCloud, ListChecks, Table as TableIcon, Info, ShieldAlert } from 'lucide-react';
 
+type DbField = {
+  key: string;
+  label: string;
+  isEssential?: boolean;
+};
+
 const DB_FIELDS = [
   { key: 'recordId', label: 'レコードID' },
-  { key: 'firstName', label: '名' },
-  { key: 'lastName', label: '姓' },
+  { key: 'firstName', label: '名', isEssential: true },
+  { key: 'lastName', label: '姓', isEssential: true },
   { key: 'supportPriority', label: 'サポート優先度' },
   { key: 'email', label: 'メールアドレス' },
   { key: 'pattern', label: 'パターン' },
@@ -33,7 +39,7 @@ const DB_FIELDS = [
   { key: 'notes', label: 'メモ' },
   { key: 'tier', label: 'Tier (TIER1/TIER2)' },
   { key: 'tags', label: 'タグ(カンマ区切り可)' },
-] as const;
+] as const satisfies readonly DbField[];
 
 const MULTI_VALUE_FIELDS = new Set(['tags']);
 
