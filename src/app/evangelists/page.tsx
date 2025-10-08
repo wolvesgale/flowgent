@@ -240,7 +240,7 @@ export default function EvangelistsPage() {
               <select
                 value={tierFilter}
                 onChange={(e) => setTierFilter(e.target.value as 'ALL' | 'TIER1' | 'TIER2')}
-                className="px-3 py-2 border border-input bg-background rounded-md"
+                className="px-3 py-2 border border-input bg-background text-slate-900 rounded-md"
               >
                 <option value="ALL">全てのTier</option>
                 <option value="TIER1">TIER1</option>
@@ -250,7 +250,7 @@ export default function EvangelistsPage() {
               <select
                 value={assignedCsFilter}
                 onChange={(e) => setAssignedCsFilter(e.target.value)}
-                className="px-3 py-2 border border-input bg-background rounded-md"
+                className="px-3 py-2 border border-input bg-background text-slate-900 rounded-md"
               >
                 <option value="">全ての担当CS</option>
                 {users.map((user) => (
@@ -263,7 +263,7 @@ export default function EvangelistsPage() {
               <select
                 value={staleFilter}
                 onChange={(e) => setStaleFilter(e.target.value)}
-                className="px-3 py-2 border border-input bg-background rounded-md"
+                className="px-3 py-2 border border-input bg-background text-slate-900 rounded-md"
               >
                 <option value="">フォロー期間</option>
                 <option value="7">7日以上未フォロー</option>
