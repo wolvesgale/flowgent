@@ -78,20 +78,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'invalid' }, { status: 400 });
     }
 
-    const records = rows as ImportRow[]
-
-    const invalidIndex = records.findIndex((r) => {
-      const first = r.firstName?.trim()
-      const last = r.lastName?.trim()
-      return !first || !last
-    })
-
-    if (invalidIndex !== -1) {
-      return NextResponse.json(
-        { error: `Row ${invalidIndex + 1} is missing required first or last name` },
-        { status: 400 },
-      )
-    }
+    const records = rows as ImportRow[];
+    let processedCount = 0;
+    let skippedCount = 0;
 
     const buildCreateData = (r: ImportRow) => ({
       recordId: r.recordId || null,
@@ -156,8 +145,17 @@ export async function POST(req: NextRequest) {
     });
 
     const operations = records.reduce<Prisma.PrismaPromise<unknown>[]>((acc, r) => {
-      const createData = buildCreateData(r);
-      const updateData = buildUpdateData(r);
+      const firstName = r.firstName?.trim() ?? '';
+      const lastName = r.lastName?.trim() ?? '';
+
+      if (!firstName || !lastName) {
+        skippedCount += 1;
+        return acc;
+      }
+
+      const normalizedRow: ImportRow = { ...r, firstName, lastName };
+      const createData = buildCreateData(normalizedRow);
+      const updateData = buildUpdateData(normalizedRow);
 
       if (r.recordId) {
         acc.push(
@@ -167,6 +165,7 @@ export async function POST(req: NextRequest) {
             update: updateData,
           }),
         );
+        processedCount += 1;
         return acc;
       }
 
@@ -178,16 +177,21 @@ export async function POST(req: NextRequest) {
             update: updateData,
           }),
         );
+        processedCount += 1;
         return acc;
       }
 
       // recordId / email が無い行は新規作成（重複は運用で回避）
       acc.push(prisma.evangelist.create({ data: createData }));
+      processedCount += 1;
       return acc;
     }, []);
 
-    await prisma.$transaction(operations);
-    return NextResponse.json({ ok: true, count: (rows as unknown[]).length });
+    if (operations.length > 0) {
+      await prisma.$transaction(operations);
+    }
+
+    return NextResponse.json({ ok: true, count: processedCount, skippedCount });
   } catch (error) {
     console.error('CSV import error:', error);
     if (error instanceof Error && error.message === 'Unauthorized') {
