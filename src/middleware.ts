@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getIronSession } from 'iron-session'
-import { SessionData } from '@/lib/session'
+import { sessionOptions } from '@/lib/session-config'
+import type { SessionData } from '@/lib/session-config'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -10,10 +11,7 @@ export async function middleware(request: NextRequest) {
     try {
       // セッションを取得
       const response = NextResponse.next()
-      const session = await getIronSession<SessionData>(request, response, {
-        password: process.env.SESSION_PASSWORD!,
-        cookieName: 'flowgent-session',
-      })
+      const session = await getIronSession<SessionData>(request, response, sessionOptions)
 
       // ログインしていない場合はログインページにリダイレクト
       if (!session.isLoggedIn || !session.userId) {
