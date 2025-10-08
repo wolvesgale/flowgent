@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Search, Plus, Edit, Trash2, Link as LinkIcon, Map } from 'lucide-react'
+import { toast } from 'sonner'
 
 const DOMAIN_OPTIONS = [
   { value: 'HR', label: '人事' },
@@ -70,9 +71,14 @@ export default function AdminInnovatorsPage() {
         const data = await response.json()
         setInnovators(data.innovators)
         setTotalPages(Math.ceil(data.total / itemsPerPage))
+      } else {
+        const errorBody = await response.json().catch(() => null)
+        const message = (errorBody?.error as string | undefined) ?? 'イノベータ一覧の取得に失敗しました'
+        toast.error(message)
       }
     } catch (error) {
       console.error('Failed to fetch innovators:', error)
+      toast.error('イノベータ一覧の取得に失敗しました')
     } finally {
       setLoading(false)
     }
@@ -96,10 +102,17 @@ export default function AdminInnovatorsPage() {
       if (response.ok) {
         setIsCreateDialogOpen(false)
         resetForm()
+        toast.success('イノベータを登録しました')
         fetchInnovators()
+        return
       }
+
+      const errorBody = await response.json().catch(() => null)
+      const message = (errorBody?.error as string | undefined) ?? 'イノベータの登録に失敗しました'
+      toast.error(message)
     } catch (error) {
       console.error('Failed to create innovator:', error)
+      toast.error('イノベータの登録に失敗しました')
     }
   }
 
@@ -120,10 +133,17 @@ export default function AdminInnovatorsPage() {
         setIsEditDialogOpen(false)
         setSelectedInnovator(null)
         resetForm()
+        toast.success('イノベータを更新しました')
         fetchInnovators()
+        return
       }
+
+      const errorBody = await response.json().catch(() => null)
+      const message = (errorBody?.error as string | undefined) ?? 'イノベータの更新に失敗しました'
+      toast.error(message)
     } catch (error) {
       console.error('Failed to update innovator:', error)
+      toast.error('イノベータの更新に失敗しました')
     }
   }
 
@@ -137,10 +157,17 @@ export default function AdminInnovatorsPage() {
       })
 
       if (response.ok) {
+        toast.success('イノベータを削除しました')
         fetchInnovators()
+        return
       }
+
+      const errorBody = await response.json().catch(() => null)
+      const message = (errorBody?.error as string | undefined) ?? 'イノベータの削除に失敗しました'
+      toast.error(message)
     } catch (error) {
       console.error('Failed to delete innovator:', error)
+      toast.error('イノベータの削除に失敗しました')
     }
   }
 

@@ -6,6 +6,26 @@ import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { sessionOptions } from '@/lib/session-config'
 import type { SessionData } from '@/lib/session'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { PrismaClientInitializationError } from '@prisma/client/runtime/library'
+
+async function safeCount(query: () => Promise<number>): Promise<number> {
+  try {
+    return await query()
+  } catch (error) {
+    if (error instanceof PrismaClientKnownRequestError) {
+      if (error.code === 'P2021' || error.code === 'P2010') {
+        console.warn('Dashboard stat skipped because table/column is missing:', error.message)
+        return 0
+      }
+    }
+    if (error instanceof PrismaClientInitializationError) {
+      console.error('Database connection failed for dashboard stats:', error.message)
+      throw new Error('DB_UNAVAILABLE')
+    }
+    throw error
+  }
+}
 
 async function checkAuth() {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
@@ -42,52 +62,61 @@ export async function GET() {
       staleEvangelists,
       itTagEvangelists,
     ] = await Promise.all([
-      // 総EVA数
-      prisma.evangelist.count(),
+      safeCount(() => prisma.evangelist.count()),
 
       // CS未割当
-      prisma.evangelist.count({
-        where: { assignedCsId: null },
-      }),
+      safeCount(() =>
+        prisma.evangelist.count({
+          where: { assignedCsId: null },
+        }),
+      ),
 
       // 今週の面談数
-      prisma.meeting.count({
-        where: {
-          date: { gte: weekStart, lt: weekEnd },
-        },
-      }),
+      safeCount(() =>
+        prisma.meeting.count({
+          where: {
+            date: { gte: weekStart, lt: weekEnd },
+          },
+        }),
+      ),
 
       // 紹介必須イノベータ（introductionPoint 未設定）
-      prisma.innovator.count({
-        where: { introductionPoint: null },
-      }),
+      safeCount(() =>
+        prisma.innovator.count({
+          where: { introductionPoint: null },
+        }),
+      ),
 
       // 要フォロー（面談が一度もない or すべて30日より前）
-      prisma.evangelist.count({
-        where: {
-          OR: [
-            { meetings: { none: {} } },
-            {
-              meetings: {
-                every: {
-                  date: { lt: thirtyDaysAgo },
+      safeCount(() =>
+        prisma.evangelist.count({
+          where: {
+            OR: [
+              { meetings: { none: {} } },
+              {
+                meetings: {
+                  every: {
+                    date: { lt: thirtyDaysAgo },
+                  },
                 },
               },
-            },
-          ],
-        },
-      }),
+            ],
+          },
+        }),
+      ),
 
       // ITタグ/強みを持つEVA数
       // tags は JSON文字列で保存のため、'"IT"' を部分一致で検索（大文字小文字は無視）
-      prisma.evangelist.count({
-        where: {
-          OR: [
-            { tags: { contains: '"IT"', mode: 'insensitive' } },
-            { strength: { contains: 'IT', mode: 'insensitive' } },
-          ],
-        },
-      }),
+      safeCount(() =>
+        prisma.evangelist.count({
+          where: {
+            OR: [
+              { tags: { contains: '"IT"', mode: 'insensitive' } },
+              { strength: { contains: 'IT', mode: 'insensitive' } },
+            ],
+          },
+        }),
+      ),
     ])
 
     return NextResponse.json({
@@ -99,6 +128,9 @@ export async function GET() {
       itTagEvangelists,
     })
   } catch (error) {
+    if (error instanceof Error && error.message === 'DB_UNAVAILABLE') {
+      return NextResponse.json({ error: 'Database is temporarily unavailable' }, { status: 503 })
+    }
     console.error('Failed to fetch dashboard stats:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

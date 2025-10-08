@@ -206,9 +206,10 @@ export default function CSVMapper() {
 
   async function importInBatches(
     payload: Record<string, unknown>[],
-  ): Promise<{ processed: number; skipped: number }> {
+  ): Promise<{ processed: number; skipped: number; duplicates: number }> {
     let processed = 0;
     let skipped = 0;
+    let duplicates = 0;
 
     for (let i = 0; i < payload.length; i += BATCH_SIZE) {
       const chunk = payload.slice(i, i + BATCH_SIZE);
@@ -228,9 +229,10 @@ export default function CSVMapper() {
 
       let processedInBatch = chunk.length;
       let skippedInBatch = 0;
+      let duplicateInBatch = 0;
 
       const data = (await res.json().catch(() => null)) as
-        | { count?: number; skippedCount?: number }
+        | { count?: number; skippedCount?: number; duplicateCount?: number }
         | null;
 
       if (data) {
@@ -240,13 +242,17 @@ export default function CSVMapper() {
         if (typeof data.skippedCount === 'number') {
           skippedInBatch = data.skippedCount;
         }
+        if (typeof data.duplicateCount === 'number') {
+          duplicateInBatch = data.duplicateCount;
+        }
       }
 
       processed += processedInBatch;
       skipped += skippedInBatch;
+      duplicates += duplicateInBatch;
     }
 
-    return { processed, skipped };
+    return { processed, skipped, duplicates };
   }
 
   const handleImport = async () => {
@@ -300,13 +306,20 @@ export default function CSVMapper() {
       }
 
       setIsImporting(true);
-      const { processed, skipped } = await importInBatches(validRows);
+      const { processed, skipped, duplicates } = await importInBatches(validRows);
       const totalSkipped = skippedRows + skipped;
 
+      const messages: string[] = [];
+      messages.push(`${processed} 件のインポートが完了しました`);
       if (totalSkipped > 0) {
-        toast.success(`${processed} 件のインポートが完了しました（${totalSkipped} 件をスキップ）`);
-      } else {
-        toast.success(`${processed} 件のインポートが完了しました`);
+        messages.push(`（${totalSkipped} 件をスキップ）`);
+      }
+      toast.success(messages.join(''));
+
+      if (duplicates > 0) {
+        toast.message('一部の行は既存レコードと重複したためスキップしました', {
+          description: `重複によるスキップ: ${duplicates} 件`,
+        });
       }
       setLastImportCount(processed);
 
@@ -413,19 +426,11 @@ export default function CSVMapper() {
 
                     {/* 単一列マッピング（Radix Select: 空値禁止→未選択は undefined を使う） */}
                     <Select
-                      value={
-                        Array.isArray(selected)
-                          ? undefined
-                          : typeof selected === 'string' && selected.length > 0
-                          ? selected
-                          : undefined
-                      }
+                      value={Array.isArray(selected) ? undefined : selected ?? undefined}
                       onValueChange={(value) => {
                         setMap((prev) => {
                           if (value === '__CLEAR__') {
-                            const next = { ...prev };
-                            delete next[field.key];
-                            return next;
+                            return { ...prev, [field.key]: undefined };
                           }
                           return { ...prev, [field.key]: value };
                         });
@@ -471,9 +476,7 @@ export default function CSVMapper() {
                                       }
                                       const nextTags = current.filter((id) => id !== header.id);
                                       if (nextTags.length === 0) {
-                                        const next = { ...prev };
-                                        delete next.tags;
-                                        return next;
+                                        return { ...prev, tags: undefined };
                                       }
                                       return { ...prev, tags: nextTags };
                                     });
