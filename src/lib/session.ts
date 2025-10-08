@@ -8,7 +8,8 @@ import type { SessionData } from './session-config';
 export type { SessionData } from './session-config';
 
 export async function getSession() {
-  const session = await getIronSession<SessionData>(cookies(), sessionOptions)
+  const cookieStore = await cookies()
+  const session = await getIronSession<SessionData>(cookieStore, sessionOptions)
 
   if (!session.isLoggedIn) {
     session.isLoggedIn = defaultSession.isLoggedIn;
