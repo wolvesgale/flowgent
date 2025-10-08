@@ -1,4 +1,5 @@
 // src/app/api/evangelists/import/route.ts
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/session';
@@ -13,6 +14,7 @@ type ImportRow = {
   firstName?: string;
   lastName?: string;
   email?: string;
+  supportPriority?: string;
   meetingStatus?: string;
 };
 
@@ -22,6 +24,7 @@ type SanitizedRow = {
   firstName: string;
   lastName: string;
   email: string | null;
+  supportPriority: string | null;
   meetingStatus: string | null;
 };
 
@@ -30,6 +33,11 @@ function normalizeString(value?: unknown): string | null {
   const asString = typeof value === 'string' ? value : String(value);
   const trimmed = asString.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeEmail(value?: unknown): string | null {
+  const normalized = normalizeString(value);
+  return normalized ? normalized.toLowerCase() : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -58,7 +66,8 @@ export async function POST(req: NextRequest) {
       recordId: normalizeString(row.recordId),
       firstName: normalizeString(row.firstName),
       lastName: normalizeString(row.lastName),
-      email: normalizeString(row.email),
+      email: normalizeEmail(row.email),
+      supportPriority: normalizeString(row.supportPriority),
       meetingStatus: normalizeString(row.meetingStatus),
     }));
 
@@ -77,6 +86,7 @@ export async function POST(req: NextRequest) {
         firstName: row.firstName,
         lastName: row.lastName,
         email: row.email,
+        supportPriority: row.supportPriority,
         meetingStatus: row.meetingStatus,
       });
     });
@@ -90,6 +100,7 @@ export async function POST(req: NextRequest) {
       firstName: r.firstName,
       lastName: r.lastName,
       email: r.email ?? null,
+      supportPriority: r.supportPriority ?? null,
       meetingStatus: r.meetingStatus ?? null,
       assignedCsId: null,
     });
@@ -99,6 +110,7 @@ export async function POST(req: NextRequest) {
       firstName: r.firstName,
       lastName: r.lastName,
       email: r.email ?? undefined,
+      supportPriority: r.supportPriority ?? undefined,
       meetingStatus: r.meetingStatus ?? undefined,
     });
 
@@ -110,30 +122,54 @@ export async function POST(req: NextRequest) {
         const createData = buildCreateData(row);
         const updateData = buildUpdateData(row);
 
-        let existing = null;
+        try {
+          if (row.recordId) {
+            await prisma.evangelist.upsert({
+              where: { recordId: row.recordId },
+              create: { ...createData, recordId: row.recordId },
+              update: updateData,
+            });
+            successCount += 1;
+            continue;
+          }
 
-        if (row.recordId) {
-          existing = await prisma.evangelist.findUnique({
-            where: { recordId: row.recordId },
-          });
-        }
+          if (row.email) {
+            await prisma.evangelist.upsert({
+              where: { email: row.email },
+              create: { ...createData, email: row.email },
+              update: { ...updateData, recordId: row.recordId ?? undefined },
+            });
+            successCount += 1;
+            continue;
+          }
 
-        if (!existing && row.email) {
-          existing = await prisma.evangelist.findUnique({
-            where: { email: row.email },
-          });
-        }
-
-        if (existing) {
-          await prisma.evangelist.update({
-            where: { id: existing.id },
-            data: updateData,
-          });
-        } else {
           await prisma.evangelist.create({ data: createData });
-        }
+          successCount += 1;
+        } catch (innerErr) {
+          const isUniqueError =
+            innerErr instanceof Prisma.PrismaClientKnownRequestError && innerErr.code === 'P2002';
 
-        successCount += 1;
+          if (isUniqueError && row.email) {
+            try {
+              await prisma.evangelist.upsert({
+                where: { email: row.email },
+                create: { ...createData, email: row.email },
+                update: { ...updateData, recordId: row.recordId ?? undefined },
+              });
+              successCount += 1;
+              continue;
+            } catch (retryErr) {
+              console.error('CSV row retry error:', {
+                lineNumber: row.lineNumber,
+                error: retryErr instanceof Error ? retryErr.message : String(retryErr),
+              });
+              failedRowNumbers.push(row.lineNumber);
+              continue;
+            }
+          }
+
+          throw innerErr;
+        }
       } catch (err) {
         console.error('CSV row import error:', {
           lineNumber: row.lineNumber,

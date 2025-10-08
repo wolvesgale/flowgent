@@ -14,9 +14,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedPassword = String(password);
+
     // Find user by email
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
 
     if (!user) {
@@ -27,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(normalizedPassword, user.password);
 
     if (!isValidPassword) {
       return NextResponse.json(
