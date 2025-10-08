@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 // バリデーションスキーマ
 const innovatorSchema = z.object({
@@ -13,11 +14,8 @@ const innovatorSchema = z.object({
   domain: z.enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE']),
 })
 
-async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), {
-    password: process.env.SESSION_PASSWORD!,
-    cookieName: 'flowgent-session',
-  })
+async function checkAdminPermission(request: NextRequest) {
+  const session = await getSession(request)
 
   if (!session.isLoggedIn || session.role !== 'ADMIN') {
     return false
@@ -28,7 +26,7 @@ async function checkAdminPermission() {
 export async function GET(request: NextRequest) {
   try {
     // 管理者権限チェック
-    if (!(await checkAdminPermission())) {
+    if (!(await checkAdminPermission(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -92,7 +90,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // 管理者権限チェック
-    if (!(await checkAdminPermission())) {
+    if (!(await checkAdminPermission(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

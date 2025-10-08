@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +32,11 @@ interface Evangelist {
   email?: string | null
   contactPreference?: string | null
   strength?: string | null
+  supportPriority?: string | null
+  pattern?: string | null
+  registrationStatus?: string | null
+  listAcquired?: string | null
+  meetingStatus?: string | null
   notes?: string | null
   tier: 'TIER1' | 'TIER2'
   assignedCsId?: string | null
@@ -56,6 +61,11 @@ type EditFormState = {
   email: string
   contactPreference?: string | null
   strength?: string | null
+  pattern?: string | null
+  registrationStatus?: string | null
+  listAcquired?: string | null
+  nextActionNote?: string | null
+  nextActionDueOn?: string | null
   phase?: string | null
   notes: string
   tier: 'TIER1' | 'TIER2'
@@ -83,13 +93,15 @@ const CONTACT_OPTIONS = [
 ] as const
 
 const PHASE_OPTIONS = [
-  { value: 'FIRST_CONTACT', label: '初回' },
+  { value: 'INQUIRY', label: '問い合わせ' },
+  { value: 'FIRST_MEETING', label: '初回面談' },
   { value: 'REGISTERED', label: '登録' },
-  { value: 'LIST_SHARED', label: 'リスト提供' },
-  { value: 'CANDIDATE_SELECTION', label: '候補抽出' },
-  { value: 'INNOVATOR_REVIEW', label: 'イノベータ確認' },
-  { value: 'INTRODUCING', label: '紹介中' },
-  { value: 'FOLLOW_UP', label: '継続中' },
+  { value: 'LIST_MATCHING', label: 'リスト提供/突合' },
+  { value: 'INNOVATOR_CONFIRM', label: 'イノベータ確認' },
+  { value: 'INTRODUCTION', label: '紹介開始' },
+  { value: 'DEAL_SETTING', label: '商談設定' },
+  { value: 'FIRST_RESULT', label: '初回実績' },
+  { value: 'CONTINUOUS_PROPOSAL', label: '継続提案' },
 ] as const
 
 interface Meeting {
@@ -117,12 +129,20 @@ export default function EvangelistDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const initialTab = searchParams?.get('tab') === 'meetings' ? 'meetings' : 'overview'
+  const [activeTab, setActiveTab] = useState<'overview' | 'meetings'>(initialTab)
   const [editForm, setEditForm] = useState<EditFormState>({
     firstName: '',
     lastName: '',
     email: '',
     contactPreference: undefined,
     strength: undefined,
+    pattern: undefined,
+    registrationStatus: undefined,
+    listAcquired: undefined,
+    nextActionNote: undefined,
+    nextActionDueOn: undefined,
     phase: undefined,
     notes: '',
     tier: 'TIER2',
@@ -172,6 +192,11 @@ export default function EvangelistDetailPage() {
         email: evangelistData.email ?? '',
         contactPreference: evangelistData.contactPreference ?? undefined,
         strength: evangelistData.strength ?? undefined,
+        pattern: evangelistData.pattern ?? undefined,
+        registrationStatus: evangelistData.registrationStatus ?? undefined,
+        listAcquired: evangelistData.listAcquired ?? undefined,
+        nextActionNote: evangelistData.meetingStatus ?? undefined,
+        nextActionDueOn: evangelistData.supportPriority ?? undefined,
         phase: evangelistData.phase ?? undefined,
         notes: evangelistData.notes ?? '',
         tier: evangelistData.tier,
@@ -200,16 +225,36 @@ export default function EvangelistDetailPage() {
     }
   }, [params.id, fetchEvangelistData, fetchUsers])
 
+  useEffect(() => {
+    const tabParam = searchParams?.get('tab')
+    setActiveTab(tabParam === 'meetings' ? 'meetings' : 'overview')
+  }, [searchParams])
+
   const handleSave = async () => {
     try {
+      const trimmedFirstName = editForm.firstName.trim()
+      const trimmedLastName = editForm.lastName.trim()
+      const trimmedEmail = editForm.email.trim()
+      const trimmedPattern = editForm.pattern?.trim() ?? ''
+      const trimmedRegistrationStatus = editForm.registrationStatus?.trim() ?? ''
+      const trimmedListAcquired = editForm.listAcquired?.trim() ?? ''
+      const trimmedNextActionNote = editForm.nextActionNote?.trim() ?? ''
+      const trimmedNextActionDueOn = editForm.nextActionDueOn?.trim() ?? ''
+      const trimmedNotes = editForm.notes.trim()
+
       const payload = {
-        firstName: editForm.firstName,
-        lastName: editForm.lastName,
-        email: editForm.email,
+        ...(trimmedFirstName ? { firstName: trimmedFirstName } : {}),
+        ...(trimmedLastName ? { lastName: trimmedLastName } : {}),
+        ...(trimmedEmail ? { email: trimmedEmail } : {}),
         contactPreference: editForm.contactPreference ?? null,
         strength: editForm.strength ?? null,
+        pattern: trimmedPattern || null,
+        registrationStatus: trimmedRegistrationStatus || null,
+        listAcquired: trimmedListAcquired || null,
+        nextActionNote: trimmedNextActionNote || null,
+        nextActionDueOn: trimmedNextActionDueOn || null,
         phase: editForm.phase,
-        notes: editForm.notes,
+        notes: trimmedNotes || null,
         tier: editForm.tier,
         assignedCsId: editForm.assignedCsId ?? null,
       }
@@ -235,6 +280,11 @@ export default function EvangelistDetailPage() {
         email: updatedData.email ?? '',
         contactPreference: updatedData.contactPreference ?? undefined,
         strength: updatedData.strength ?? undefined,
+        pattern: updatedData.pattern ?? undefined,
+        registrationStatus: updatedData.registrationStatus ?? undefined,
+        listAcquired: updatedData.listAcquired ?? undefined,
+        nextActionNote: updatedData.meetingStatus ?? undefined,
+        nextActionDueOn: updatedData.supportPriority ?? undefined,
         phase: updatedData.phase ?? undefined,
         notes: updatedData.notes ?? '',
         tier: updatedData.tier,
@@ -356,6 +406,11 @@ export default function EvangelistDetailPage() {
                       email: evangelist.email ?? '',
                       contactPreference: evangelist.contactPreference ?? undefined,
                       strength: evangelist.strength ?? undefined,
+                      pattern: evangelist.pattern ?? undefined,
+                      registrationStatus: evangelist.registrationStatus ?? undefined,
+                      listAcquired: evangelist.listAcquired ?? undefined,
+                      nextActionNote: evangelist.meetingStatus ?? undefined,
+                      nextActionDueOn: evangelist.supportPriority ?? undefined,
                       phase: evangelist.phase ?? undefined,
                       notes: evangelist.notes ?? '',
                       tier: evangelist.tier,
@@ -382,7 +437,11 @@ export default function EvangelistDetailPage() {
       </div>
 
       {/* タブコンテンツ */}
-      <Tabs defaultValue="overview" className="space-y-6">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as 'overview' | 'meetings')}
+        className="space-y-6"
+      >
         <TabsList>
           <TabsTrigger value="overview">概要</TabsTrigger>
           <TabsTrigger value="meetings">面談シート</TabsTrigger>
@@ -450,11 +509,11 @@ export default function EvangelistDetailPage() {
                         }))
                       }
                     >
-                      <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="連絡手段を選択" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white text-slate-900">
-                        <SelectItem value="">未設定</SelectItem>
+                    <SelectTrigger className="bg-white text-slate-900">
+                      <SelectValue className="text-slate-900" placeholder="連絡手段を選択" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value="">未設定</SelectItem>
                         {CONTACT_OPTIONS.map((option) => (
                           <SelectItem key={option.value} value={option.value}>
                             {option.label}
@@ -478,11 +537,11 @@ export default function EvangelistDetailPage() {
                         setEditForm(prev => ({ ...prev, tier: value }))
                       }
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="TIER1">TIER1</SelectItem>
+                    <SelectTrigger className="text-slate-900">
+                      <SelectValue className="text-slate-900" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value="TIER1">TIER1</SelectItem>
                         <SelectItem value="TIER2">TIER2</SelectItem>
                       </SelectContent>
                     </Select>
@@ -506,8 +565,8 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="強みを選択" />
+                    <SelectTrigger className="bg-white text-slate-900">
+                      <SelectValue className="text-slate-900" placeholder="強みを選択" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-slate-900">
                       <SelectItem value="">未設定</SelectItem>
@@ -537,8 +596,8 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="フェーズを選択" />
+                    <SelectTrigger className="bg-white text-slate-900">
+                      <SelectValue className="text-slate-900" placeholder="フェーズを選択" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-slate-900">
                       <SelectItem value="">未設定</SelectItem>
@@ -556,18 +615,46 @@ export default function EvangelistDetailPage() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label>備考</Label>
-                {isEditing ? (
-                  <Textarea
-                    value={editForm.notes || ''}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="備考を入力"
-                    rows={3}
-                  />
-                ) : (
-                  <p className="text-sm whitespace-pre-wrap">{evangelist.notes || '未設定'}</p>
-                )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>領域</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editForm.pattern ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, pattern: e.target.value }))}
+                      placeholder="例：IT、人事 など"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.pattern || '未設定'}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>登録有無</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editForm.registrationStatus ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, registrationStatus: e.target.value }))}
+                      placeholder="例：登録済 / 未登録"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.registrationStatus || '未設定'}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>リスト提出有無</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editForm.listAcquired ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, listAcquired: e.target.value }))}
+                      placeholder="例：提出済 / 未提出"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.listAcquired || '未設定'}</p>
+                  )}
+                </div>
+
               </div>
             </CardContent>
           </Card>
@@ -593,10 +680,10 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="CSを選択してください" />
+                    <SelectTrigger className="text-slate-900">
+                      <SelectValue className="text-slate-900" placeholder="CSを選択してください" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-white text-slate-900">
                       <SelectItem value="">未割り当て</SelectItem>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
@@ -617,6 +704,134 @@ export default function EvangelistDetailPage() {
 
         {/* 面談シートタブ */}
         <TabsContent value="meetings" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                面談シート
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>連絡手段</Label>
+                  {isEditing ? (
+                    <Select
+                      value={editForm.contactPreference ?? ''}
+                      onValueChange={(value) =>
+                        setEditForm(prev => ({
+                          ...prev,
+                          contactPreference: value || null,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="bg-white text-slate-900">
+                        <SelectValue className="text-slate-900" placeholder="連絡手段を選択" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white text-slate-900">
+                        <SelectItem value="">未設定</SelectItem>
+                        {CONTACT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">
+                      {CONTACT_OPTIONS.find(option => option.value === evangelist.contactPreference)?.label || '未設定'}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>強み</Label>
+                  {isEditing ? (
+                    <Select
+                      value={editForm.strength ?? ''}
+                      onValueChange={(value) =>
+                        setEditForm(prev => ({
+                          ...prev,
+                          strength: value || null,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="bg-white text-slate-900">
+                        <SelectValue className="text-slate-900" placeholder="強みを選択" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white text-slate-900">
+                        <SelectItem value="">未設定</SelectItem>
+                        {STRENGTH_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">
+                      {STRENGTH_OPTIONS.find(option => option.value === evangelist.strength)?.label || '未設定'}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>リスト提供有無</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editForm.listAcquired ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, listAcquired: e.target.value }))}
+                      placeholder="例：提出済 / 未提出"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.listAcquired || '未設定'}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>N/A（ネクストアクション）</Label>
+                  {isEditing ? (
+                    <Textarea
+                      value={editForm.nextActionNote ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, nextActionNote: e.target.value }))}
+                      placeholder="次のアクション内容を入力"
+                      rows={3}
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.meetingStatus || '未設定'}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>N/A期日</Label>
+                  {isEditing ? (
+                    <Input
+                      value={editForm.nextActionDueOn ?? ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, nextActionDueOn: e.target.value }))}
+                      placeholder="例：2024-05-01"
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.supportPriority || '未設定'}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>メモ</Label>
+                  {isEditing ? (
+                    <Textarea
+                      value={editForm.notes || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                      placeholder="面談メモを入力"
+                      rows={4}
+                    />
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{evangelist.notes || '未設定'}</p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold">面談履歴</h2>
             <Button

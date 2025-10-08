@@ -1,15 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 
-export async function POST() {
-  try {
-    const session = await getSession();
-    session.destroy();
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-    return NextResponse.json(
+export async function POST(request: NextRequest) {
+  try {
+    const response = NextResponse.json(
       { message: 'Logged out successfully' },
       { status: 200 }
     );
+
+    const session = await getSession(request, response);
+    await session.destroy();
+
+    return response;
   } catch (error) {
     console.error('Logout error:', error);
     return NextResponse.json(

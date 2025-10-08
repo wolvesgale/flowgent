@@ -32,8 +32,16 @@ const CONTACT_LABELS = {
 } as const
 
 const PHASE_LABELS = {
-  FIRST_CONTACT: '初回',
+  INQUIRY: '問い合わせ',
+  FIRST_MEETING: '初回面談',
   REGISTERED: '登録',
+  LIST_MATCHING: 'リスト提供/突合',
+  INNOVATOR_CONFIRM: 'イノベータ確認',
+  INTRODUCTION: '紹介開始',
+  DEAL_SETTING: '商談設定',
+  FIRST_RESULT: '初回実績',
+  CONTINUOUS_PROPOSAL: '継続提案',
+  FIRST_CONTACT: '初回',
   LIST_SHARED: 'リスト提供',
   CANDIDATE_SELECTION: '候補抽出',
   INNOVATOR_REVIEW: 'イノベータ確認',
@@ -240,7 +248,7 @@ export default function EvangelistsPage() {
               <select
                 value={tierFilter}
                 onChange={(e) => setTierFilter(e.target.value as 'ALL' | 'TIER1' | 'TIER2')}
-                className="px-3 py-2 border border-input bg-background rounded-md"
+                className="px-3 py-2 border border-input bg-white/95 text-slate-900 rounded-md backdrop-blur-sm"
               >
                 <option value="ALL">全てのTier</option>
                 <option value="TIER1">TIER1</option>
@@ -250,7 +258,7 @@ export default function EvangelistsPage() {
               <select
                 value={assignedCsFilter}
                 onChange={(e) => setAssignedCsFilter(e.target.value)}
-                className="px-3 py-2 border border-input bg-background rounded-md"
+                className="px-3 py-2 border border-input bg-white/95 text-slate-900 rounded-md backdrop-blur-sm"
               >
                 <option value="">全ての担当CS</option>
                 {users.map((user) => (
@@ -263,7 +271,7 @@ export default function EvangelistsPage() {
               <select
                 value={staleFilter}
                 onChange={(e) => setStaleFilter(e.target.value)}
-                className="px-3 py-2 border border-input bg-background rounded-md"
+                className="px-3 py-2 border border-input bg-white/95 text-slate-900 rounded-md backdrop-blur-sm"
               >
                 <option value="">フォロー期間</option>
                 <option value="7">7日以上未フォロー</option>
@@ -339,8 +347,8 @@ export default function EvangelistsPage() {
                             handleAssign(evangelist.id, value)
                           }}
                         >
-                          <SelectTrigger className="bg-white">
-                            <SelectValue placeholder="未割り当て" />
+                          <SelectTrigger className="bg-white text-slate-900">
+                            <SelectValue className="text-slate-900" placeholder="未割り当て" />
                           </SelectTrigger>
                           <SelectContent className="bg-white text-slate-900">
                             <SelectItem value="">未割り当て</SelectItem>
@@ -354,11 +362,18 @@ export default function EvangelistsPage() {
                       </TableCell>
                       <TableCell>{formatDate(evangelist.createdAt)}</TableCell>
                       <TableCell>
-                        <Link href={`/evangelists/${evangelist.id}`}>
-                          <Button variant="outline" size="sm">
-                            詳細
-                          </Button>
-                        </Link>
+                        <div className="flex flex-wrap gap-2">
+                          <Link href={`/evangelists/${evangelist.id}`}>
+                            <Button variant="outline" size="sm">
+                              詳細
+                            </Button>
+                          </Link>
+                          <Link href={`/evangelists/${evangelist.id}?tab=meetings`}>
+                            <Button variant="secondary" size="sm">
+                              面談シート
+                            </Button>
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

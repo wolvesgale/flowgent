@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const updateUserSchema = z.object({
   name: z.string().min(1, 'Name is required').optional(),
@@ -14,11 +15,8 @@ const updateUserSchema = z.object({
 })
 
 // 管理者権限チェック
-async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), {
-    password: process.env.SESSION_PASSWORD!,
-    cookieName: 'flowgent-session',
-  })
+async function checkAdminPermission(request: NextRequest) {
+  const session = await getSession(request)
 
   if (!session.isLoggedIn || !session.userId) {
     return { authorized: false, error: 'Unauthorized', status: 401 }
@@ -42,7 +40,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authCheck = await checkAdminPermission()
+    const authCheck = await checkAdminPermission(request)
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
@@ -90,7 +88,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authCheck = await checkAdminPermission()
+    const authCheck = await checkAdminPermission(request)
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
@@ -109,6 +107,7 @@ export async function PUT(
     }
 
     const userData = validationResult.data
+    const normalizedEmail = userData.email ? userData.email.trim().toLowerCase() : undefined
 
     // ユーザーが存在するかチェック
     const existingUser = await prisma.user.findUnique({
@@ -120,10 +119,10 @@ export async function PUT(
     }
 
     // メールアドレスの重複チェック（自分以外）
-    if (userData.email) {
+    if (normalizedEmail) {
       const emailExists = await prisma.user.findFirst({
         where: {
-          email: userData.email,
+          email: normalizedEmail,
           id: { not: id },
         },
       })
@@ -146,8 +145,8 @@ export async function PUT(
     }
     
     const updateData: UpdateData = { updatedAt: new Date() }
-    if (userData.name) updateData.name = userData.name
-    if (userData.email) updateData.email = userData.email
+    if (userData.name) updateData.name = userData.name.trim()
+    if (normalizedEmail) updateData.email = normalizedEmail
     if (userData.role) updateData.role = userData.role
     if (userData.password) {
       updateData.password = await bcrypt.hash(userData.password, 12)
@@ -183,7 +182,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authCheck = await checkAdminPermission()
+    const authCheck = await checkAdminPermission(request)
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
