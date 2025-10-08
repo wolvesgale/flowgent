@@ -215,8 +215,8 @@ export default function AdminInnovatorsPage() {
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">領域</Label>
                 <Select value={formData.domain} onValueChange={(value: Domain) => setFormData((prev) => ({ ...prev, domain: value }))}>
-                  <SelectTrigger className="col-span-3 bg-white">
-                    <SelectValue placeholder="領域を選択" />
+                  <SelectTrigger className="col-span-3 bg-white text-slate-900">
+                    <SelectValue className="text-slate-900" placeholder="領域を選択" />
                   </SelectTrigger>
                   <SelectContent className="bg-white text-slate-900">
                     {DOMAIN_OPTIONS.map((option) => (
@@ -286,8 +286,8 @@ export default function AdminInnovatorsPage() {
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">領域</Label>
                 <Select value={formData.domain} onValueChange={(value: Domain) => setFormData((prev) => ({ ...prev, domain: value }))}>
-                  <SelectTrigger className="col-span-3 bg-white">
-                    <SelectValue placeholder="領域を選択" />
+                  <SelectTrigger className="col-span-3 bg-white text-slate-900">
+                    <SelectValue className="text-slate-900" placeholder="領域を選択" />
                   </SelectTrigger>
                   <SelectContent className="bg-white text-slate-900">
                     {DOMAIN_OPTIONS.map((option) => (
@@ -354,8 +354,8 @@ export default function AdminInnovatorsPage() {
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Select value={domainFilter} onValueChange={(value: 'ALL' | Domain) => setDomainFilter(value)}>
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="領域を選択" />
+                <SelectTrigger className="bg-white text-slate-900">
+                  <SelectValue className="text-slate-900" placeholder="領域を選択" />
                 </SelectTrigger>
                 <SelectContent className="bg-white text-slate-900">
                   <SelectItem value="ALL">全ての領域</SelectItem>
