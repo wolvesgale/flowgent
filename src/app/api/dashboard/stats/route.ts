@@ -4,13 +4,11 @@ import { getIronSession } from 'iron-session'
 import { cookies } from 'next/headers'
 
 import { prisma } from '@/lib/prisma'
+import { sessionOptions } from '@/lib/session-config'
 import type { SessionData } from '@/lib/session'
 
 async function checkAuth() {
-  const session = await getIronSession<SessionData>(await cookies(), {
-    password: process.env.SESSION_PASSWORD!,
-    cookieName: 'flowgent-session',
-  })
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
   if (!session.isLoggedIn) return null
   return session
 }
