@@ -1,6 +1,7 @@
-import { getIronSession, type SessionOptions } from 'iron-session';
+import { getIronSession, type IronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import type { NextRequest, NextResponse } from 'next/server';
 
 export interface SessionData {
   userId?: string;
@@ -47,28 +48,23 @@ function buildSessionOptions(cookieName: string): SessionOptions {
   };
 }
 
-async function readSessionForCookie(
-  cookieStore: Awaited<ReturnType<typeof cookies>>,
-  cookieName: string,
-) {
-  return getIronSession<SessionData>(cookieStore, buildSessionOptions(cookieName));
-}
-
 export function getSessionOptions(): SessionOptions {
   return buildSessionOptions(resolveCookieName());
 }
 
-export async function getSession() {
+async function getSessionFromCookieStore(cookieName: string) {
   const cookieStore = await cookies();
-  const cookieName = resolveCookieName();
-  const session = await readSessionForCookie(cookieStore, cookieName);
+  const session = await getIronSession<SessionData>(cookieStore, buildSessionOptions(cookieName));
 
   if (!session.isLoggedIn) {
     const legacyCookiePresent =
       cookieName !== LEGACY_COOKIE_NAME && Boolean(cookieStore.get(LEGACY_COOKIE_NAME));
 
     if (legacyCookiePresent) {
-      const legacySession = await readSessionForCookie(cookieStore, LEGACY_COOKIE_NAME);
+      const legacySession = await getIronSession<SessionData>(
+        cookieStore,
+        buildSessionOptions(LEGACY_COOKIE_NAME),
+      );
       if (legacySession.isLoggedIn) {
         session.userId = legacySession.userId;
         session.email = legacySession.email;
@@ -86,6 +82,25 @@ export async function getSession() {
   }
 
   return session;
+}
+
+function ensureSessionDefaults(session: IronSession<SessionData>) {
+  if (!session.isLoggedIn) {
+    session.isLoggedIn = defaultSession.isLoggedIn;
+  }
+  return session;
+}
+
+export async function getSession(request?: NextRequest, response?: NextResponse) {
+  const cookieName = resolveCookieName();
+
+  if (request && response) {
+    const session = await getIronSession<SessionData>(request, response, buildSessionOptions(cookieName));
+    return ensureSessionDefaults(session);
+  }
+
+  const session = await getSessionFromCookieStore(cookieName);
+  return ensureSessionDefaults(session);
 }
 
 export async function requireAuth() {

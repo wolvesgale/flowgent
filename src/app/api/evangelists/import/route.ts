@@ -122,54 +122,32 @@ export async function POST(req: NextRequest) {
         const createData = buildCreateData(row);
         const updateData = buildUpdateData(row);
 
-        try {
-          if (row.recordId) {
-            await prisma.evangelist.upsert({
-              where: { recordId: row.recordId },
-              create: { ...createData, recordId: row.recordId },
-              update: updateData,
-            });
-            successCount += 1;
-            continue;
-          }
+        let existing: { id: string } | null = null;
 
-          if (row.email) {
-            await prisma.evangelist.upsert({
-              where: { email: row.email },
-              create: { ...createData, email: row.email },
-              update: { ...updateData, recordId: row.recordId ?? undefined },
-            });
-            successCount += 1;
-            continue;
-          }
-
-          await prisma.evangelist.create({ data: createData });
-          successCount += 1;
-        } catch (innerErr) {
-          const isUniqueError =
-            innerErr instanceof Prisma.PrismaClientKnownRequestError && innerErr.code === 'P2002';
-
-          if (isUniqueError && row.email) {
-            try {
-              await prisma.evangelist.upsert({
-                where: { email: row.email },
-                create: { ...createData, email: row.email },
-                update: { ...updateData, recordId: row.recordId ?? undefined },
-              });
-              successCount += 1;
-              continue;
-            } catch (retryErr) {
-              console.error('CSV row retry error:', {
-                lineNumber: row.lineNumber,
-                error: retryErr instanceof Error ? retryErr.message : String(retryErr),
-              });
-              failedRowNumbers.push(row.lineNumber);
-              continue;
-            }
-          }
-
-          throw innerErr;
+        if (row.recordId) {
+          existing = await prisma.evangelist.findUnique({
+            where: { recordId: row.recordId },
+            select: { id: true },
+          });
         }
+
+        if (!existing && row.email) {
+          existing = await prisma.evangelist.findUnique({
+            where: { email: row.email },
+            select: { id: true },
+          });
+        }
+
+        if (existing) {
+          await prisma.evangelist.update({
+            where: { id: existing.id },
+            data: updateData,
+          });
+        } else {
+          await prisma.evangelist.create({ data: createData });
+        }
+
+        successCount += 1;
       } catch (err) {
         console.error('CSV row import error:', {
           lineNumber: row.lineNumber,
