@@ -9,15 +9,25 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { UploadCloud, ListChecks, Table as TableIcon, Info, ShieldAlert } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const DB_FIELDS = [
-  { key: 'recordId', label: 'レコードID' },
-  { key: 'firstName', label: '名' },
-  { key: 'lastName', label: '姓' },
+  { key: 'lastName', label: '姓', isEssential: true, description: '必須項目' },
+  { key: 'firstName', label: '名', isEssential: true, description: '必須項目' },
+  {
+    key: 'email',
+    label: 'メールアドレス',
+    isEssential: true,
+    description: '任意。既存レコードと突合する際に利用できます',
+  },
+  {
+    key: 'recordId',
+    label: 'レコードID',
+    description: '任意。Salesforce 等の外部IDを保持している場合に使用します',
+  },
   { key: 'supportPriority', label: 'サポート優先度' },
-  { key: 'email', label: 'メールアドレス' },
   { key: 'pattern', label: 'パターン' },
-  { key: 'contactPref', label: '連絡手段' },
+  { key: 'contactMethod', label: '連絡手段' },
   { key: 'meetingStatus', label: '面談状況' },
   { key: 'registrationStatus', label: '登録状況' },
   { key: 'lineRegistered', label: 'LINE登録' },
@@ -29,11 +39,16 @@ const DB_FIELDS = [
   { key: 'contactOwner', label: 'コンタクト担当者' },
   { key: 'sourceCreatedAt', label: '作成日 (YYYY-MM-DD HH:mm)' },
   { key: 'marketingContactStatus', label: 'マーケティングコンタクトステータス' },
-  { key: 'strengths', label: '強み' },
+  { key: 'strength', label: '強み' },
   { key: 'notes', label: 'メモ' },
   { key: 'tier', label: 'Tier (TIER1/TIER2)' },
   { key: 'tags', label: 'タグ(カンマ区切り可)' },
-] as const;
+] as const satisfies readonly {
+  key: string;
+  label: string;
+  description?: string;
+  isEssential?: boolean;
+}[];
 
 const MULTI_VALUE_FIELDS = new Set(['tags']);
 
@@ -62,6 +77,8 @@ export default function CSVMapper() {
   const [map, setMap] = useState<Record<FieldKey, string | string[] | undefined>>(() => createEmptyMap());
   const [isImporting, setIsImporting] = useState(false);
   const [lastImportCount, setLastImportCount] = useState<number | null>(null);
+  const [skippedCount, setSkippedCount] = useState<number | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const headerLookup = useMemo(
     () =>
@@ -130,6 +147,7 @@ export default function CSVMapper() {
             setAllRows(normalizedRows);
             setMap(createEmptyMap());
             setLastImportCount(null);
+            setSkippedCount(null);
 
             toast.success(`CSVファイルを読み込みました（${normalizedRows.length}行）`);
           } catch (e: unknown) {
@@ -199,6 +217,8 @@ export default function CSVMapper() {
   }, [allRows, headerLookup, map]);
 
   async function importInBatches(payload: Record<string, unknown>[]) {
+    let imported = 0;
+    let skipped = 0;
     for (let i = 0; i < payload.length; i += BATCH_SIZE) {
       const chunk = payload.slice(i, i + BATCH_SIZE);
       const res = await fetch('/api/evangelists/import', {
@@ -214,12 +234,26 @@ export default function CSVMapper() {
         const text = await res.text();
         throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${text || res.statusText}`);
       }
+
+      try {
+        const data = (await res.json()) as { count?: number; skipped?: number };
+        imported += data?.count ?? chunk.length;
+        skipped += data?.skipped ?? 0;
+      } catch {
+        imported += chunk.length;
+      }
     }
+
+    return { imported, skipped };
   }
 
   const handleImport = async () => {
     try {
       if (!allRows.length) return toast.error('CSV データが空です');
+
+      if (!map.firstName || !map.lastName) {
+        return toast.error('名と姓の列は必須です');
+      }
 
       const hasMapping = Object.values(map).some((v) =>
         Array.isArray(v) ? v.length > 0 : Boolean(v && v.length > 0),
@@ -236,16 +270,34 @@ export default function CSVMapper() {
       );
       if (meaningfulRows.length === 0) return toast.error('選択した列に値が見つかりませんでした');
 
+      const validRows = meaningfulRows.filter((row) => {
+        const firstName = typeof row.firstName === 'string' ? row.firstName.trim() : '';
+        const lastName = typeof row.lastName === 'string' ? row.lastName.trim() : '';
+        return firstName.length > 0 && lastName.length > 0;
+      });
+
+      const skippedRows = meaningfulRows.length - validRows.length;
+
+      if (validRows.length === 0) {
+        return toast.error('名と姓が入力された行が見つかりませんでした');
+      }
+
       setIsImporting(true);
-      await importInBatches(meaningfulRows);
-      toast.success(`${meaningfulRows.length} 件のインポートが完了しました`);
-      setLastImportCount(meaningfulRows.length);
+      const result = await importInBatches(validRows);
+      const totalSkipped = skippedRows + (result.skipped ?? 0);
+      toast.success(`${result.imported} 件のインポートが完了しました`);
+      if (totalSkipped > 0) {
+        toast(`名・姓が未入力の ${totalSkipped} 行はスキップされました`);
+      }
+      setLastImportCount(result.imported);
+      setSkippedCount(totalSkipped);
 
       // リセット
       setHeaders([]);
       setRows([]);
       setAllRows([]);
       setMap(createEmptyMap());
+      setShowAdvanced(false);
     } catch (e: unknown) {
       if (e instanceof Error) {
         if (e.message === 'AUTH') return toast.error('セッションの有効期限が切れています。再度ログインしてください。');
@@ -261,6 +313,128 @@ export default function CSVMapper() {
   const mappedFields = DB_FIELDS.filter(
     (f) => map[f.key] && (!Array.isArray(map[f.key]) || (map[f.key] as string[]).length > 0),
   );
+
+  const essentialFields = DB_FIELDS.filter((field) => field.isEssential);
+  const advancedFields = DB_FIELDS.filter((field) => !field.isEssential);
+
+  const renderFieldCard = (field: (typeof DB_FIELDS)[number]) => {
+    const selected = map[field.key];
+    const selectedLabel = Array.isArray(selected)
+      ? selected.map((id) => headerLookup[id]?.label ?? '（不明な列）').join(', ')
+      : typeof selected === 'string' && selected.length > 0
+      ? headerLookup[selected]?.label ?? '（不明な列）'
+      : '未選択';
+
+    const isMapped = Array.isArray(selected)
+      ? selected.length > 0
+      : typeof selected === 'string' && selected.length > 0;
+
+    return (
+      <div key={field.key} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-slate-700">
+              {field.label}
+              {field.isEssential && <span className="ml-1 text-xs font-normal text-purple-600">（必須）</span>}
+            </span>
+            <span className="text-xs text-slate-500">{isMapped ? selectedLabel : '未選択'}</span>
+            {field.description && <span className="text-xs text-slate-500">{field.description}</span>}
+          </div>
+          {isMapped ? (
+            <Badge variant="outline" className="border-green-300 bg-green-50 text-xs text-green-700">
+              選択済み
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-slate-300 text-xs text-slate-500">未設定</Badge>
+          )}
+        </div>
+
+        {/* 単一列マッピング */}
+        <Select
+          value={
+            Array.isArray(selected)
+              ? undefined
+              : typeof selected === 'string' && selected.length > 0
+              ? selected
+              : undefined
+          }
+          onValueChange={(value) => {
+            setMap((prev) => {
+              if (value === '__CLEAR__') {
+                const next = { ...prev };
+                delete next[field.key];
+                return next;
+              }
+              return { ...prev, [field.key]: value };
+            });
+          }}
+        >
+          <SelectTrigger className="w-full bg-white text-slate-800">
+            <SelectValue placeholder="（単一列を選択）" />
+          </SelectTrigger>
+          <SelectContent className="bg-white text-slate-800">
+            <SelectItem value="__CLEAR__" className="text-slate-800">
+              （選択解除）
+            </SelectItem>
+            {headers.map((header) => (
+              <SelectItem
+                key={header.id}
+                value={header.id}
+                className={cn(
+                  'text-slate-800 focus:text-slate-900 data-[highlighted]:bg-purple-100 data-[state=checked]:bg-purple-200 data-[state=checked]:text-slate-900',
+                )}
+              >
+                {header.label}
+                {header.raw.trim().length > 0 && header.raw.trim() !== header.label
+                  ? `（${header.raw}）`
+                  : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* タグのみ複数列対応 */}
+        {field.key === 'tags' && (
+          <details className="mt-2">
+            <summary className="cursor-pointer text-sm text-slate-600">タグに使う列を複数選択</summary>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {headers.map((header) => {
+                const isChecked = Array.isArray(map.tags) && (map.tags as string[]).includes(header.id);
+                return (
+                  <label
+                    key={header.id}
+                    className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(event) => {
+                        setMap((prev) => {
+                          const current = Array.isArray(prev.tags) ? [...(prev.tags as string[])] : [];
+                          if (event.target.checked) {
+                            if (current.includes(header.id)) return prev;
+                            return { ...prev, tags: [...current, header.id] };
+                          }
+                          const nextTags = current.filter((id) => id !== header.id);
+                          if (nextTags.length === 0) {
+                            const next = { ...prev };
+                            delete next.tags;
+                            return next;
+                          }
+                          return { ...prev, tags: nextTags };
+                        });
+                      }}
+                    />
+                    <span>{header.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </details>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -315,111 +489,37 @@ export default function CSVMapper() {
             <ListChecks className="h-6 w-6 text-purple-600" />
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid gap-4 lg:grid-cols-2">
-              {DB_FIELDS.map((field) => {
-                const selected = map[field.key];
-                const selectedLabel = Array.isArray(selected)
-                  ? selected.map((id) => headerLookup[id]?.label ?? '（不明な列）').join(', ')
-                  : typeof selected === 'string' && selected.length > 0
-                  ? headerLookup[selected]?.label ?? '（不明な列）'
-                  : '未選択';
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">
+                  CSVから最低限必要な項目（姓・名・メールアドレス）だけを素早くマッピングできます。
+                </p>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {essentialFields.map((field) => renderFieldCard(field))}
+                </div>
+              </div>
 
-                const isMapped = Array.isArray(selected)
-                  ? selected.length > 0
-                  : typeof selected === 'string' && selected.length > 0;
-
-                return (
-                  <div key={field.key} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-semibold text-slate-700">{field.label}</span>
-                        <span className="text-xs text-slate-500">{isMapped ? selectedLabel : '未選択'}</span>
-                      </div>
-                      {isMapped ? (
-                        <Badge variant="outline" className="border-green-300 bg-green-50 text-xs text-green-700">選択済み</Badge>
-                      ) : (
-                        <Badge variant="outline" className="border-slate-300 text-xs text-slate-500">未設定</Badge>
-                      )}
-                    </div>
-
-                    {/* 単一列マッピング（Radix Select: 空値禁止→未選択は undefined を使う） */}
-                    <Select
-                      value={
-                        Array.isArray(selected)
-                          ? undefined
-                          : typeof selected === 'string' && selected.length > 0
-                          ? selected
-                          : undefined
-                      }
-                      onValueChange={(value) => {
-                        setMap((prev) => {
-                          if (value === '__CLEAR__') {
-                            const next = { ...prev };
-                            delete next[field.key];
-                            return next;
-                          }
-                          return { ...prev, [field.key]: value };
-                        });
-                      }}
+              {advancedFields.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-700">追加フィールド（任意）</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-purple-200 bg-white text-purple-700 hover:bg-purple-50"
+                      onClick={() => setShowAdvanced((prev) => !prev)}
                     >
-                      <SelectTrigger className="w-full bg-white">
-                        <SelectValue placeholder="（単一列を選択）" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__CLEAR__">（選択解除）</SelectItem>
-                        {headers.map((header) => (
-                          <SelectItem key={header.id} value={header.id}>
-                            {header.label}
-                            {header.raw.trim().length > 0 && header.raw.trim() !== header.label
-                              ? `（${header.raw}）`
-                              : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    {/* タグのみ複数列対応 */}
-                    {field.key === 'tags' && (
-                      <details className="mt-2">
-                        <summary className="cursor-pointer text-sm text-slate-600">タグに使う列を複数選択</summary>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {headers.map((header) => {
-                            const isChecked = Array.isArray(map.tags) && (map.tags as string[]).includes(header.id);
-                            return (
-                              <label
-                                key={header.id}
-                                className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={(event) => {
-                                    setMap((prev) => {
-                                      const current = Array.isArray(prev.tags) ? [...(prev.tags as string[])] : [];
-                                      if (event.target.checked) {
-                                        if (current.includes(header.id)) return prev;
-                                        return { ...prev, tags: [...current, header.id] };
-                                      }
-                                      const nextTags = current.filter((id) => id !== header.id);
-                                      if (nextTags.length === 0) {
-                                        const next = { ...prev };
-                                        delete next.tags;
-                                        return next;
-                                      }
-                                      return { ...prev, tags: nextTags };
-                                    });
-                                  }}
-                                />
-                                <span>{header.label}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </details>
-                    )}
+                      {showAdvanced ? '追加フィールドを閉じる' : '追加フィールドを表示'}
+                    </Button>
                   </div>
-                );
-              })}
+                  {showAdvanced && (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {advancedFields.map((field) => renderFieldCard(field))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -516,8 +616,15 @@ export default function CSVMapper() {
             </Button>
 
             {lastImportCount !== null && (
-              <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-                {lastImportCount} 件のレコードを登録 / 更新しました。
+              <div className="space-y-2">
+                <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                  {lastImportCount} 件のレコードを登録 / 更新しました。
+                </div>
+                {skippedCount !== null && skippedCount > 0 && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                    名・姓が未入力の {skippedCount} 行をスキップしました。
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

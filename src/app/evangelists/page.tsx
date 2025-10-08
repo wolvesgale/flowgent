@@ -8,7 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, Plus, ArrowUpDown, X } from 'lucide-react'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Search, Plus, ArrowUpDown, X, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 
 const STRENGTH_LABELS = {
@@ -31,19 +34,21 @@ const CONTACT_LABELS = {
   SLACK: 'Slack',
 } as const
 
-const PHASE_LABELS = {
-  FIRST_CONTACT: '初回',
+const MANAGEMENT_PHASE_LABELS = {
+  INQUIRY: '問い合わせ',
+  FIRST_MEETING: '初回面談',
   REGISTERED: '登録',
-  LIST_SHARED: 'リスト提供',
-  CANDIDATE_SELECTION: '候補抽出',
+  LIST_PROVIDED: 'リスト提供/突合',
   INNOVATOR_REVIEW: 'イノベータ確認',
-  INTRODUCING: '紹介中',
-  FOLLOW_UP: '継続中',
+  INTRODUCTION_STARTED: '紹介開始',
+  MEETING_SCHEDULED: '商談設定',
+  FIRST_RESULT: '初回実績',
+  CONTINUED_PROPOSAL: '継続提案',
 } as const
 
 type StrengthKey = keyof typeof STRENGTH_LABELS
 type ContactKey = keyof typeof CONTACT_LABELS
-type PhaseKey = keyof typeof PHASE_LABELS
+type ManagementPhaseKey = keyof typeof MANAGEMENT_PHASE_LABELS
 
 interface Evangelist {
   id: string
@@ -51,8 +56,12 @@ interface Evangelist {
   lastName?: string | null
   email?: string | null
   strength?: StrengthKey | null
-  contactPreference?: ContactKey | null
-  phase?: PhaseKey | null
+  contactMethod?: ContactKey | null
+  managementPhase?: ManagementPhaseKey | null
+  listProvided?: boolean | null
+  nextAction?: string | null
+  nextActionDueOn?: string | null
+  notes?: string | null
   tier: 'TIER1' | 'TIER2'
   assignedCsId?: string | null
   assignedCs?: {
@@ -71,6 +80,16 @@ interface User {
   role: 'ADMIN' | 'CS'
 }
 
+type EditFormState = {
+  contactMethod: ContactKey | ''
+  strength: StrengthKey | ''
+  managementPhase: ManagementPhaseKey | ''
+  listProvided: 'true' | 'false'
+  nextAction: string
+  nextActionDueOn: string
+  notes: string
+}
+
 export default function EvangelistsPage() {
   const [evangelists, setEvangelists] = useState<Evangelist[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -84,6 +103,17 @@ export default function EvangelistsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const itemsPerPage = 10
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [selectedEvangelist, setSelectedEvangelist] = useState<Evangelist | null>(null)
+  const [editForm, setEditForm] = useState<EditFormState>({
+    contactMethod: '',
+    strength: '',
+    managementPhase: '',
+    listProvided: 'false',
+    nextAction: '',
+    nextActionDueOn: '',
+    notes: '',
+  })
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -135,6 +165,22 @@ export default function EvangelistsPage() {
   useEffect(() => {
     void fetchEvangelists()
   }, [fetchEvangelists])
+
+  useEffect(() => {
+    if (!selectedEvangelist) return
+
+    setEditForm({
+      contactMethod: selectedEvangelist.contactMethod ?? '',
+      strength: selectedEvangelist.strength ?? '',
+      managementPhase: selectedEvangelist.managementPhase ?? '',
+      listProvided: selectedEvangelist.listProvided ? 'true' : 'false',
+      nextAction: selectedEvangelist.nextAction ?? '',
+      nextActionDueOn: selectedEvangelist.nextActionDueOn
+        ? selectedEvangelist.nextActionDueOn.slice(0, 10)
+        : '',
+      notes: selectedEvangelist.notes ?? '',
+    })
+  }, [selectedEvangelist])
 
   const handleSort = (field: 'name' | 'createdAt') => {
     if (sortBy === field) {
@@ -192,6 +238,62 @@ export default function EvangelistsPage() {
   }
 
   const hasActiveFilters = searchTerm || tierFilter !== 'ALL' || assignedCsFilter || staleFilter
+
+  const handleEditSubmit = async () => {
+    if (!selectedEvangelist) return
+
+    try {
+      const payload = {
+        contactMethod: editForm.contactMethod || null,
+        strength: editForm.strength || null,
+        managementPhase: editForm.managementPhase || null,
+        listProvided: editForm.listProvided === 'true',
+        nextAction: editForm.nextAction ? editForm.nextAction : null,
+        nextActionDueOn: editForm.nextActionDueOn
+          ? new Date(editForm.nextActionDueOn).toISOString()
+          : null,
+        notes: editForm.notes ? editForm.notes : null,
+      }
+
+      const response = await fetch(`/api/evangelists/${selectedEvangelist.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw new Error('更新に失敗しました')
+      }
+
+      const updated: Evangelist = await response.json()
+
+      setEvangelists((prev) =>
+        prev.map((evangelist) =>
+          evangelist.id === updated.id
+            ? {
+                ...evangelist,
+                ...updated,
+              }
+            : evangelist,
+        ),
+      )
+
+      setSelectedEvangelist(updated)
+      setIsEditOpen(false)
+      toast.success('EVA情報を更新しました')
+    } catch (error) {
+      console.error('Failed to update evangelist:', error)
+      toast.error('EVA情報の更新に失敗しました')
+    }
+  }
+
+  const openEditDialog = (evangelist: Evangelist) => {
+    setSelectedEvangelist(evangelist)
+    setIsEditOpen(true)
+  }
 
   return (
     <div className="container mx-auto py-6">
@@ -293,8 +395,11 @@ export default function EvangelistsPage() {
                     </TableHead>
                     <TableHead>メールアドレス</TableHead>
                     <TableHead>強み</TableHead>
-                    <TableHead>フェーズ</TableHead>
                     <TableHead>連絡手段</TableHead>
+                    <TableHead>管理フェーズ</TableHead>
+                    <TableHead>リスト提供</TableHead>
+                    <TableHead>ネクストアクション</TableHead>
+                    <TableHead>NA期日</TableHead>
                     <TableHead>担当CS</TableHead>
                     <TableHead>
                       <Button
@@ -320,16 +425,41 @@ export default function EvangelistsPage() {
                         {evangelist.strength ? STRENGTH_LABELS[evangelist.strength] : '—'}
                       </TableCell>
                       <TableCell>
-                        {evangelist.phase ? (
+                        {evangelist.contactMethod ? CONTACT_LABELS[evangelist.contactMethod] : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {evangelist.managementPhase ? (
                           <Badge variant="outline" className="border-purple-300 bg-purple-50 text-purple-700">
-                            {PHASE_LABELS[evangelist.phase]}
+                            {MANAGEMENT_PHASE_LABELS[evangelist.managementPhase]}
                           </Badge>
                         ) : (
                           <span className="text-sm text-slate-500">未設定</span>
                         )}
                       </TableCell>
                       <TableCell>
-                        {evangelist.contactPreference ? CONTACT_LABELS[evangelist.contactPreference] : '—'}
+                        {evangelist.listProvided ? (
+                          <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                            済
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-slate-100 text-slate-600">
+                            未
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="max-w-[220px] text-sm text-slate-700">
+                        {evangelist.nextAction ? (
+                          <span className="line-clamp-2">{evangelist.nextAction}</span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {evangelist.nextActionDueOn ? (
+                          <span>{formatDate(evangelist.nextActionDueOn)}</span>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="min-w-[180px]">
                         <Select
@@ -354,11 +484,17 @@ export default function EvangelistsPage() {
                       </TableCell>
                       <TableCell>{formatDate(evangelist.createdAt)}</TableCell>
                       <TableCell>
-                        <Link href={`/evangelists/${evangelist.id}`}>
-                          <Button variant="outline" size="sm">
-                            詳細
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => openEditDialog(evangelist)}>
+                            <Pencil className="mr-1 h-3.5 w-3.5" />
+                            編集
                           </Button>
-                        </Link>
+                          <Link href={`/evangelists/${evangelist.id}`}>
+                            <Button variant="outline" size="sm">
+                              詳細
+                            </Button>
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -397,6 +533,153 @@ export default function EvangelistsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={isEditOpen}
+        onOpenChange={(open) => {
+          setIsEditOpen(open)
+          if (!open) {
+            setSelectedEvangelist(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>エヴァンジェリスト情報を編集</DialogTitle>
+          </DialogHeader>
+          {selectedEvangelist && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  {selectedEvangelist.firstName} {selectedEvangelist.lastName}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>連絡手段</Label>
+                  <Select
+                    value={editForm.contactMethod}
+                    onValueChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, contactMethod: value as ContactKey | '' }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="未設定" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">未設定</SelectItem>
+                      {Object.entries(CONTACT_LABELS).map(([key, label]) => (
+                        <SelectItem key={key} value={key}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>強み</Label>
+                  <Select
+                    value={editForm.strength}
+                    onValueChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, strength: value as StrengthKey | '' }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="未設定" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">未設定</SelectItem>
+                      {Object.entries(STRENGTH_LABELS).map(([key, label]) => (
+                        <SelectItem key={key} value={key}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>管理フェーズ</Label>
+                  <Select
+                    value={editForm.managementPhase}
+                    onValueChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, managementPhase: value as ManagementPhaseKey | '' }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="未設定" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">未設定</SelectItem>
+                      {Object.entries(MANAGEMENT_PHASE_LABELS).map(([key, label]) => (
+                        <SelectItem key={key} value={key}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>リスト提供</Label>
+                  <Select
+                    value={editForm.listProvided}
+                    onValueChange={(value) =>
+                      setEditForm((prev) => ({ ...prev, listProvided: value as 'true' | 'false' }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="true">済</SelectItem>
+                      <SelectItem value="false">未</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>ネクストアクション</Label>
+                <Textarea
+                  value={editForm.nextAction}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, nextAction: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>NA期日</Label>
+                  <Input
+                    type="date"
+                    value={editForm.nextActionDueOn}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, nextActionDueOn: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>メモ</Label>
+                  <Textarea
+                    value={editForm.notes}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsEditOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleEditSubmit} disabled={!selectedEvangelist}>
+              保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

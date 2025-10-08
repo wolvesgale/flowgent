@@ -42,7 +42,7 @@ export default function EvangelistImportPage() {
               <ul className="text-sm space-y-1 text-muted-foreground">
                 <li>• 同じメールアドレスのデータは上書きされます</li>
                 <li>• 最大200行まで一度にインポート可能です</li>
-                <li>• 必須フィールド：名、姓、メールアドレス</li>
+                <li>• 必須フィールド：名、姓</li>
                 <li>• タグは複数の列から選択可能です</li>
               </ul>
             </div>

@@ -33,7 +33,7 @@ type ImportRow = {
   // プロフィール/状態系
   firstName?: string;
   lastName?: string;
-  contactPref?: string;
+  contactMethod?: string;
   supportPriority?: string;
   pattern?: string;
   meetingStatus?: string;
@@ -47,7 +47,7 @@ type ImportRow = {
   contactOwner?: string;
   marketingContactStatus?: string;
   sourceCreatedAt?: string; // CSVは文字列で来る想定
-  strengths?: string;
+  strength?: string;
   notes?: string;
   tier?: string;            // "TIER1" | "TIER2" 以外は無視
   tags?: string[] | string; // UIで配列/文字列どちらでも
@@ -67,6 +67,19 @@ function normalizeTier(input?: string | null): 'TIER1' | 'TIER2' | null {
   return up === 'TIER1' || up === 'TIER2' ? up : null;
 }
 
+const trimToNull = (value?: string | null) => {
+  if (typeof value !== 'string') return value ?? null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const trimToUndefined = (value?: string | null) => {
+  if (typeof value !== 'string') return value === null ? undefined : value;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed;
+};
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUserOrThrow();
@@ -78,27 +91,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'invalid' }, { status: 400 });
     }
 
+    const records = rows as ImportRow[];
+    const validRecords = records.filter((r) => {
+      const first = r.firstName?.trim();
+      const last = r.lastName?.trim();
+      return Boolean(first && last);
+    });
+    const skipped = records.length - validRecords.length;
+
+    if (validRecords.length === 0) {
+      return NextResponse.json(
+        { error: 'No rows contained both first and last name', skipped },
+        { status: 400 },
+      );
+    }
+
     const buildCreateData = (r: ImportRow) => ({
-      recordId: r.recordId || null,
-      firstName: r.firstName || null,
-      lastName: r.lastName || null,
-      email: r.email || null,
-      contactPref: r.contactPref || null,
-      supportPriority: r.supportPriority || null,
-      pattern: r.pattern || null,
-      meetingStatus: r.meetingStatus || null,
-      registrationStatus: r.registrationStatus || null,
-      lineRegistered: r.lineRegistered || null,
-      phoneNumber: r.phoneNumber || null,
-      acquisitionSource: r.acquisitionSource || null,
-      facebookUrl: r.facebookUrl || null,
-      listAcquired: r.listAcquired || null,
-      matchingListUrl: r.matchingListUrl || null,
-      contactOwner: r.contactOwner || null,
-      marketingContactStatus: r.marketingContactStatus || null,
+      recordId: trimToNull(r.recordId),
+      firstName: trimToNull(r.firstName),
+      lastName: trimToNull(r.lastName),
+      email: trimToNull(r.email),
+      contactMethod: trimToNull(r.contactMethod),
+      supportPriority: trimToNull(r.supportPriority),
+      pattern: trimToNull(r.pattern),
+      meetingStatus: trimToNull(r.meetingStatus),
+      registrationStatus: trimToNull(r.registrationStatus),
+      lineRegistered: trimToNull(r.lineRegistered),
+      phoneNumber: trimToNull(r.phoneNumber),
+      acquisitionSource: trimToNull(r.acquisitionSource),
+      facebookUrl: trimToNull(r.facebookUrl),
+      listAcquired: trimToNull(r.listAcquired),
+      listProvided: false,
+      matchingListUrl: trimToNull(r.matchingListUrl),
+      contactOwner: trimToNull(r.contactOwner),
+      marketingContactStatus: trimToNull(r.marketingContactStatus),
       sourceCreatedAt: parseSourceCreatedAt(r.sourceCreatedAt) || null,
-      strengths: r.strengths || null,
-      notes: r.notes || null,
+      strength: trimToNull(r.strength),
+      notes: trimToNull(r.notes),
       tier: normalizeTier(r.tier) ?? 'TIER2',
       tags: Array.isArray(r.tags)
         ? JSON.stringify(r.tags)
@@ -110,26 +139,26 @@ export async function POST(req: NextRequest) {
     });
 
     const buildUpdateData = (r: ImportRow) => ({
-      recordId: r.recordId || undefined,
-      firstName: r.firstName || undefined,
-      lastName: r.lastName || undefined,
-      email: r.email || undefined,
-      contactPref: r.contactPref || undefined,
-      supportPriority: r.supportPriority || undefined,
-      pattern: r.pattern || undefined,
-      meetingStatus: r.meetingStatus || undefined,
-      registrationStatus: r.registrationStatus || undefined,
-      lineRegistered: r.lineRegistered || undefined,
-      phoneNumber: r.phoneNumber || undefined,
-      acquisitionSource: r.acquisitionSource || undefined,
-      facebookUrl: r.facebookUrl || undefined,
-      listAcquired: r.listAcquired || undefined,
-      matchingListUrl: r.matchingListUrl || undefined,
-      contactOwner: r.contactOwner || undefined,
-      marketingContactStatus: r.marketingContactStatus || undefined,
+      recordId: trimToUndefined(r.recordId),
+      firstName: trimToUndefined(r.firstName),
+      lastName: trimToUndefined(r.lastName),
+      email: trimToUndefined(r.email),
+      contactMethod: trimToUndefined(r.contactMethod),
+      supportPriority: trimToUndefined(r.supportPriority),
+      pattern: trimToUndefined(r.pattern),
+      meetingStatus: trimToUndefined(r.meetingStatus),
+      registrationStatus: trimToUndefined(r.registrationStatus),
+      lineRegistered: trimToUndefined(r.lineRegistered),
+      phoneNumber: trimToUndefined(r.phoneNumber),
+      acquisitionSource: trimToUndefined(r.acquisitionSource),
+      facebookUrl: trimToUndefined(r.facebookUrl),
+      listAcquired: trimToUndefined(r.listAcquired),
+      matchingListUrl: trimToUndefined(r.matchingListUrl),
+      contactOwner: trimToUndefined(r.contactOwner),
+      marketingContactStatus: trimToUndefined(r.marketingContactStatus),
       sourceCreatedAt: parseSourceCreatedAt(r.sourceCreatedAt) || undefined,
-      strengths: r.strengths || undefined,
-      notes: r.notes || undefined,
+      strength: trimToUndefined(r.strength),
+      notes: trimToUndefined(r.notes),
       tier: normalizeTier(r.tier) || undefined,
       tags: Array.isArray(r.tags)
         ? JSON.stringify(r.tags)
@@ -139,7 +168,7 @@ export async function POST(req: NextRequest) {
       // 既存の assignedCsId は基本触らない（暗黙更新を避ける）
     });
 
-    const operations = (rows as ImportRow[]).reduce<Prisma.PrismaPromise<unknown>[]>((acc, r) => {
+    const operations = validRecords.reduce<Prisma.PrismaPromise<unknown>[]>((acc, r) => {
       const createData = buildCreateData(r);
       const updateData = buildUpdateData(r);
 
@@ -171,7 +200,7 @@ export async function POST(req: NextRequest) {
     }, []);
 
     await prisma.$transaction(operations);
-    return NextResponse.json({ ok: true, count: (rows as unknown[]).length });
+    return NextResponse.json({ ok: true, count: validRecords.length, skipped });
   } catch (error) {
     console.error('CSV import error:', error);
     if (error instanceof Error && error.message === 'Unauthorized') {
