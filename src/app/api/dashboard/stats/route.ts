@@ -84,7 +84,7 @@ export async function GET() {
         where: {
           OR: [
             { tags: { contains: '"IT"', mode: 'insensitive' } },
-            { strengths: { contains: 'IT', mode: 'insensitive' } },
+            { strength: { contains: 'IT', mode: 'insensitive' } },
           ],
         },
       }),
