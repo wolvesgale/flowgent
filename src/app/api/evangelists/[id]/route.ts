@@ -20,8 +20,26 @@ const updateEvangelistSchema = z
     registrationStatus: z.string().min(1).optional().nullable(),
     listAcquired: z.string().min(1).optional().nullable(),
     meetingStatus: z.string().min(1).optional().nullable(),
+    nextActionNote: z.string().min(1).optional().nullable(),
+    nextActionDueOn: z.string().min(1).optional().nullable(),
     phase: z
-      .enum(['FIRST_CONTACT', 'REGISTERED', 'LIST_SHARED', 'CANDIDATE_SELECTION', 'INNOVATOR_REVIEW', 'INTRODUCING', 'FOLLOW_UP'])
+      .enum([
+        'INQUIRY',
+        'FIRST_MEETING',
+        'REGISTERED',
+        'LIST_MATCHING',
+        'INNOVATOR_CONFIRM',
+        'INTRODUCTION',
+        'DEAL_SETTING',
+        'FIRST_RESULT',
+        'CONTINUOUS_PROPOSAL',
+        'FIRST_CONTACT',
+        'LIST_SHARED',
+        'CANDIDATE_SELECTION',
+        'INNOVATOR_REVIEW',
+        'INTRODUCING',
+        'FOLLOW_UP',
+      ])
       .optional(),
     notes: z.string().optional().nullable(),
     tier: z.enum(['TIER1', 'TIER2']).optional(),
@@ -143,6 +161,12 @@ export async function PUT(
 
     if (evangelistData.meetingStatus !== undefined) {
       updateData.meetingStatus = evangelistData.meetingStatus ?? null
+    }
+    if (evangelistData.nextActionNote !== undefined) {
+      updateData.meetingStatus = evangelistData.nextActionNote ?? null
+    }
+    if (evangelistData.nextActionDueOn !== undefined) {
+      updateData.supportPriority = evangelistData.nextActionDueOn ?? null
     }
 
     if (evangelistData.phase !== undefined) {

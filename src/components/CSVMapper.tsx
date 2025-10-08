@@ -11,12 +11,9 @@ import { toast } from 'sonner';
 import { UploadCloud, ListChecks, Table as TableIcon, Info, ShieldAlert } from 'lucide-react';
 
 const DB_FIELDS = [
-  { key: 'recordId', label: 'レコードID（任意）' },
   { key: 'lastName', label: '姓（必須）' },
   { key: 'firstName', label: '名（必須）' },
   { key: 'email', label: 'メールアドレス（任意）' },
-  { key: 'supportPriority', label: 'サポート優先度（任意）' },
-  { key: 'meetingStatus', label: '前回面談日時' },
 ] as const;
 
 const REQUIRED_FIELDS = ['lastName', 'firstName'] as const;
@@ -326,7 +323,7 @@ export default function CSVMapper() {
                 <CardTitle>取り込みフィールドのマッピング</CardTitle>
               </div>
               <CardDescription className="text-slate-600">
-                右側のプルダウンから CSV の列を選択してください。姓と名は必須で、メールアドレス・サポート優先度・前回面談日時は任意です。
+                右側のプルダウンから CSV の列を選択してください。姓と名は必須で、メールアドレスのみ任意で指定できます。
               </CardDescription>
             </div>
             <ListChecks className="h-6 w-6 text-purple-600" />

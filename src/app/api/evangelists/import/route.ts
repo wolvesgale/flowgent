@@ -10,22 +10,16 @@ export const dynamic = 'force-dynamic';
 // クライアント側 CSV マッピング後の行型
 type ImportRow = {
   __lineNumber?: number;
-  recordId?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
-  supportPriority?: string;
-  meetingStatus?: string;
 };
 
 type SanitizedRow = {
   lineNumber: number;
-  recordId: string | null;
   firstName: string;
   lastName: string;
   email: string | null;
-  supportPriority: string | null;
-  meetingStatus: string | null;
 };
 
 function normalizeString(value?: unknown): string | null {
@@ -63,12 +57,9 @@ export async function POST(req: NextRequest) {
         typeof row.__lineNumber === 'number' && Number.isFinite(row.__lineNumber)
           ? Math.max(1, Math.floor(row.__lineNumber))
           : index + 1,
-      recordId: normalizeString(row.recordId),
       firstName: normalizeString(row.firstName),
       lastName: normalizeString(row.lastName),
       email: normalizeEmail(row.email),
-      supportPriority: normalizeString(row.supportPriority),
-      meetingStatus: normalizeString(row.meetingStatus),
     }));
 
     const sanitizedRows: SanitizedRow[] = [];
@@ -82,12 +73,9 @@ export async function POST(req: NextRequest) {
 
       sanitizedRows.push({
         lineNumber: row.lineNumber,
-        recordId: row.recordId,
         firstName: row.firstName,
         lastName: row.lastName,
         email: row.email,
-        supportPriority: row.supportPriority,
-        meetingStatus: row.meetingStatus,
       });
     });
 
@@ -95,56 +83,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, count: 0, skippedRowNumbers }, { status: 200 });
     }
 
-    const buildCreateData = (r: SanitizedRow) => ({
-      recordId: r.recordId ?? null,
-      firstName: r.firstName,
-      lastName: r.lastName,
-      email: r.email ?? null,
-      supportPriority: r.supportPriority ?? null,
-      meetingStatus: r.meetingStatus ?? null,
-      assignedCsId: null,
-    });
-
-    const buildUpdateData = (r: SanitizedRow) => ({
-      recordId: r.recordId ?? undefined,
-      firstName: r.firstName,
-      lastName: r.lastName,
-      email: r.email ?? undefined,
-      supportPriority: r.supportPriority ?? undefined,
-      meetingStatus: r.meetingStatus ?? undefined,
-    });
-
     const failedRowNumbers: number[] = [];
     let successCount = 0;
 
     for (const row of sanitizedRows) {
       try {
-        const createData = buildCreateData(row);
-        const updateData = buildUpdateData(row);
-
-        let existing: { id: string } | null = null;
-
-        if (row.recordId) {
-          existing = await prisma.evangelist.findUnique({
-            where: { recordId: row.recordId },
-            select: { id: true },
-          });
-        }
-
-        if (!existing && row.email) {
-          existing = await prisma.evangelist.findUnique({
+        if (row.email) {
+          await prisma.evangelist.upsert({
             where: { email: row.email },
-            select: { id: true },
-          });
-        }
-
-        if (existing) {
-          await prisma.evangelist.update({
-            where: { id: existing.id },
-            data: updateData,
+            update: {
+              firstName: row.firstName,
+              lastName: row.lastName,
+            },
+            create: {
+              firstName: row.firstName,
+              lastName: row.lastName,
+              email: row.email,
+              assignedCsId: null,
+            },
           });
         } else {
-          await prisma.evangelist.create({ data: createData });
+          await prisma.evangelist.create({
+            data: {
+              firstName: row.firstName,
+              lastName: row.lastName,
+              assignedCsId: null,
+            },
+          });
         }
 
         successCount += 1;

@@ -32,8 +32,16 @@ const CONTACT_LABELS = {
 } as const
 
 const PHASE_LABELS = {
-  FIRST_CONTACT: '初回',
+  INQUIRY: '問い合わせ',
+  FIRST_MEETING: '初回面談',
   REGISTERED: '登録',
+  LIST_MATCHING: 'リスト提供/突合',
+  INNOVATOR_CONFIRM: 'イノベータ確認',
+  INTRODUCTION: '紹介開始',
+  DEAL_SETTING: '商談設定',
+  FIRST_RESULT: '初回実績',
+  CONTINUOUS_PROPOSAL: '継続提案',
+  FIRST_CONTACT: '初回',
   LIST_SHARED: 'リスト提供',
   CANDIDATE_SELECTION: '候補抽出',
   INNOVATOR_REVIEW: 'イノベータ確認',
@@ -354,11 +362,18 @@ export default function EvangelistsPage() {
                       </TableCell>
                       <TableCell>{formatDate(evangelist.createdAt)}</TableCell>
                       <TableCell>
-                        <Link href={`/evangelists/${evangelist.id}`}>
-                          <Button variant="outline" size="sm">
-                            詳細
-                          </Button>
-                        </Link>
+                        <div className="flex flex-wrap gap-2">
+                          <Link href={`/evangelists/${evangelist.id}`}>
+                            <Button variant="outline" size="sm">
+                              詳細
+                            </Button>
+                          </Link>
+                          <Link href={`/evangelists/${evangelist.id}?tab=meetings`}>
+                            <Button variant="secondary" size="sm">
+                              面談シート
+                            </Button>
+                          </Link>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
