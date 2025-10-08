@@ -11,7 +11,7 @@
 
 html, body {
   background: var(--brand-purple);
-  color: var(--fg-on-purple);
+  color: var(--card-fg);
   min-height: 100vh;
 }
 
@@ -26,6 +26,7 @@ html, body {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--fg-on-purple);
 }
 
 /* Input styles */
@@ -33,6 +34,11 @@ input, textarea, select {
   background: rgba(255, 255, 255, 0.9) !important;
   border: 1px solid #d1d5db !important;
   color: var(--card-fg) !important;
+}
+
+option {
+  color: var(--card-fg) !important;
+  background: #ffffff !important;
 }
 
 input:focus, textarea:focus, select:focus {
