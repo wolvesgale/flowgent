@@ -202,10 +202,14 @@ export default function EvangelistDetailPage() {
 
   const handleSave = async () => {
     try {
+      const trimmedFirstName = editForm.firstName.trim()
+      const trimmedLastName = editForm.lastName.trim()
+      const trimmedEmail = editForm.email.trim()
+
       const payload = {
-        firstName: editForm.firstName,
-        lastName: editForm.lastName,
-        email: editForm.email,
+        ...(trimmedFirstName ? { firstName: trimmedFirstName } : {}),
+        ...(trimmedLastName ? { lastName: trimmedLastName } : {}),
+        ...(trimmedEmail ? { email: trimmedEmail } : {}),
         contactPreference: editForm.contactPreference ?? null,
         strength: editForm.strength ?? null,
         phase: editForm.phase,
