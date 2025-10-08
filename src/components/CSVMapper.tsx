@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { UploadCloud, ListChecks, Table as TableIcon } from 'lucide-react';
+import { UploadCloud, ListChecks, Table as TableIcon, Info, ShieldAlert } from 'lucide-react';
 
 const DB_FIELDS = [
   { key: 'recordId', label: 'レコードID' },
@@ -32,7 +33,7 @@ const DB_FIELDS = [
   { key: 'notes', label: 'メモ' },
   { key: 'tier', label: 'Tier (TIER1/TIER2)' },
   { key: 'tags', label: 'タグ(カンマ区切り可)' },
-];
+] as const;
 
 const MULTI_VALUE_FIELDS = new Set(['tags']);
 
@@ -52,6 +53,7 @@ export default function CSVMapper() {
   const [allRows, setAllRows] = useState<CsvRow[]>([]);
   const [map, setMap] = useState<Record<string, string | string[]>>({});
   const [isImporting, setIsImporting] = useState(false);
+  const [lastImportCount, setLastImportCount] = useState<number | null>(null);
 
   const headerLookup = useMemo(
     () =>
@@ -64,12 +66,11 @@ export default function CSVMapper() {
 
   const onFile = useCallback((file: File) => {
     try {
-      const canUseWorker =
-        typeof window !== 'undefined' && typeof Worker !== 'undefined';
+      const canUseWorker = typeof window !== 'undefined' && typeof Worker !== 'undefined';
 
       Papa.parse<(string | number | boolean | null)[]>(file, {
         header: false,
-        worker: canUseWorker,        // 関数オプションは渡さない（clone失敗回避）
+        worker: canUseWorker,            // structured clone 安全
         skipEmptyLines: 'greedy',
         complete: (res) => {
           try {
@@ -88,7 +89,7 @@ export default function CSVMapper() {
               return;
             }
 
-            // ヘッダ整形（空は「列n」に置換して空値を作らない）
+            // ヘッダ整形（空は「列n」に置換して空valueを作らない）
             const initialHeaders: HeaderInfo[] = rawHeaderRow.map((value, index) => {
               const rawValue = value == null ? '' : String(value);
               const trimmed = rawValue.trim();
@@ -96,19 +97,14 @@ export default function CSVMapper() {
               return { id: `col_${index}`, label, raw: rawValue, index };
             });
 
-            // データ側にヘッダ数より多い列があればヘッダを増やす（列n）
+            // データ側にヘッダ数より多い列があればヘッダを増やす
             const maxColumns = dataRows.reduce(
               (max, row) => Math.max(max, row.length),
               initialHeaders.length,
             );
             const headerInfos = [...initialHeaders];
             for (let i = initialHeaders.length; i < maxColumns; i += 1) {
-              headerInfos.push({
-                id: `col_${i}`,
-                label: `列${i + 1}`,
-                raw: '',
-                index: i,
-              });
+              headerInfos.push({ id: `col_${i}`, label: `列${i + 1}`, raw: '', index: i });
             }
 
             // 行をトリム・正規化
@@ -122,9 +118,11 @@ export default function CSVMapper() {
             );
 
             setHeaders(headerInfos);
-            setRows(normalizedRows.slice(0, 200)); // プレビューは200行
+            setRows(normalizedRows.slice(0, 200)); // プレビュー用
             setAllRows(normalizedRows);
             setMap({});
+            setLastImportCount(null);
+
             toast.success(`CSVファイルを読み込みました（${normalizedRows.length}行）`);
           } catch (e: unknown) {
             toast.error(`CSV データ処理で例外: ${e instanceof Error ? e.message : String(e)}`);
@@ -203,8 +201,10 @@ export default function CSVMapper() {
         body: JSON.stringify({ rows: chunk }),
       });
       if (!res.ok) {
+        if (res.status === 401) throw new Error('AUTH');
+        if (res.status === 403) throw new Error('FORBIDDEN');
         const text = await res.text();
-        throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${text}`);
+        throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${text || res.statusText}`);
       }
     }
   }
@@ -212,63 +212,102 @@ export default function CSVMapper() {
   const handleImport = async () => {
     try {
       if (!allRows.length) return toast.error('CSV データが空です');
+
+      const hasMapping = Object.values(map).some((v) =>
+        Array.isArray(v) ? v.length > 0 : Boolean(v && v.length > 0),
+      );
+      if (!hasMapping) return toast.error('取り込み先の列が選択されていません');
+
       const payload = buildPayload();
+      const meaningfulRows = payload.filter((row) =>
+        Object.values(row).some((value) => {
+          if (Array.isArray(value)) return value.length > 0;
+          if (value === null || value === undefined) return false;
+          return String(value).trim().length > 0;
+        }),
+      );
+      if (meaningfulRows.length === 0) return toast.error('選択した列に値が見つかりませんでした');
+
       setIsImporting(true);
-      await importInBatches(payload);
-      toast.success('インポートが完了しました');
+      await importInBatches(meaningfulRows);
+      toast.success(`${meaningfulRows.length} 件のインポートが完了しました`);
+      setLastImportCount(meaningfulRows.length);
+
+      // リセット
       setHeaders([]);
       setRows([]);
       setAllRows([]);
       setMap({});
     } catch (e: unknown) {
-      toast.error(`インポートエラー: ${e instanceof Error ? e.message : String(e)}`);
+      if (e instanceof Error) {
+        if (e.message === 'AUTH') return toast.error('セッションの有効期限が切れています。再度ログインしてください。');
+        if (e.message === 'FORBIDDEN') return toast.error('CSVインポートは管理者またはCS権限のみ利用できます。');
+        return toast.error(`インポートエラー: ${e.message}`);
+      }
+      toast.error(`インポートエラー: ${String(e)}`);
     } finally {
       setIsImporting(false);
     }
   };
 
+  const mappedFields = DB_FIELDS.filter(
+    (f) => map[f.key] && (!Array.isArray(map[f.key]) || (map[f.key] as string[]).length > 0),
+  );
+
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="flex items-center justify-between">
-          <div>
-            <CardTitle>CSVファイルアップロード</CardTitle>
-            <CardDescription>UTF-8 の CSV / TSV ファイルを読み込めます</CardDescription>
-          </div>
-          <UploadCloud className="h-5 w-5 text-purple-600" />
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="csv-file">CSVファイルを選択</Label>
-              <Input
-                id="csv-file"
-                type="file"
-                accept=".csv,.tsv"
-                onChange={(e) => e.target.files && onFile(e.target.files[0])}
-                className="mt-2"
-              />
+    <div className="space-y-8">
+      {/* STEP 1 */}
+      <Card className="border-none shadow-lg">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="bg-purple-100 text-purple-700">STEP 1</Badge>
+              <CardTitle>CSVファイルをアップロード</CardTitle>
             </div>
-            {allRows.length > 0 && (
-              <div className="text-sm text-muted-foreground">
-                {allRows.length}行のデータが読み込まれました（最初の200行を表示）
-              </div>
-            )}
+            <CardDescription className="leading-relaxed text-slate-600">
+              UTF-8 の CSV / TSV を読み込み、最初の行をヘッダーとして認識します。列名が空でも自動で列番号が割り当てられます。
+            </CardDescription>
           </div>
+          <UploadCloud className="h-6 w-6 text-purple-600" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="csv-file" className="text-sm font-semibold text-slate-700">CSVファイルを選択</Label>
+            <Input
+              id="csv-file"
+              type="file"
+              accept=".csv,.tsv"
+              onChange={(e) => e.target.files && onFile(e.target.files[0])}
+              className="mt-2 bg-white"
+            />
+          </div>
+
+          {allRows.length > 0 && (
+            <div className="flex items-center gap-2 rounded-md border border-purple-100 bg-purple-50 px-3 py-2 text-sm text-purple-800">
+              <Info className="h-4 w-4" />
+              <span>{allRows.length} 行のデータが読み込まれました（最初の 200 行をプレビューします）</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
+      {/* STEP 2 */}
       {headers.length > 0 && (
-        <Card>
-          <CardHeader className="flex items-center justify-between">
-            <div>
-              <CardTitle>フィールドマッピング</CardTitle>
-              <CardDescription>取り込み先の列を選択してください</CardDescription>
+        <Card className="border-none shadow-lg">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="bg-purple-100 text-purple-700">STEP 2</Badge>
+                <CardTitle>取り込みフィールドのマッピング</CardTitle>
+              </div>
+              <CardDescription className="text-slate-600">
+                右側のプルダウンから CSV の列を選択してください。タグは複数列から統合できます。
+              </CardDescription>
             </div>
-            <ListChecks className="h-5 w-5 text-purple-600" />
+            <ListChecks className="h-6 w-6 text-purple-600" />
           </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-2 gap-4">
+          <CardContent className="space-y-6">
+            <div className="grid gap-4 lg:grid-cols-2">
               {DB_FIELDS.map((field) => {
                 const selected = map[field.key];
                 const selectedLabel = Array.isArray(selected)
@@ -277,13 +316,24 @@ export default function CSVMapper() {
                   ? headerLookup[selected]?.label ?? '（不明な列）'
                   : '未選択';
 
+                const isMapped = Array.isArray(selected)
+                  ? selected.length > 0
+                  : typeof selected === 'string' && selected.length > 0;
+
                 return (
-                  <div key={field.key} className="p-4 border rounded-lg space-y-3">
-                    <div className="font-medium">
-                      {field.label} → {selectedLabel}
+                  <div key={field.key} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-slate-700">{field.label}</span>
+                        <span className="text-xs text-slate-500">{isMapped ? selectedLabel : '未選択'}</span>
+                      </div>
+                      {isMapped ? (
+                        <Badge variant="outline" className="border-green-300 bg-green-50 text-xs text-green-700">選択済み</Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-slate-300 text-xs text-slate-500">未設定</Badge>
+                      )}
                     </div>
 
-                    {/* 単一列マッピング（空値は作らない／未選択は undefined） */}
                     <Select
                       value={
                         Array.isArray(selected)
@@ -303,7 +353,7 @@ export default function CSVMapper() {
                         });
                       }}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full bg-white">
                         <SelectValue placeholder="（単一列を選択）" />
                       </SelectTrigger>
                       <SelectContent>
@@ -319,26 +369,20 @@ export default function CSVMapper() {
                       </SelectContent>
                     </Select>
 
-                    {/* タグのみ複数列対応 */}
                     {field.key === 'tags' && (
                       <details className="mt-2">
-                        <summary className="cursor-pointer text-sm text-muted-foreground">
-                          タグに使う列を複数選択
-                        </summary>
-                        <div className="flex flex-wrap gap-2 mt-2">
+                        <summary className="cursor-pointer text-sm text-slate-600">タグに使う列を複数選択</summary>
+                        <div className="mt-2 flex flex-wrap gap-2">
                           {headers.map((header) => {
-                            const isChecked =
-                              Array.isArray(map.tags) && (map.tags as string[]).includes(header.id);
+                            const isChecked = Array.isArray(map.tags) && (map.tags as string[]).includes(header.id);
                             return (
-                              <label key={header.id} className="text-sm flex items-center space-x-1">
+                              <label key={header.id} className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
                                   onChange={(event) => {
                                     setMap((prev) => {
-                                      const current = Array.isArray(prev.tags)
-                                        ? [...(prev.tags as string[])]
-                                        : [];
+                                      const current = Array.isArray(prev.tags) ? [...(prev.tags as string[])] : [];
                                       if (event.target.checked) {
                                         if (current.includes(header.id)) return prev;
                                         return { ...prev, tags: [...current, header.id] };
@@ -368,35 +412,33 @@ export default function CSVMapper() {
         </Card>
       )}
 
+      {/* STEP 3 */}
       {headers.length > 0 && (
-        <Card>
-          <CardHeader className="flex items-center justify-between">
-            <div>
-              <CardTitle>プレビュー</CardTitle>
-              <CardDescription>最初の5行を表示しています</CardDescription>
+        <Card className="border-none shadow-lg">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="bg-purple-100 text-purple-700">STEP 3</Badge>
+                <CardTitle>取り込み内容のプレビュー</CardTitle>
+              </div>
+              <CardDescription className="text-slate-600">最初の 5 行を確認してからインポートしてください。</CardDescription>
             </div>
-            <TableIcon className="h-5 w-5 text-purple-600" />
+            <TableIcon className="h-6 w-6 text-purple-600" />
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300">
+              <table className="w-full border-collapse overflow-hidden rounded-lg border border-slate-200">
                 <thead>
-                  <tr>
-                    {DB_FIELDS.filter(
-                      (f) => map[f.key] && (!Array.isArray(map[f.key]) || (map[f.key] as string[]).length > 0),
-                    ).map((f) => (
-                      <th key={f.key} className="border border-gray-300 px-2 py-1 bg-gray-50 text-left">
-                        {f.label}
-                      </th>
+                  <tr className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
+                    {mappedFields.map((f) => (
+                      <th key={f.key} className="border border-slate-200 px-3 py-2">{f.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, 5).map((row, i) => (
-                    <tr key={i}>
-                      {DB_FIELDS.filter(
-                        (f) => map[f.key] && (!Array.isArray(map[f.key]) || (map[f.key] as string[]).length > 0),
-                      ).map((f) => {
+                  {rows.slice(0, 5).map((row, rowIndex) => (
+                    <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      {mappedFields.map((f) => {
                         const mapping = map[f.key];
                         let value = '';
                         if (Array.isArray(mapping)) {
@@ -413,7 +455,7 @@ export default function CSVMapper() {
                           value = header ? row[header.index] ?? '' : '';
                         }
                         return (
-                          <td key={f.key} className="border border-gray-300 px-2 py-1 text-sm">
+                          <td key={f.key} className="border border-slate-200 px-3 py-2 text-sm text-slate-700">
                             {value}
                           </td>
                         );
@@ -424,25 +466,54 @@ export default function CSVMapper() {
               </table>
             </div>
             {rows.length > 5 && (
-              <div className="text-sm text-muted-foreground mt-2">...他 {rows.length - 5} 行</div>
+              <div className="mt-3 text-sm text-slate-500">...他 {rows.length - 5} 行</div>
             )}
           </CardContent>
         </Card>
       )}
 
+      {/* STEP 4 */}
       {headers.length > 0 && (
-        <div className="flex justify-end">
-          <Button onClick={handleImport} disabled={allRows.length === 0 || isImporting} className="w-full">
-            {isImporting ? (
-              'インポート中...'
-            ) : (
-              <span className="flex items-center justify-center">
-                <UploadCloud className="mr-2 h-4 w-4" />
-                {allRows.length}件をインポート
-              </span>
+        <Card className="border-none shadow-lg">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="bg-purple-100 text-purple-700">STEP 4</Badge>
+                <CardTitle>インポートを実行</CardTitle>
+              </div>
+              <CardDescription className="text-slate-600">
+                インポート後は割り当てられていないEVAに対して CS を設定できます。
+              </CardDescription>
+            </div>
+            <ShieldAlert className="h-6 w-6 text-purple-600" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              インポートには管理者または CS 権限のアカウントが必要です。
+            </div>
+
+            <Button
+              onClick={handleImport}
+              disabled={allRows.length === 0 || isImporting}
+              className="w-full bg-purple-600 hover:bg-purple-700"
+            >
+              {isImporting ? (
+                'インポート中...'
+              ) : (
+                <span className="flex items-center justify-center">
+                  <UploadCloud className="mr-2 h-4 w-4" />
+                  {allRows.length}件をインポート
+                </span>
+              )}
+            </Button>
+
+            {lastImportCount !== null && (
+              <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                {lastImportCount} 件のレコードを登録 / 更新しました。
+              </div>
             )}
-          </Button>
-        </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
