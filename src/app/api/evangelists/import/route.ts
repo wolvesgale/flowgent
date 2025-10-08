@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
+import type { PrismaPromise } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import type { SessionData } from '@/lib/session';
 
@@ -169,7 +170,7 @@ export async function POST(req: NextRequest) {
       // recordId / email が無い行は新規作成（重複は運用で回避）
       acc.push(prisma.evangelist.create({ data: createData }));
       return acc;
-    }, [] as Promise<unknown>[]);
+    }, [] as PrismaPromise<unknown>[]);
 
     await prisma.$transaction(operations);
     return NextResponse.json({ ok: true, count: (rows as unknown[]).length });
