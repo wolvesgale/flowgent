@@ -31,50 +31,102 @@ export async function POST(req: NextRequest) {
     const user = await getSessionUserOrThrow();
     requireRole(user, ["ADMIN", "CS"]);
 
-    const { rows } = await req.json(); // すでにクライアントでマッピング済み [{recordId, firstName,...}]
+    const { rows } = await req.json(); // すでにクライアントでマッピング済み
     if (!Array.isArray(rows)) return NextResponse.json({ error: "invalid" }, { status: 400 });
 
     interface ImportRow {
-      recordId?: string
       firstName?: string
       lastName?: string
       email?: string
-      contactPref?: string
-      strengths?: string
-      notes?: string
-      tier?: string
-      tags?: string[] | string
+      strength?: string
+      contactPreference?: string
+      phase?: string
     }
 
-    const ops = rows.map((r: ImportRow) =>
-      prisma.evangelist.upsert({
-        where: { email: r.email ?? "__no_email__" }, // email優先
-        create: {
-          recordId: r.recordId || null,
-          firstName: r.firstName || null,
-          lastName: r.lastName || null,
-          email: r.email || null,
-          contactPref: r.contactPref || null,
-          strengths: r.strengths || null,
-          notes: r.notes || null,
-          tier: (r.tier as 'TIER1' | 'TIER2') || "TIER2",
-          tags: Array.isArray(r.tags) ? JSON.stringify(r.tags) : (r.tags ? JSON.stringify([r.tags]) : null),
-          assignedCsId: user.role === 'CS' ? user.userId : null,
-        },
-        update: {
-          recordId: r.recordId || undefined,
-          firstName: r.firstName || undefined,
-          lastName: r.lastName || undefined,
-          contactPref: r.contactPref || undefined,
-          strengths: r.strengths || undefined,
-          notes: r.notes || undefined,
-          tier: (r.tier as 'TIER1' | 'TIER2') || undefined,
-          tags: Array.isArray(r.tags) ? JSON.stringify(r.tags) : (r.tags ? JSON.stringify([r.tags]) : undefined),
-        }
-      })
-    );
+    const VALID_STRENGTHS = [
+      'HR',
+      'IT',
+      'ACCOUNTING',
+      'ADVERTISING',
+      'MANAGEMENT',
+      'SALES',
+      'MANUFACTURING',
+      'MEDICAL',
+      'FINANCE',
+    ] as const;
 
-    await prisma.$transaction(ops);
+    const VALID_CONTACTS = ['FACEBOOK', 'LINE', 'EMAIL', 'PHONE', 'SLACK'] as const;
+
+    const VALID_PHASES = [
+      'FIRST_CONTACT',
+      'REGISTERED',
+      'LIST_SHARED',
+      'CANDIDATE_SELECTION',
+      'INNOVATOR_REVIEW',
+      'INTRODUCING',
+      'FOLLOW_UP',
+    ] as const;
+
+    const validStrengths = new Set<typeof VALID_STRENGTHS[number]>(VALID_STRENGTHS);
+    const validContacts = new Set<typeof VALID_CONTACTS[number]>(VALID_CONTACTS);
+    const validPhases = new Set<typeof VALID_PHASES[number]>(VALID_PHASES);
+
+    const sanitizeStrength = (value?: string | null): typeof VALID_STRENGTHS[number] | null => {
+      if (!value) return null;
+      const upper = value.trim().toUpperCase() as typeof VALID_STRENGTHS[number];
+      return validStrengths.has(upper) ? upper : null;
+    };
+
+    const sanitizeContact = (value?: string | null): typeof VALID_CONTACTS[number] | null => {
+      if (!value) return null;
+      const upper = value.trim().toUpperCase() as typeof VALID_CONTACTS[number];
+      return validContacts.has(upper) ? upper : null;
+    };
+
+    const sanitizePhase = (value?: string | null): typeof VALID_PHASES[number] | undefined => {
+      if (!value) return undefined;
+      const upper = value.trim().toUpperCase() as typeof VALID_PHASES[number];
+      return validPhases.has(upper) ? upper : undefined;
+    };
+
+    const buildCreateData = (r: ImportRow) => ({
+      firstName: r.firstName || null,
+      lastName: r.lastName || null,
+      email: r.email || null,
+      strength: sanitizeStrength(r.strength),
+      contactPreference: sanitizeContact(r.contactPreference),
+      phase: sanitizePhase(r.phase),
+      assignedCsId: null,
+    });
+
+    const buildUpdateData = (r: ImportRow) => ({
+      firstName: r.firstName || undefined,
+      lastName: r.lastName || undefined,
+      strength: sanitizeStrength(r.strength) || undefined,
+      contactPreference: sanitizeContact(r.contactPreference) || undefined,
+      phase: sanitizePhase(r.phase),
+    });
+
+    const operations = rows.reduce((acc, row: ImportRow) => {
+      const createData = buildCreateData(row);
+      const updateData = buildUpdateData(row);
+
+      if (row.email) {
+        acc.push(
+          prisma.evangelist.upsert({
+            where: { email: row.email },
+            create: createData,
+            update: updateData,
+          })
+        );
+        return acc;
+      }
+
+      acc.push(prisma.evangelist.create({ data: createData }));
+      return acc;
+    }, [] as Promise<unknown>[]);
+
+    await prisma.$transaction(operations);
     return NextResponse.json({ ok: true, count: rows.length });
   } catch (error) {
     console.error('CSV import error:', error);

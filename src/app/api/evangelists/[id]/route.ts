@@ -5,15 +5,29 @@ import { prisma } from '@/lib/prisma'
 import { SessionData } from '@/lib/session'
 import { z } from 'zod'
 
-const updateEvangelistSchema = z.object({
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
-  email: z.string().email('Invalid email format'),
-  contactPref: z.string().optional(),
-  strengths: z.string().optional(),
-  notes: z.string().optional(),
-  tier: z.enum(['TIER1', 'TIER2']).optional(),
-})
+const updateEvangelistSchema = z
+  .object({
+    firstName: z.string().min(1, 'First name is required').optional(),
+    lastName: z.string().min(1, 'Last name is required').optional(),
+    email: z.string().email('Invalid email format').optional(),
+    contactPreference: z
+      .enum(['FACEBOOK', 'LINE', 'EMAIL', 'PHONE', 'SLACK'])
+      .optional()
+      .nullable(),
+    strength: z
+      .enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE'])
+      .optional()
+      .nullable(),
+    phase: z
+      .enum(['FIRST_CONTACT', 'REGISTERED', 'LIST_SHARED', 'CANDIDATE_SELECTION', 'INNOVATOR_REVIEW', 'INTRODUCING', 'FOLLOW_UP'])
+      .optional(),
+    notes: z.string().optional().nullable(),
+    tier: z.enum(['TIER1', 'TIER2']).optional(),
+    assignedCsId: z.string().min(1, 'Assigned CS is required').optional().nullable(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'No update fields provided',
+  })
 
 // GET /api/evangelists/[id] - EVA詳細取得
 export async function GET(
@@ -97,18 +111,47 @@ export async function PUT(
     }
 
     // EVA情報を更新
+    const updateData: Record<string, unknown> = { updatedAt: new Date() }
+
+    if (evangelistData.firstName !== undefined) {
+      updateData.firstName = evangelistData.firstName
+    }
+
+    if (evangelistData.lastName !== undefined) {
+      updateData.lastName = evangelistData.lastName
+    }
+
+    if (evangelistData.email !== undefined) {
+      updateData.email = evangelistData.email
+    }
+
+    if (evangelistData.contactPreference !== undefined) {
+      updateData.contactPreference = evangelistData.contactPreference ?? null
+    }
+
+    if (evangelistData.strength !== undefined) {
+      updateData.strength = evangelistData.strength ?? null
+    }
+
+    if (evangelistData.phase !== undefined) {
+      updateData.phase = evangelistData.phase
+    }
+
+    if (evangelistData.notes !== undefined) {
+      updateData.notes = evangelistData.notes ?? null
+    }
+
+    if (evangelistData.tier !== undefined) {
+      updateData.tier = evangelistData.tier
+    }
+
+    if (evangelistData.assignedCsId !== undefined) {
+      updateData.assignedCsId = evangelistData.assignedCsId ?? null
+    }
+
     const updatedEvangelist = await prisma.evangelist.update({
       where: { id },
-      data: {
-        firstName: evangelistData.firstName,
-        lastName: evangelistData.lastName,
-        email: evangelistData.email,
-        contactPref: evangelistData.contactPref,
-        strengths: evangelistData.strengths,
-        notes: evangelistData.notes,
-        tier: evangelistData.tier,
-        updatedAt: new Date(),
-      },
+      data: updateData,
       include: {
         assignedCs: {
           select: {

@@ -33,33 +33,31 @@ enum Role {
 }
 
 model Innovator {
-  id                   Int      @id @default(autoincrement())
-  name                 String
-  email                String   @unique
-  company              String
-  position             String
-  status               String   @default("ACTIVE") // ACTIVE, INACTIVE
-  requiresIntroduction Boolean  @default(false) // 「紹介必須」フラグ
-  notes                String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                Int             @id @default(autoincrement())
+  company           String
+  url               String?
+  introductionPoint String?
+  domain            BusinessDomain
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 }
 
 model Evangelist {
-  id           String   @id @default(cuid())
-  recordId     String?  @unique // CSV由来のID
-  firstName    String?
-  lastName     String?
-  email        String?  @unique
-  contactPref  String?  // 連絡手段の希望
-  strengths    String?  // 強み・専門分野（初回面談で入力）
-  notes        String?  // 備考
-  tier         Tier     @default(TIER2)
-  assignedCsId String?
-  assignedCs   User?    @relation(fields: [assignedCsId], references: [id])
-  tags         String?  // JSON文字列として保存（配列をJSONで格納）
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                String             @id @default(cuid())
+  recordId          String?            @unique // CSV由来のID
+  firstName         String?
+  lastName          String?
+  email             String?            @unique
+  strength          EvangelistStrength?
+  contactPreference ContactPreference?
+  phase             EvangelistPhase    @default(FIRST_CONTACT)
+  notes             String?
+  tier              Tier               @default(TIER2)
+  assignedCsId      String?
+  assignedCs        User?              @relation(fields: [assignedCsId], references: [id])
+  tags              String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   meetings Meeting[]
 
@@ -69,6 +67,48 @@ model Evangelist {
 enum Tier {
   TIER1
   TIER2
+}
+
+enum EvangelistStrength {
+  HR
+  IT
+  ACCOUNTING
+  ADVERTISING
+  MANAGEMENT
+  SALES
+  MANUFACTURING
+  MEDICAL
+  FINANCE
+}
+
+enum ContactPreference {
+  FACEBOOK
+  LINE
+  EMAIL
+  PHONE
+  SLACK
+}
+
+enum EvangelistPhase {
+  FIRST_CONTACT
+  REGISTERED
+  LIST_SHARED
+  CANDIDATE_SELECTION
+  INNOVATOR_REVIEW
+  INTRODUCING
+  FOLLOW_UP
+}
+
+enum BusinessDomain {
+  HR
+  IT
+  ACCOUNTING
+  ADVERTISING
+  MANAGEMENT
+  SALES
+  MANUFACTURING
+  MEDICAL
+  FINANCE
 }
 
 model Meeting {
