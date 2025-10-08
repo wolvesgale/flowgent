@@ -11,31 +11,14 @@ import { toast } from 'sonner';
 import { UploadCloud, ListChecks, Table as TableIcon, Info, ShieldAlert } from 'lucide-react';
 
 const DB_FIELDS = [
-  { key: 'recordId', label: 'レコードID' },
-  { key: 'firstName', label: '名' },
-  { key: 'lastName', label: '姓' },
-  { key: 'supportPriority', label: 'サポート優先度' },
-  { key: 'email', label: 'メールアドレス' },
-  { key: 'pattern', label: 'パターン' },
-  { key: 'contactPref', label: '連絡手段' },
-  { key: 'meetingStatus', label: '面談状況' },
-  { key: 'registrationStatus', label: '登録状況' },
-  { key: 'lineRegistered', label: 'LINE登録' },
-  { key: 'phoneNumber', label: '電話番号' },
-  { key: 'acquisitionSource', label: '流入経路' },
-  { key: 'facebookUrl', label: 'Facebook URL' },
-  { key: 'listAcquired', label: 'リスト取得' },
-  { key: 'matchingListUrl', label: 'マッチングリストURL' },
-  { key: 'contactOwner', label: 'コンタクト担当者' },
-  { key: 'sourceCreatedAt', label: '作成日 (YYYY-MM-DD HH:mm)' },
-  { key: 'marketingContactStatus', label: 'マーケティングコンタクトステータス' },
-  { key: 'strengths', label: '強み' },
-  { key: 'notes', label: 'メモ' },
-  { key: 'tier', label: 'Tier (TIER1/TIER2)' },
-  { key: 'tags', label: 'タグ(カンマ区切り可)' },
+  { key: 'recordId', label: 'レコードID（任意）' },
+  { key: 'lastName', label: '姓（必須）' },
+  { key: 'firstName', label: '名（必須）' },
+  { key: 'email', label: 'メールアドレス（任意）' },
+  { key: 'meetingStatus', label: '前回面談日時' },
 ] as const;
 
-const MULTI_VALUE_FIELDS = new Set(['tags']);
+const REQUIRED_FIELDS = ['lastName', 'firstName'] as const;
 
 type FieldKey = (typeof DB_FIELDS)[number]['key'];
 
@@ -50,16 +33,16 @@ type CsvRow = string[];
 const BATCH_SIZE = 500;
 
 const createEmptyMap = () =>
-  DB_FIELDS.reduce<Record<FieldKey, string | string[] | undefined>>((acc, field) => {
+  DB_FIELDS.reduce<Record<FieldKey, string | undefined>>((acc, field) => {
     acc[field.key] = undefined;
     return acc;
-  }, {} as Record<FieldKey, string | string[] | undefined>);
+  }, {} as Record<FieldKey, string | undefined>);
 
 export default function CSVMapper() {
   const [headers, setHeaders] = useState<HeaderInfo[]>([]);
   const [rows, setRows] = useState<CsvRow[]>([]);
   const [allRows, setAllRows] = useState<CsvRow[]>([]);
-  const [map, setMap] = useState<Record<FieldKey, string | string[] | undefined>>(() => createEmptyMap());
+  const [map, setMap] = useState<Record<FieldKey, string | undefined>>(() => createEmptyMap());
   const [isImporting, setIsImporting] = useState(false);
   const [lastImportCount, setLastImportCount] = useState<number | null>(null);
 
@@ -146,56 +129,53 @@ export default function CSVMapper() {
   }, []);
 
   const buildPayload = useCallback(() => {
-    return allRows.map((row) => {
-      const obj: Record<string, unknown> = {};
+    const skippedRows: number[] = [];
 
-      DB_FIELDS.forEach((f) => {
-        const mapping = map[f.key];
-        if (!mapping || (typeof mapping === 'string' && mapping.length === 0)) return;
+    const records = allRows.reduce<Record<string, unknown>[]>((acc, row, index) => {
+      const record: Record<string, unknown> = {};
+      let hasMeaningfulValue = false;
 
-        const applySingleValue = (rawValue: string) => {
-          const value = rawValue.trim();
-          if (!value) return;
+      DB_FIELDS.forEach((field) => {
+        const mapping = map[field.key];
+        if (!mapping) return;
 
-          if (MULTI_VALUE_FIELDS.has(f.key)) {
-            const tags = value
-              .split(',')
-              .map((tag) => tag.trim())
-              .filter((tag) => tag.length > 0);
-            if (tags.length === 0) return;
-            const existing = Array.isArray(obj[f.key]) ? (obj[f.key] as string[]) : [];
-            obj[f.key] = Array.from(new Set([...existing, ...tags]));
-            return;
-          }
+        const header = headerLookup[mapping];
+        if (!header) return;
 
-          if (f.key === 'tier') {
-            const normalized = value.toUpperCase();
-            obj[f.key] = normalized === 'TIER1' || normalized === 'TIER2' ? normalized : value;
-            return;
-          }
+        const raw = row[header.index];
+        const value = raw == null ? '' : String(raw).trim();
 
-          obj[f.key] = value;
-        };
-
-        if (Array.isArray(mapping)) {
-          mapping.forEach((id) => {
-            const header = headerLookup[id];
-            if (!header) return;
-            const cell = row[header.index];
-            const value = cell == null ? '' : String(cell);
-            applySingleValue(value);
-          });
-        } else {
-          const header = headerLookup[mapping];
-          if (!header) return;
-          const cell = row[header.index];
-          const value = cell == null ? '' : String(cell);
-          applySingleValue(value);
+        if (!value) {
+          return;
         }
+
+        record[field.key] = value;
+        hasMeaningfulValue = true;
       });
 
-      return obj;
-    });
+      const hasAllRequired = REQUIRED_FIELDS.every((key) => {
+        const assignedHeader = map[key];
+        if (!assignedHeader) return false;
+        const header = headerLookup[assignedHeader];
+        if (!header) return false;
+        const raw = row[header.index];
+        return Boolean(raw != null && String(raw).trim());
+      });
+
+      if (!hasAllRequired) {
+        skippedRows.push(index + 1);
+        return acc;
+      }
+
+      if (!hasMeaningfulValue) {
+        return acc;
+      }
+
+      acc.push(record);
+      return acc;
+    }, []);
+
+    return { records, skippedRows };
   }, [allRows, headerLookup, map]);
 
   async function importInBatches(payload: Record<string, unknown>[]) {
@@ -221,25 +201,30 @@ export default function CSVMapper() {
     try {
       if (!allRows.length) return toast.error('CSV データが空です');
 
-      const hasMapping = Object.values(map).some((v) =>
-        Array.isArray(v) ? v.length > 0 : Boolean(v && v.length > 0),
-      );
-      if (!hasMapping) return toast.error('取り込み先の列が選択されていません');
+      const requiredMapped = REQUIRED_FIELDS.every((key) => Boolean(map[key]));
+      if (!requiredMapped) return toast.error('姓と名の取り込み先を必ず選択してください');
 
-      const payload = buildPayload();
-      const meaningfulRows = payload.filter((row) =>
-        Object.values(row).some((value) => {
-          if (Array.isArray(value)) return value.length > 0;
-          if (value === null || value === undefined) return false;
-          return String(value).trim().length > 0;
-        }),
-      );
-      if (meaningfulRows.length === 0) return toast.error('選択した列に値が見つかりませんでした');
+      const { records, skippedRows } = buildPayload();
+
+      if (records.length === 0) {
+        if (skippedRows.length > 0) {
+          const sample = skippedRows.slice(0, 5).join(', ');
+          const suffix = skippedRows.length > 5 ? ' など' : '';
+          return toast.error(`必須項目（姓・名）が空の行のみでした: ${sample}${suffix}`);
+        }
+        return toast.error('選択した列に値が見つかりませんでした');
+      }
 
       setIsImporting(true);
-      await importInBatches(meaningfulRows);
-      toast.success(`${meaningfulRows.length} 件のインポートが完了しました`);
-      setLastImportCount(meaningfulRows.length);
+      await importInBatches(records);
+      toast.success(`${records.length} 件のインポートが完了しました`);
+      setLastImportCount(records.length);
+
+      if (skippedRows.length > 0) {
+        const sample = skippedRows.slice(0, 5).join(', ');
+        const suffix = skippedRows.length > 5 ? ' など' : '';
+        toast.message(`必須項目が空のため ${skippedRows.length} 行をスキップしました（行: ${sample}${suffix}）`);
+      }
 
       // リセット
       setHeaders([]);
@@ -258,9 +243,7 @@ export default function CSVMapper() {
     }
   };
 
-  const mappedFields = DB_FIELDS.filter(
-    (f) => map[f.key] && (!Array.isArray(map[f.key]) || (map[f.key] as string[]).length > 0),
-  );
+  const mappedFields = DB_FIELDS.filter((f) => Boolean(map[f.key]));
 
   return (
     <div className="space-y-8">
@@ -309,7 +292,7 @@ export default function CSVMapper() {
                 <CardTitle>取り込みフィールドのマッピング</CardTitle>
               </div>
               <CardDescription className="text-slate-600">
-                右側のプルダウンから CSV の列を選択してください。タグは複数列から統合できます。
+                右側のプルダウンから CSV の列を選択してください。姓と名は必須で、メールアドレスと前回面談日時は任意です。
               </CardDescription>
             </div>
             <ListChecks className="h-6 w-6 text-purple-600" />
@@ -318,15 +301,11 @@ export default function CSVMapper() {
             <div className="grid gap-4 lg:grid-cols-2">
               {DB_FIELDS.map((field) => {
                 const selected = map[field.key];
-                const selectedLabel = Array.isArray(selected)
-                  ? selected.map((id) => headerLookup[id]?.label ?? '（不明な列）').join(', ')
-                  : typeof selected === 'string' && selected.length > 0
+                const selectedLabel = selected
                   ? headerLookup[selected]?.label ?? '（不明な列）'
                   : '未選択';
 
-                const isMapped = Array.isArray(selected)
-                  ? selected.length > 0
-                  : typeof selected === 'string' && selected.length > 0;
+                const isMapped = Boolean(selected);
 
                 return (
                   <div key={field.key} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
@@ -344,13 +323,7 @@ export default function CSVMapper() {
 
                     {/* 単一列マッピング（Radix Select: 空値禁止→未選択は undefined を使う） */}
                     <Select
-                      value={
-                        Array.isArray(selected)
-                          ? undefined
-                          : typeof selected === 'string' && selected.length > 0
-                          ? selected
-                          : undefined
-                      }
+                      value={selected || undefined}
                       onValueChange={(value) => {
                         setMap((prev) => {
                           if (value === '__CLEAR__') {
@@ -362,10 +335,10 @@ export default function CSVMapper() {
                         });
                       }}
                     >
-                      <SelectTrigger className="w-full bg-white">
-                        <SelectValue placeholder="（単一列を選択）" />
+                      <SelectTrigger className="w-full bg-white text-slate-900">
+                        <SelectValue className="text-slate-900" placeholder="（単一列を選択）" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-white text-slate-900">
                         <SelectItem value="__CLEAR__">（選択解除）</SelectItem>
                         {headers.map((header) => (
                           <SelectItem key={header.id} value={header.id}>
@@ -377,46 +350,6 @@ export default function CSVMapper() {
                         ))}
                       </SelectContent>
                     </Select>
-
-                    {/* タグのみ複数列対応 */}
-                    {field.key === 'tags' && (
-                      <details className="mt-2">
-                        <summary className="cursor-pointer text-sm text-slate-600">タグに使う列を複数選択</summary>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {headers.map((header) => {
-                            const isChecked = Array.isArray(map.tags) && (map.tags as string[]).includes(header.id);
-                            return (
-                              <label
-                                key={header.id}
-                                className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={(event) => {
-                                    setMap((prev) => {
-                                      const current = Array.isArray(prev.tags) ? [...(prev.tags as string[])] : [];
-                                      if (event.target.checked) {
-                                        if (current.includes(header.id)) return prev;
-                                        return { ...prev, tags: [...current, header.id] };
-                                      }
-                                      const nextTags = current.filter((id) => id !== header.id);
-                                      if (nextTags.length === 0) {
-                                        const next = { ...prev };
-                                        delete next.tags;
-                                        return next;
-                                      }
-                                      return { ...prev, tags: nextTags };
-                                    });
-                                  }}
-                                />
-                                <span>{header.label}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </details>
-                    )}
                   </div>
                 );
               })}
@@ -453,20 +386,8 @@ export default function CSVMapper() {
                     <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                       {mappedFields.map((f) => {
                         const mapping = map[f.key];
-                        let value = '';
-                        if (Array.isArray(mapping)) {
-                          value = mapping
-                            .map((id) => {
-                              const header = headerLookup[id];
-                              if (!header) return '';
-                              return row[header.index] ?? '';
-                            })
-                            .filter(Boolean)
-                            .join(', ');
-                        } else if (mapping) {
-                          const header = headerLookup[mapping];
-                          value = header ? row[header.index] ?? '' : '';
-                        }
+                        const header = mapping ? headerLookup[mapping] : undefined;
+                        const value = header ? row[header.index] ?? '' : '';
 
                         return (
                           <td key={f.key} className="border border-slate-200 px-3 py-2 text-sm text-slate-700">
