@@ -1,4 +1,5 @@
 // src/app/api/evangelists/import/route.ts
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/session';
