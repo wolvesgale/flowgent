@@ -13,6 +13,12 @@ export async function middleware(request: NextRequest) {
       const session = await getIronSession<SessionData>(request, response, {
         password: process.env.SESSION_PASSWORD!,
         cookieName: 'flowgent-session',
+        cookieOptions: {
+          secure: process.env.NODE_ENV === 'production',
+          httpOnly: true,
+          sameSite: 'lax',
+          path: '/',
+        },
       })
 
       // ログインしていない場合はログインページにリダイレクト

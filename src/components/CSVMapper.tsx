@@ -354,9 +354,9 @@ export default function CSVMapper() {
                       )}
                     </div>
 
-                    {/* 単一列マッピング（Radix Select: 空値禁止→未選択は undefined を使う） */}
+                    {/* 単一列マッピング（Radix Select: 空値禁止→未選択時は空文字を保持） */}
                     <Select
-                      value={selected || undefined}
+                      value={selected ?? ''}
                       onValueChange={(value) => {
                         setMap((prev) => {
                           if (value === '__CLEAR__') {

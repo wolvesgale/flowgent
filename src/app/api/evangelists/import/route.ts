@@ -1,30 +1,10 @@
 // src/app/api/evangelists/import/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getIronSession } from 'iron-session';
-import { cookies } from 'next/headers';
-import type { PrismaPromise } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import type { SessionData } from '@/lib/session';
+import { getSession } from '@/lib/session';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-async function getSessionUserOrThrow(): Promise<SessionData> {
-  const session = await getIronSession<SessionData>(await cookies(), {
-    password: process.env.SESSION_PASSWORD!,
-    cookieName: 'flowgent-session',
-  });
-  if (!session.isLoggedIn || !session.userId) {
-    throw new Error('Unauthorized');
-  }
-  return session;
-}
-
-function requireRole(user: SessionData, roles: string[]) {
-  if (!roles.includes(user.role || '')) {
-    throw new Error('Forbidden');
-  }
-}
 
 // クライアント側 CSV マッピング後の行型
 type ImportRow = {
@@ -54,8 +34,15 @@ function normalizeString(value?: unknown): string | null {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getSessionUserOrThrow();
-    requireRole(user, ['ADMIN', 'CS']);
+    const session = await getSession();
+
+    if (!session.isLoggedIn || !session.userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (session.role !== 'ADMIN' && session.role !== 'CS') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await req.json();
     const rows: unknown = (body ?? {}).rows;
@@ -159,12 +146,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, count: successCount, skippedRowNumbers, failedRowNumbers });
   } catch (error) {
     console.error('CSV import error:', error);
-    if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    if (error instanceof Error && error.message === 'Forbidden') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
