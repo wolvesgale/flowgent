@@ -6,134 +6,63 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { UploadCloud, ListChecks, Table as TableIcon, Info, ShieldAlert } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-
-const STRENGTH_OPTIONS = [
-  { value: 'HR', label: '人事', aliases: ['人事', 'hr', 'ヒューマンリソース'] },
-  { value: 'IT', label: 'IT', aliases: ['it', 'アイティー'] },
-  { value: 'ACCOUNTING', label: '会計', aliases: ['会計', 'accounting', 'finance&accounting'] },
-  { value: 'ADVERTISING', label: '広告', aliases: ['広告', 'advertising', 'マーケ'] },
-  { value: 'MANAGEMENT', label: '経営', aliases: ['経営', 'management', 'マネジメント'] },
-  { value: 'SALES', label: '営業', aliases: ['営業', 'sales'] },
-  { value: 'MANUFACTURING', label: '製造', aliases: ['製造', 'manufacturing', 'ものづくり'] },
-  { value: 'MEDICAL', label: '医療', aliases: ['医療', 'medical', 'ヘルスケア'] },
-  { value: 'FINANCE', label: '金融', aliases: ['金融', 'finance', 'ファイナンス'] },
-] as const;
-
-const CONTACT_OPTIONS = [
-  { value: 'FACEBOOK', label: 'Facebook', aliases: ['facebook', 'fb'] },
-  { value: 'LINE', label: 'LINE', aliases: ['line', 'ライン'] },
-  { value: 'EMAIL', label: 'メール', aliases: ['メール', 'mail', 'email', 'e-mail'] },
-  { value: 'PHONE', label: '電話', aliases: ['電話', 'tel', 'phone', 'call'] },
-  { value: 'SLACK', label: 'Slack', aliases: ['slack'] },
-] as const;
-
-const PHASE_OPTIONS = [
-  { value: 'FIRST_CONTACT', label: '初回', aliases: ['初回', 'first', 'firstcontact'] },
-  { value: 'REGISTERED', label: '登録', aliases: ['登録', 'registered'] },
-  { value: 'LIST_SHARED', label: 'リスト提供', aliases: ['リスト提供', 'list', 'listshared'] },
-  { value: 'CANDIDATE_SELECTION', label: '候補抽出', aliases: ['候補抽出', 'selection'] },
-  { value: 'INNOVATOR_REVIEW', label: 'イノベータ確認', aliases: ['イノベータ確認', 'innovator', 'review'] },
-  { value: 'INTRODUCING', label: '紹介中', aliases: ['紹介中', 'introducing', '紹介'] },
-  { value: 'FOLLOW_UP', label: '継続中', aliases: ['継続中', 'followup', 'follow'] },
-] as const;
 
 const DB_FIELDS = [
-  { key: 'lastName', label: '姓' },
+  { key: 'recordId', label: 'レコードID' },
   { key: 'firstName', label: '名' },
+  { key: 'lastName', label: '姓' },
+  { key: 'supportPriority', label: 'サポート優先度' },
   { key: 'email', label: 'メールアドレス' },
-  { key: 'strength', label: '強み' },
-  { key: 'contactPreference', label: '連絡手段' },
-  { key: 'phase', label: 'フェーズ' },
+  { key: 'pattern', label: 'パターン' },
+  { key: 'contactPref', label: '連絡手段' },
+  { key: 'meetingStatus', label: '面談状況' },
+  { key: 'registrationStatus', label: '登録状況' },
+  { key: 'lineRegistered', label: 'LINE登録' },
+  { key: 'phoneNumber', label: '電話番号' },
+  { key: 'acquisitionSource', label: '流入経路' },
+  { key: 'facebookUrl', label: 'Facebook URL' },
+  { key: 'listAcquired', label: 'リスト取得' },
+  { key: 'matchingListUrl', label: 'マッチングリストURL' },
+  { key: 'contactOwner', label: 'コンタクト担当者' },
+  { key: 'sourceCreatedAt', label: '作成日 (YYYY-MM-DD HH:mm)' },
+  { key: 'marketingContactStatus', label: 'マーケティングコンタクトステータス' },
+  { key: 'strengths', label: '強み' },
+  { key: 'notes', label: 'メモ' },
+  { key: 'tier', label: 'Tier (TIER1/TIER2)' },
+  { key: 'tags', label: 'タグ(カンマ区切り可)' },
 ] as const;
 
-type FieldKey = (typeof DB_FIELDS)[number]['key'];
+const MULTI_VALUE_FIELDS = new Set(['tags']);
 
 type HeaderInfo = {
-  id: string;
-  label: string;
-  raw: string;
-  index: number;
+  id: string;     // 内部ID（col_0 等）
+  label: string;  // 表示名（空なら「列n」）
+  raw: string;    // CSVの生ヘッダ
+  index: number;  // カラムインデックス
 };
 
 type CsvRow = string[];
 const BATCH_SIZE = 500;
 
-const normalizeText = (value: string) => value.replace(/\s+/g, '').toLowerCase();
-
-const buildLookup = <T extends { value: string; label: string; aliases?: string[] }>(options: readonly T[]) => {
-  return options.reduce<Map<string, string>>((map, option) => {
-    const candidates = [option.value, option.label, ...(option.aliases ?? [])];
-    candidates.forEach((candidate) => {
-      const normalized = normalizeText(candidate);
-      if (!map.has(normalized)) {
-        map.set(normalized, option.value);
-      }
-    });
-    return map;
-  }, new Map<string, string>());
-};
-
-const strengthLookup = buildLookup(STRENGTH_OPTIONS);
-const contactLookup = buildLookup(CONTACT_OPTIONS);
-const phaseLookup = buildLookup(PHASE_OPTIONS);
-
-const FIELD_KEYWORDS: Record<FieldKey, string[]> = {
-  lastName: ['姓', '苗字', 'last', 'last_name', 'familyname', '氏'],
-  firstName: ['名', '名前', 'first', 'first_name', 'givenname'],
-  email: ['メールアドレス', 'email', 'mail', 'e-mail'],
-  strength: ['強み', '専門', 'スキル', '領域'],
-  contactPreference: ['連絡手段', '連絡方法', 'コンタクト', '連絡先'],
-  phase: ['フェーズ', 'ステータス', '進捗', '状態'],
-};
-
-const FIELD_HINTS: Partial<Record<FieldKey, string>> = {
-  strength: '人事 / IT / 会計 / 広告 / 経営 / 営業 / 製造 / 医療 / 金融',
-  contactPreference: 'Facebook / LINE / メール / 電話 / Slack',
-  phase: '初回 / 登録 / リスト提供 / 候補抽出 / イノベータ確認 / 紹介中 / 継続中',
-};
-
-const buildAutoMap = (headers: HeaderInfo[]) => {
-  const autoMap: Record<string, string> = {};
-  const takenHeaderIds = new Set<string>();
-
-  headers.forEach((header) => {
-    const normalized = normalizeText(header.label || header.raw);
-    (Object.entries(FIELD_KEYWORDS) as Array<[FieldKey, string[]]>).forEach(([fieldKey, keywords]) => {
-      if (autoMap[fieldKey]) return;
-      const matched = keywords.some((keyword) => normalizeText(keyword) === normalized);
-      if (matched && !takenHeaderIds.has(header.id)) {
-        autoMap[fieldKey] = header.id;
-        takenHeaderIds.add(header.id);
-      }
-    });
-  });
-
-  return autoMap;
-};
-
-const createEmptyMap = () =>
-  DB_FIELDS.reduce<Record<FieldKey, string | undefined>>((acc, field) => {
-    acc[field.key] = undefined;
-    return acc;
-  }, {} as Record<FieldKey, string | undefined>);
-
 export default function CSVMapper() {
   const [headers, setHeaders] = useState<HeaderInfo[]>([]);
   const [rows, setRows] = useState<CsvRow[]>([]);
   const [allRows, setAllRows] = useState<CsvRow[]>([]);
-  const [map, setMap] = useState<Record<FieldKey, string | undefined>>(() => createEmptyMap());
+  const [map, setMap] = useState<Record<string, string | string[]>>({});
   const [isImporting, setIsImporting] = useState(false);
   const [lastImportCount, setLastImportCount] = useState<number | null>(null);
 
-  const headerLookup = useMemo(() => {
-    return headers.reduce<Record<string, HeaderInfo>>((acc, header) => {
-      acc[header.id] = header;
-      return acc;
-    }, {});
-  }, [headers]);
+  const headerLookup = useMemo(
+    () =>
+      headers.reduce<Record<string, HeaderInfo>>((acc, header) => {
+        acc[header.id] = header;
+        return acc;
+      }, {}),
+    [headers],
+  );
 
   const onFile = useCallback((file: File) => {
     try {
@@ -141,132 +70,122 @@ export default function CSVMapper() {
 
       Papa.parse<(string | number | boolean | null)[]>(file, {
         header: false,
-        worker: canUseWorker,
+        worker: canUseWorker,            // structured clone 安全
         skipEmptyLines: 'greedy',
-        delimiter: '',
         complete: (res) => {
           try {
-            const parsedRows = (res.data ?? []).filter((row): row is (string | number | boolean | null)[] => Array.isArray(row));
+            const parsedRows = (res.data ?? []).filter((row): row is (string | number | boolean | null)[] =>
+              Array.isArray(row),
+            );
             if (parsedRows.length === 0) {
               toast.error('CSV にヘッダ行が見つかりません');
               return;
             }
 
-            if (res.errors && res.errors.length > 0) {
-              const message = res.errors.map((err) => err.message).join('\n');
-              toast.warning(`CSV 解析で警告: ${message}`);
-            }
-
             const rawHeaderRow = parsedRows[0] ?? [];
             const dataRows = parsedRows.slice(1);
-
             if (dataRows.length === 0) {
               toast.error('CSV にデータ行がありません');
               return;
             }
 
+            // ヘッダ整形（空は「列n」）
             const initialHeaders: HeaderInfo[] = rawHeaderRow.map((value, index) => {
               const rawValue = value == null ? '' : String(value);
               const trimmed = rawValue.trim();
               const label = trimmed || `列${index + 1}`;
-              return {
-                id: `col_${index}`,
-                label,
-                raw: rawValue,
-                index,
-              };
+              return { id: `col_${index}`, label, raw: rawValue, index };
             });
 
-            const maxColumns = dataRows.reduce((max, row) => Math.max(max, row.length), initialHeaders.length);
+            // データ側列が多い場合はヘッダを追加
+            const maxColumns = dataRows.reduce(
+              (max, row) => Math.max(max, row.length),
+              initialHeaders.length,
+            );
             const headerInfos = [...initialHeaders];
             for (let i = initialHeaders.length; i < maxColumns; i += 1) {
-              headerInfos.push({
-                id: `col_${i}`,
-                label: `列${i + 1}`,
-                raw: '',
-                index: i,
-              });
+              headerInfos.push({ id: `col_${i}`, label: `列${i + 1}`, raw: '', index: i });
             }
 
-            const normalizedRows = dataRows.map((row) => {
-              return headerInfos.map((_, index) => {
+            // 行をトリム・正規化
+            const normalizedRows = dataRows.map((row) =>
+              headerInfos.map((_, index) => {
                 const cell = row[index];
                 if (cell == null) return '';
                 if (typeof cell === 'string') return cell.trim();
                 return String(cell).trim();
-              });
-            });
-
-            const displayData = normalizedRows.slice(0, 200);
+              }),
+            );
 
             setHeaders(headerInfos);
-            setRows(displayData);
+            setRows(normalizedRows.slice(0, 200)); // プレビュー用
             setAllRows(normalizedRows);
-            const auto = buildAutoMap(headerInfos);
-            const nextMap = createEmptyMap();
-            (Object.entries(auto) as Array<[FieldKey, string]>).forEach(([key, headerId]) => {
-              nextMap[key] = headerId;
-            });
-            setMap(nextMap);
+            setMap({});
             setLastImportCount(null);
+
             toast.success(`CSVファイルを読み込みました（${normalizedRows.length}行）`);
           } catch (e: unknown) {
-            const errorMessage = e instanceof Error ? e.message : String(e);
-            toast.error(`CSV データ処理で例外: ${errorMessage}`);
+            toast.error(`CSV データ処理で例外: ${e instanceof Error ? e.message : String(e)}`);
           }
         },
         error: (err) => {
-          toast.error(`CSV 解析に失敗しました: ${err?.message ?? err}`);
+          toast.error(`CSV 解析に失敗しました: ${err?.message ?? String(err)}`);
         },
       });
     } catch (e: unknown) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      toast.error(`CSV 読み込みで例外: ${errorMessage}`);
+      toast.error(`CSV 読み込みで例外: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, []);
 
   const buildPayload = useCallback(() => {
     return allRows.map((row) => {
       const obj: Record<string, unknown> = {};
-      DB_FIELDS.forEach((field) => {
-        const mapping = map[field.key];
-        if (!mapping) return;
 
-        const header = headerLookup[mapping];
-        if (!header) return;
+      DB_FIELDS.forEach((f) => {
+        const mapping = map[f.key];
+        if (!mapping || (typeof mapping === 'string' && mapping.length === 0)) return;
 
-        const cell = row[header.index];
-        const rawValue = cell == null ? '' : String(cell).trim();
-        if (!rawValue) return;
+        const applySingleValue = (rawValue: string) => {
+          const value = rawValue.trim();
+          if (!value) return;
 
-        const normalized = normalizeText(rawValue);
-
-        if (field.key === 'strength') {
-          const strength = strengthLookup.get(normalized);
-          if (strength) {
-            obj[field.key] = strength;
+          if (MULTI_VALUE_FIELDS.has(f.key)) {
+            const tags = value
+              .split(',')
+              .map((tag) => tag.trim())
+              .filter((tag) => tag.length > 0);
+            if (tags.length === 0) return;
+            const existing = Array.isArray(obj[f.key]) ? (obj[f.key] as string[]) : [];
+            obj[f.key] = Array.from(new Set([...existing, ...tags]));
+            return;
           }
-          return;
-        }
 
-        if (field.key === 'contactPreference') {
-          const contact = contactLookup.get(normalized);
-          if (contact) {
-            obj[field.key] = contact;
+          if (f.key === 'tier') {
+            const normalized = value.toUpperCase();
+            obj[f.key] = normalized === 'TIER1' || normalized === 'TIER2' ? normalized : value;
+            return;
           }
-          return;
-        }
 
-        if (field.key === 'phase') {
-          const phase = phaseLookup.get(normalized);
-          if (phase) {
-            obj[field.key] = phase;
-          }
-          return;
-        }
+          obj[f.key] = value;
+        };
 
-        obj[field.key] = rawValue;
+        if (Array.isArray(mapping)) {
+          mapping.forEach((id) => {
+            const header = headerLookup[id];
+            if (!header) return;
+            const cell = row[header.index];
+            const value = cell == null ? '' : String(cell);
+            applySingleValue(value);
+          });
+        } else {
+          const header = headerLookup[mapping];
+          if (!header) return;
+          const cell = row[header.index];
+          const value = cell == null ? '' : String(cell);
+          applySingleValue(value);
+        }
       });
+
       return obj;
     });
   }, [allRows, headerLookup, map]);
@@ -278,16 +197,12 @@ export default function CSVMapper() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        credentials: 'include',
+        credentials: 'include', // 401回避（Cookie送信）
         body: JSON.stringify({ rows: chunk }),
       });
       if (!res.ok) {
-        if (res.status === 401) {
-          throw new Error('AUTH');
-        }
-        if (res.status === 403) {
-          throw new Error('FORBIDDEN');
-        }
+        if (res.status === 401) throw new Error('AUTH');
+        if (res.status === 403) throw new Error('FORBIDDEN');
         const text = await res.text();
         throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${text || res.statusText}`);
       }
@@ -296,52 +211,38 @@ export default function CSVMapper() {
 
   const handleImport = async () => {
     try {
-      if (!allRows.length) {
-        toast.error('CSV データが空です');
-        return;
-      }
+      if (!allRows.length) return toast.error('CSV データが空です');
 
-      const hasMapping = Object.values(map).some((value) => Boolean(value && value.length > 0));
-
-      if (!hasMapping) {
-        toast.error('取り込み先の列が選択されていません');
-        return;
-      }
+      const hasMapping = Object.values(map).some((v) =>
+        Array.isArray(v) ? v.length > 0 : Boolean(v && v.length > 0),
+      );
+      if (!hasMapping) return toast.error('取り込み先の列が選択されていません');
 
       const payload = buildPayload();
       const meaningfulRows = payload.filter((row) =>
         Object.values(row).some((value) => {
+          if (Array.isArray(value)) return value.length > 0;
           if (value === null || value === undefined) return false;
           return String(value).trim().length > 0;
-        })
+        }),
       );
-
-      if (meaningfulRows.length === 0) {
-        toast.error('選択した列に値が見つかりませんでした');
-        return;
-      }
+      if (meaningfulRows.length === 0) return toast.error('選択した列に値が見つかりませんでした');
 
       setIsImporting(true);
       await importInBatches(meaningfulRows);
       toast.success(`${meaningfulRows.length} 件のインポートが完了しました`);
       setLastImportCount(meaningfulRows.length);
 
+      // リセット
       setHeaders([]);
       setRows([]);
       setAllRows([]);
-      setMap(createEmptyMap());
+      setMap({});
     } catch (e: unknown) {
       if (e instanceof Error) {
-        if (e.message === 'AUTH') {
-          toast.error('セッションの有効期限が切れています。再度ログインしてからやり直してください。');
-          return;
-        }
-        if (e.message === 'FORBIDDEN') {
-          toast.error('CSVインポートは管理者またはCS権限のユーザーのみ利用できます。');
-          return;
-        }
-        toast.error(`インポートエラー: ${e.message}`);
-        return;
+        if (e.message === 'AUTH') return toast.error('セッションの有効期限が切れています。再度ログインしてください。');
+        if (e.message === 'FORBIDDEN') return toast.error('CSVインポートは管理者またはCS権限のみ利用できます。');
+        return toast.error(`インポートエラー: ${e.message}`);
       }
       toast.error(`インポートエラー: ${String(e)}`);
     } finally {
@@ -349,10 +250,13 @@ export default function CSVMapper() {
     }
   };
 
-  const mappedFields = DB_FIELDS.filter((field) => Boolean(map[field.key]));
+  const mappedFields = DB_FIELDS.filter(
+    (f) => map[f.key] && (!Array.isArray(map[f.key]) || (map[f.key] as string[]).length > 0),
+  );
 
   return (
     <div className="space-y-8">
+      {/* STEP 1 */}
       <Card className="border-none shadow-lg">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
@@ -361,22 +265,20 @@ export default function CSVMapper() {
               <CardTitle>CSVファイルをアップロード</CardTitle>
             </div>
             <CardDescription className="leading-relaxed text-slate-600">
-              UTF-8 の CSV / TSV ファイルを読み込み、最初の行をヘッダーとして認識します。列名が空でも自動で列番号が割り当てられます。
+              UTF-8 の CSV / TSV を読み込み、最初の行をヘッダーとして認識します。列名が空でも自動で列番号が割り当てられます。
             </CardDescription>
           </div>
           <UploadCloud className="h-6 w-6 text-purple-600" />
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="csv-file" className="text-sm font-semibold text-slate-700">
-              CSVファイルを選択
-            </Label>
+            <Label htmlFor="csv-file" className="text-sm font-semibold text-slate-700">CSVファイルを選択</Label>
             <Input
               id="csv-file"
               type="file"
-              accept=".csv"
-              onChange={(event) => event.target.files && onFile(event.target.files[0])}
-              className="mt-2"
+              accept=".csv,.tsv"
+              onChange={(e) => e.target.files && onFile(e.target.files[0])}
+              className="mt-2 bg-white"
             />
           </div>
 
@@ -389,6 +291,7 @@ export default function CSVMapper() {
         </CardContent>
       </Card>
 
+      {/* STEP 2 */}
       {headers.length > 0 && (
         <Card className="border-none shadow-lg">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -407,8 +310,15 @@ export default function CSVMapper() {
             <div className="grid gap-4 lg:grid-cols-2">
               {DB_FIELDS.map((field) => {
                 const selected = map[field.key];
-                const selectedLabel = selected ? headerLookup[selected]?.label ?? '（不明な列）' : '未選択';
-                const isMapped = Boolean(selected);
+                const selectedLabel = Array.isArray(selected)
+                  ? selected.map((id) => headerLookup[id]?.label ?? '（不明な列）').join(', ')
+                  : typeof selected === 'string' && selected.length > 0
+                  ? headerLookup[selected]?.label ?? '（不明な列）'
+                  : '未選択';
+
+                const isMapped = Array.isArray(selected)
+                  ? selected.length > 0
+                  : typeof selected === 'string' && selected.length > 0;
 
                 return (
                   <div key={field.key} className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
@@ -418,23 +328,26 @@ export default function CSVMapper() {
                         <span className="text-xs text-slate-500">{isMapped ? selectedLabel : '未選択'}</span>
                       </div>
                       {isMapped ? (
-                        <Badge variant="outline" className="border-green-300 bg-green-50 text-xs text-green-700">
-                          選択済み
-                        </Badge>
+                        <Badge variant="outline" className="border-green-300 bg-green-50 text-xs text-green-700">選択済み</Badge>
                       ) : (
-                        <Badge variant="outline" className="border-slate-300 text-xs text-slate-500">
-                          未設定
-                        </Badge>
+                        <Badge variant="outline" className="border-slate-300 text-xs text-slate-500">未設定</Badge>
                       )}
                     </div>
 
+                    {/* 単一列マッピング（Radix Select: 空値禁止→未選択は undefined を使う） */}
                     <Select
-                      value={selected ?? undefined}
+                      value={
+                        Array.isArray(selected)
+                          ? undefined
+                          : typeof selected === 'string' && selected.length > 0
+                          ? selected
+                          : undefined
+                      }
                       onValueChange={(value) => {
                         setMap((prev) => {
                           if (value === '__CLEAR__') {
                             const next = { ...prev };
-                            next[field.key] = undefined;
+                            delete next[field.key];
                             return next;
                           }
                           return { ...prev, [field.key]: value };
@@ -444,24 +357,54 @@ export default function CSVMapper() {
                       <SelectTrigger className="w-full bg-white">
                         <SelectValue placeholder="（単一列を選択）" />
                       </SelectTrigger>
-                      <SelectContent className="bg-white text-slate-900">
+                      <SelectContent>
                         <SelectItem value="__CLEAR__">（選択解除）</SelectItem>
-                        {headers.map((header) => {
-                          const trimmedRaw = header.raw.trim();
-                          return (
-                            <SelectItem key={header.id} value={header.id}>
-                              {header.label}
-                              {trimmedRaw.length > 0 && trimmedRaw !== header.label ? `（${header.raw}）` : ''}
-                            </SelectItem>
-                          );
-                        })}
+                        {headers.map((header) => (
+                          <SelectItem key={header.id} value={header.id}>
+                            {header.label}
+                            {header.raw.trim().length > 0 && header.raw.trim() !== header.label
+                              ? `（${header.raw}）`
+                              : ''}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
 
-                    {FIELD_HINTS[field.key] && (
-                      <p className="text-xs text-slate-500">
-                        利用可能な値: <span className="font-medium text-slate-600">{FIELD_HINTS[field.key]}</span>
-                      </p>
+                    {/* タグのみ複数列対応 */}
+                    {field.key === 'tags' && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-sm text-slate-600">タグに使う列を複数選択</summary>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {headers.map((header) => {
+                            const isChecked = Array.isArray(map.tags) && (map.tags as string[]).includes(header.id);
+                            return (
+                              <label key={header.id} className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(event) => {
+                                    setMap((prev) => {
+                                      const current = Array.isArray(prev.tags) ? [...(prev.tags as string[])] : [];
+                                      if (event.target.checked) {
+                                        if (current.includes(header.id)) return prev;
+                                        return { ...prev, tags: [...current, header.id] };
+                                      }
+                                      const nextTags = current.filter((id) => id !== header.id);
+                                      if (nextTags.length === 0) {
+                                        const next = { ...prev };
+                                        delete next.tags;
+                                        return next;
+                                      }
+                                      return { ...prev, tags: nextTags };
+                                    });
+                                  }}
+                                />
+                                <span>{header.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </details>
                     )}
                   </div>
                 );
@@ -471,6 +414,7 @@ export default function CSVMapper() {
         </Card>
       )}
 
+      {/* STEP 3 */}
       {headers.length > 0 && (
         <Card className="border-none shadow-lg">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -488,20 +432,17 @@ export default function CSVMapper() {
               <table className="w-full border-collapse overflow-hidden rounded-lg border border-slate-200">
                 <thead>
                   <tr className="bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-600">
-                    {mappedFields.map((field) => (
-                      <th key={field.key} className="border border-slate-200 px-3 py-2">
-                        {field.label}
-                      </th>
+                    {mappedFields.map((f) => (
+                      <th key={f.key} className="border border-slate-200 px-3 py-2">{f.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.slice(0, 5).map((row, rowIndex) => (
                     <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      {mappedFields.map((field) => {
-                        const mapping = map[field.key];
+                      {mappedFields.map((f) => {
+                        const mapping = map[f.key];
                         let value = '';
-
                         if (Array.isArray(mapping)) {
                           value = mapping
                             .map((id) => {
@@ -515,9 +456,8 @@ export default function CSVMapper() {
                           const header = headerLookup[mapping];
                           value = header ? row[header.index] ?? '' : '';
                         }
-
                         return (
-                          <td key={field.key} className="border border-slate-200 px-3 py-2 text-sm text-slate-700">
+                          <td key={f.key} className="border border-slate-200 px-3 py-2 text-sm text-slate-700">
                             {value}
                           </td>
                         );
@@ -534,6 +474,7 @@ export default function CSVMapper() {
         </Card>
       )}
 
+      {/* STEP 4 */}
       {headers.length > 0 && (
         <Card className="border-none shadow-lg">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -543,16 +484,12 @@ export default function CSVMapper() {
                 <CardTitle>インポートを実行</CardTitle>
               </div>
               <CardDescription className="text-slate-600">
-                インポート後は割り当てられていないEVAに対して CS を設定できます。
+                インポートには管理者または CS 権限のアカウントが必要です。
               </CardDescription>
             </div>
             <ShieldAlert className="h-6 w-6 text-purple-600" />
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              <p>インポートを実行するには管理者または CS 権限のアカウントでログインしている必要があります。</p>
-            </div>
-
             <Button
               onClick={handleImport}
               disabled={allRows.length === 0 || isImporting}
