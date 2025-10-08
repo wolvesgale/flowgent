@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { z } from 'zod'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // バリデーションスキーマ
 const innovatorSchema = z.object({
   company: z.string().min(1, 'Company is required'),

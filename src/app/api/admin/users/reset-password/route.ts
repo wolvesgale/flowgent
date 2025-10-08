@@ -4,6 +4,9 @@ import { getSession } from '@/lib/session'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // バリデーションスキーマ
 const resetPasswordSchema = z.object({
   userId: z.string().min(1, 'User ID is required'),

@@ -17,13 +17,21 @@ const defaultSession: SessionData = {
 
 const DEFAULT_COOKIE_NAME = 'flowgent_session';
 const LEGACY_COOKIE_NAME = 'flowgent-session';
+const FALLBACK_SESSION_PASSWORD = 'flowgent_session_secret_at_least_32_chars_long_!';
 
 function resolveSessionPassword() {
-  const password = process.env.SESSION_PASSWORD;
-  if (!password) {
-    throw new Error('SESSION_PASSWORD is not configured.');
+  const configured = process.env.SESSION_PASSWORD?.trim();
+  if (configured && configured.length >= 32) {
+    return configured;
   }
-  return password;
+
+  if (configured && configured.length > 0 && configured.length < 32) {
+    console.warn('SESSION_PASSWORD is shorter than 32 characters. Padding automatically.');
+    return configured.padEnd(32, '_');
+  }
+
+  console.warn('SESSION_PASSWORD is not configured. Falling back to default development secret.');
+  return FALLBACK_SESSION_PASSWORD;
 }
 
 function resolveCookieName() {

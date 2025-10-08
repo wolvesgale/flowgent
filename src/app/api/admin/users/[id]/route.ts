@@ -4,6 +4,9 @@ import { getSession } from '@/lib/session'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 const updateUserSchema = z.object({
   name: z.string().min(1, 'Name is required').optional(),
   email: z.string().email('Invalid email format').optional(),

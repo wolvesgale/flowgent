@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 interface WhereInput {
   OR?: Array<{
     firstName?: { contains: string; mode: 'insensitive' }
