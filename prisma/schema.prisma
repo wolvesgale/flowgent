@@ -4,8 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   // directUrl = env("DIRECT_URL") // 任意
 }
 
@@ -76,7 +76,7 @@ enum Tier {
   TIER2
 }
 
-// 以下の enum は将来の型厳格化/UI向けに残置（現状の列は String を使用）
+// 以下の enum は将来の型厳格化/UI向けに残置（現状は Evangelist は String 列を使用）
 enum EvangelistStrength {
   HR
   IT
@@ -88,6 +88,7 @@ enum EvangelistStrength {
   MEDICAL
   FINANCE
 }
+
 enum ContactPreference {
   FACEBOOK
   LINE
@@ -95,6 +96,7 @@ enum ContactPreference {
   PHONE
   SLACK
 }
+
 enum EvangelistPhase {
   FIRST_CONTACT
   REGISTERED

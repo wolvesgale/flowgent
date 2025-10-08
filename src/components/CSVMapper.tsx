@@ -37,6 +37,8 @@ const DB_FIELDS = [
 
 const MULTI_VALUE_FIELDS = new Set(['tags']);
 
+type FieldKey = (typeof DB_FIELDS)[number]['key'];
+
 type HeaderInfo = {
   id: string;     // 内部ID（col_0 等）
   label: string;  // 表示名（空なら「列n」）
@@ -47,11 +49,17 @@ type HeaderInfo = {
 type CsvRow = string[];
 const BATCH_SIZE = 500;
 
+const createEmptyMap = () =>
+  DB_FIELDS.reduce<Record<FieldKey, string | string[] | undefined>>((acc, field) => {
+    acc[field.key] = undefined;
+    return acc;
+  }, {} as Record<FieldKey, string | string[] | undefined>);
+
 export default function CSVMapper() {
   const [headers, setHeaders] = useState<HeaderInfo[]>([]);
   const [rows, setRows] = useState<CsvRow[]>([]);
   const [allRows, setAllRows] = useState<CsvRow[]>([]);
-  const [map, setMap] = useState<Record<string, string | string[]>>({});
+  const [map, setMap] = useState<Record<FieldKey, string | string[] | undefined>>(() => createEmptyMap());
   const [isImporting, setIsImporting] = useState(false);
   const [lastImportCount, setLastImportCount] = useState<number | null>(null);
 
@@ -67,9 +75,10 @@ export default function CSVMapper() {
   const onFile = useCallback((file: File) => {
     try {
       const canUseWorker = typeof window !== 'undefined' && typeof Worker !== 'undefined';
+
       Papa.parse<(string | number | boolean | null)[]>(file, {
         header: false,
-        worker: canUseWorker,          // 可能ならWebWorkerでパース
+        worker: canUseWorker, // 可能ならWebWorkerでパース
         skipEmptyLines: 'greedy',
         complete: (res) => {
           try {
@@ -80,6 +89,7 @@ export default function CSVMapper() {
               toast.error('CSV にヘッダ行が見つかりません');
               return;
             }
+
             const rawHeaderRow = parsedRows[0] ?? [];
             const dataRows = parsedRows.slice(1);
             if (dataRows.length === 0) {
@@ -118,8 +128,9 @@ export default function CSVMapper() {
             setHeaders(headerInfos);
             setRows(normalizedRows.slice(0, 200)); // プレビュー用
             setAllRows(normalizedRows);
-            setMap({});
+            setMap(createEmptyMap());
             setLastImportCount(null);
+
             toast.success(`CSVファイルを読み込みました（${normalizedRows.length}行）`);
           } catch (e: unknown) {
             toast.error(`CSV データ処理で例外: ${e instanceof Error ? e.message : String(e)}`);
@@ -234,7 +245,7 @@ export default function CSVMapper() {
       setHeaders([]);
       setRows([]);
       setAllRows([]);
-      setMap({});
+      setMap(createEmptyMap());
     } catch (e: unknown) {
       if (e instanceof Error) {
         if (e.message === 'AUTH') return toast.error('セッションの有効期限が切れています。再度ログインしてください。');
@@ -278,6 +289,7 @@ export default function CSVMapper() {
               className="mt-2 bg-white"
             />
           </div>
+
           {allRows.length > 0 && (
             <div className="flex items-center gap-2 rounded-md border border-purple-100 bg-purple-50 px-3 py-2 text-sm text-purple-800">
               <Info className="h-4 w-4" />
@@ -374,7 +386,10 @@ export default function CSVMapper() {
                           {headers.map((header) => {
                             const isChecked = Array.isArray(map.tags) && (map.tags as string[]).includes(header.id);
                             return (
-                              <label key={header.id} className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+                              <label
+                                key={header.id}
+                                className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
+                              >
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
@@ -452,6 +467,7 @@ export default function CSVMapper() {
                           const header = headerLookup[mapping];
                           value = header ? row[header.index] ?? '' : '';
                         }
+
                         return (
                           <td key={f.key} className="border border-slate-200 px-3 py-2 text-sm text-slate-700">
                             {value}
