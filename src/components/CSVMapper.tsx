@@ -132,7 +132,7 @@ export default function CSVMapper() {
     const skippedRows: number[] = [];
 
     const records = allRows.reduce<Record<string, unknown>[]>((acc, row, index) => {
-      const record: Record<string, unknown> = {};
+      const record: Record<string, unknown> = { __lineNumber: index + 2 }; // +2 to account for header row
       let hasMeaningfulValue = false;
 
       DB_FIELDS.forEach((field) => {
@@ -163,7 +163,7 @@ export default function CSVMapper() {
       });
 
       if (!hasAllRequired) {
-        skippedRows.push(index + 1);
+        skippedRows.push(index + 2);
         return acc;
       }
 
@@ -178,7 +178,15 @@ export default function CSVMapper() {
     return { records, skippedRows };
   }, [allRows, headerLookup, map]);
 
-  async function importInBatches(payload: Record<string, unknown>[]) {
+  type ImportSummary = {
+    count: number;
+    skippedRowNumbers: number[];
+    failedRowNumbers: number[];
+  };
+
+  async function importInBatches(payload: Record<string, unknown>[]): Promise<ImportSummary> {
+    const summary: ImportSummary = { count: 0, skippedRowNumbers: [], failedRowNumbers: [] };
+
     for (let i = 0; i < payload.length; i += BATCH_SIZE) {
       const chunk = payload.slice(i, i + BATCH_SIZE);
       const res = await fetch('/api/evangelists/import', {
@@ -194,7 +202,24 @@ export default function CSVMapper() {
         const text = await res.text();
         throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${text || res.statusText}`);
       }
+
+      try {
+        const data = await res.json();
+        if (typeof data.count === 'number') {
+          summary.count += data.count;
+        }
+        if (Array.isArray(data.skippedRowNumbers)) {
+          summary.skippedRowNumbers.push(...data.skippedRowNumbers);
+        }
+        if (Array.isArray(data.failedRowNumbers)) {
+          summary.failedRowNumbers.push(...data.failedRowNumbers);
+        }
+      } catch (err) {
+        console.error('Failed to parse import response JSON', err);
+      }
     }
+
+    return summary;
   }
 
   const handleImport = async () => {
@@ -216,14 +241,22 @@ export default function CSVMapper() {
       }
 
       setIsImporting(true);
-      await importInBatches(records);
-      toast.success(`${records.length} 件のインポートが完了しました`);
-      setLastImportCount(records.length);
+      const importResult = await importInBatches(records);
+      const importedCount = importResult.count ?? records.length;
+      toast.success(`${importedCount} 件のインポートが完了しました`);
+      setLastImportCount(importedCount);
 
-      if (skippedRows.length > 0) {
-        const sample = skippedRows.slice(0, 5).join(', ');
-        const suffix = skippedRows.length > 5 ? ' など' : '';
-        toast.message(`必須項目が空のため ${skippedRows.length} 行をスキップしました（行: ${sample}${suffix}）`);
+      const combinedSkipped = Array.from(new Set([...skippedRows, ...importResult.skippedRowNumbers]));
+      if (combinedSkipped.length > 0) {
+        const sample = combinedSkipped.slice(0, 5).join(', ');
+        const suffix = combinedSkipped.length > 5 ? ' など' : '';
+        toast.message(`必須項目が空のため ${combinedSkipped.length} 行をスキップしました（行: ${sample}${suffix}）`);
+      }
+
+      if (importResult.failedRowNumbers.length > 0) {
+        const sample = importResult.failedRowNumbers.slice(0, 5).join(', ');
+        const suffix = importResult.failedRowNumbers.length > 5 ? ' など' : '';
+        toast.error(`データベースエラーのため ${importResult.failedRowNumbers.length} 行を登録できませんでした（行: ${sample}${suffix}）`);
       }
 
       // リセット

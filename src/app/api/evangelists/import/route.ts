@@ -28,6 +28,7 @@ function requireRole(user: SessionData, roles: string[]) {
 
 // クライアント側 CSV マッピング後の行型
 type ImportRow = {
+  __lineNumber?: number;
   recordId?: string;
   firstName?: string;
   lastName?: string;
@@ -36,6 +37,7 @@ type ImportRow = {
 };
 
 type SanitizedRow = {
+  lineNumber: number;
   recordId: string | null;
   firstName: string;
   lastName: string;
@@ -62,7 +64,10 @@ export async function POST(req: NextRequest) {
     }
 
     const prelimRows = (rows as ImportRow[]).map((row, index) => ({
-      index,
+      lineNumber:
+        typeof row.__lineNumber === 'number' && Number.isFinite(row.__lineNumber)
+          ? Math.max(1, Math.floor(row.__lineNumber))
+          : index + 1,
       recordId: normalizeString(row.recordId),
       firstName: normalizeString(row.firstName),
       lastName: normalizeString(row.lastName),
@@ -75,11 +80,12 @@ export async function POST(req: NextRequest) {
 
     prelimRows.forEach((row) => {
       if (!row.firstName || !row.lastName) {
-        skippedRowNumbers.push(row.index + 1);
+        skippedRowNumbers.push(row.lineNumber);
         return;
       }
 
       sanitizedRows.push({
+        lineNumber: row.lineNumber,
         recordId: row.recordId,
         firstName: row.firstName,
         lastName: row.lastName,
@@ -109,31 +115,48 @@ export async function POST(req: NextRequest) {
       meetingStatus: r.meetingStatus ?? undefined,
     });
 
-    const operations: PrismaPromise<unknown>[] = sanitizedRows.map((row) => {
-      const createData = buildCreateData(row);
-      const updateData = buildUpdateData(row);
+    const failedRowNumbers: number[] = [];
+    let successCount = 0;
 
-      if (row.recordId) {
-        return prisma.evangelist.upsert({
-          where: { recordId: row.recordId },
-          create: createData,
-          update: updateData,
+    for (const row of sanitizedRows) {
+      try {
+        const createData = buildCreateData(row);
+        const updateData = buildUpdateData(row);
+
+        let existing = null;
+
+        if (row.recordId) {
+          existing = await prisma.evangelist.findUnique({
+            where: { recordId: row.recordId },
+          });
+        }
+
+        if (!existing && row.email) {
+          existing = await prisma.evangelist.findUnique({
+            where: { email: row.email },
+          });
+        }
+
+        if (existing) {
+          await prisma.evangelist.update({
+            where: { id: existing.id },
+            data: updateData,
+          });
+        } else {
+          await prisma.evangelist.create({ data: createData });
+        }
+
+        successCount += 1;
+      } catch (err) {
+        console.error('CSV row import error:', {
+          lineNumber: row.lineNumber,
+          error: err instanceof Error ? err.message : String(err),
         });
+        failedRowNumbers.push(row.lineNumber);
       }
+    }
 
-      if (row.email) {
-        return prisma.evangelist.upsert({
-          where: { email: row.email },
-          create: createData,
-          update: updateData,
-        });
-      }
-
-      return prisma.evangelist.create({ data: createData });
-    });
-
-    await prisma.$transaction(operations);
-    return NextResponse.json({ ok: true, count: operations.length, skippedRowNumbers });
+    return NextResponse.json({ ok: true, count: successCount, skippedRowNumbers, failedRowNumbers });
   } catch (error) {
     console.error('CSV import error:', error);
     if (error instanceof Error && error.message === 'Unauthorized') {
