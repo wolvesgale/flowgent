@@ -53,7 +53,7 @@ type HeaderInfo = {
 };
 
 type CsvRow = string[];
-const BATCH_SIZE = 500;
+const BATCH_SIZE = 100;
 
 const createEmptyMap = () =>
   DB_FIELDS.reduce<Record<FieldKey, string | string[] | undefined>>((acc, field) => {
