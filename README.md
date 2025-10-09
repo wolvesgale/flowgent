@@ -10,9 +10,12 @@ Create a `.env` file with at least the following secrets:
 ```bash
 SESSION_PASSWORD="your-64-char-secret"
 DATABASE_URL="postgresql://..."
-# Optional when using connection pooling on Vercel
-# DIRECT_URL="postgresql://..."
+DIRECT_URL="postgresql://..."
 ```
+
+> On Vercel, `DATABASE_URL` can point at Prisma Accelerate/Data Proxy for runtime use, while `DIRECT_URL` **must** be a
+> direct PostgreSQL connection string used for running migrations. If you only have a single direct connection string, reuse
+> it for both variables.
 
 ## Local Development
 
@@ -40,15 +43,32 @@ The evangelist importer accepts a JSON body with a `rows` array. Import behaviou
 * Deduplication order: `recordId` → `email` → create new record.
 * The endpoint responds with `ok`, `total`, `accepted`, `success`, `failed`, and up to the first five `failures` for quick QA.
 
+## Environment Variables
+
+| Environment | `DATABASE_URL` | `DIRECT_URL` |
+|-------------|----------------|---------------|
+| Local       | Direct PostgreSQL connection string (e.g. `postgresql://postgres:pass@localhost:5432/postgres?schema=public`) | Same value as `DATABASE_URL` |
+| Production / Preview (Vercel) | Connection pooling or Prisma Accelerate string (e.g. `prisma://...`) | Direct PostgreSQL connection string (`postgresql://...`, **not** `prisma://`) |
+
 ## Deployment on Vercel
 
 1. Set **Build Command** to `npm run vercel-build` in the project settings.
-2. Ensure `DATABASE_URL` (and `DIRECT_URL` if required) are configured for the Production environment.
+2. Ensure both `DATABASE_URL` and `DIRECT_URL` are configured for the Production/Preview environments. `DIRECT_URL` must be a
+   direct connection string (no `prisma://`).
 3. Disable Vercel features that inject their own login prompts, such as **Password Protection** or **Preview Protection**. The
    application expects unauthenticated users to reach `/login` directly.
 
-During the Vercel build the script `npm run vercel-build` runs `prisma migrate deploy` before the Next.js build, ensuring schema
-changes are always applied.
+During the Vercel build the script `npm run vercel-build` checks `DIRECT_URL` before running migrations:
+
+* When `DIRECT_URL` is set and not a `prisma://` string, `prisma migrate deploy` runs against that direct connection before
+  `next build`.
+* When `DIRECT_URL` is missing or points to Prisma Data Proxy, the migration step is skipped and a warning is printed, while
+  `next build` continues normally.
+
+## Health Checks
+
+Use `/api/health/db` to verify the deployment environment can reach the database. The endpoint returns `{ ok: true }` on
+success.
 
 ## Useful Commands
 
