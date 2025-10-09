@@ -4,7 +4,6 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions } from '@/lib/session-config';
-import type { Prisma } from '@prisma/client';
 import type { SessionData } from '@/lib/session';
 
 export const runtime = 'nodejs';
@@ -79,8 +78,32 @@ export async function POST(req: NextRequest) {
     }
 
     const records = rows as ImportRow[];
-    let processedCount = 0;
-    let skippedCount = 0;
+
+    const sanitized = records.reduce<{
+      row: ImportRow;
+      index: number;
+    }[]>((acc, r, index) => {
+      const firstName = r.firstName?.trim() ?? '';
+      const lastName = r.lastName?.trim() ?? '';
+
+      if (!firstName || !lastName) {
+        return acc;
+      }
+
+      const normalizedTier =
+        typeof r.tier === 'string' ? r.tier.toUpperCase() : r.tier;
+
+      acc.push({
+        index,
+        row: {
+          ...r,
+          firstName,
+          lastName,
+          tier: normalizedTier,
+        },
+      });
+      return acc;
+    }, []);
 
     const buildCreateData = (r: ImportRow) => ({
       recordId: r.recordId || null,
@@ -110,7 +133,6 @@ export async function POST(req: NextRequest) {
         : r.tags
           ? JSON.stringify([r.tags])
           : null,
-      // CS であれば自動割当、Admin は空で作る
       assignedCsId: user.role === 'CS' ? user.userId : null,
     });
 
@@ -141,57 +163,55 @@ export async function POST(req: NextRequest) {
         : r.tags
           ? JSON.stringify([r.tags])
           : undefined,
-      // 既存の assignedCsId は基本触らない（暗黙更新を避ける）
+      assignedCsId: undefined,
     });
 
-    const operations = records.reduce<Prisma.PrismaPromise<unknown>[]>((acc, r) => {
-      const firstName = r.firstName?.trim() ?? '';
-      const lastName = r.lastName?.trim() ?? '';
+    let success = 0;
+    const failures: { index: number; reason: string }[] = [];
+    const chunkSize = 25;
 
-      if (!firstName || !lastName) {
-        skippedCount += 1;
-        return acc;
-      }
+    for (let i = 0; i < sanitized.length; i += chunkSize) {
+      const chunk = sanitized.slice(i, i + chunkSize);
 
-      const normalizedRow: ImportRow = { ...r, firstName, lastName };
-      const createData = buildCreateData(normalizedRow);
-      const updateData = buildUpdateData(normalizedRow);
+      const ops = chunk.map(async ({ row, index }) => {
+        try {
+          const createData = buildCreateData(row);
+          const updateData = buildUpdateData(row);
 
-      if (r.recordId) {
-        acc.push(
-          prisma.evangelist.upsert({
-            where: { recordId: r.recordId },
-            create: createData,
-            update: updateData,
-          }),
-        );
-        processedCount += 1;
-        return acc;
-      }
+          if (row.recordId) {
+            await prisma.evangelist.upsert({
+              where: { recordId: row.recordId },
+              create: createData,
+              update: updateData,
+            });
+          } else if (row.email) {
+            await prisma.evangelist.upsert({
+              where: { email: row.email },
+              create: createData,
+              update: updateData,
+            });
+          } else {
+            await prisma.evangelist.create({ data: createData });
+          }
 
-      if (r.email) {
-        acc.push(
-          prisma.evangelist.upsert({
-            where: { email: r.email },
-            create: createData,
-            update: updateData,
-          }),
-        );
-        processedCount += 1;
-        return acc;
-      }
+          success += 1;
+        } catch (error: unknown) {
+          const reason = error instanceof Error ? error.message : String(error);
+          failures.push({ index, reason });
+        }
+      });
 
-      // recordId / email が無い行は新規作成（重複は運用で回避）
-      acc.push(prisma.evangelist.create({ data: createData }));
-      processedCount += 1;
-      return acc;
-    }, []);
-
-    if (operations.length > 0) {
-      await prisma.$transaction(operations);
+      await Promise.allSettled(ops);
     }
 
-    return NextResponse.json({ ok: true, count: processedCount, skippedCount });
+    return NextResponse.json({
+      ok: true,
+      total: records.length,
+      accepted: sanitized.length,
+      success,
+      failed: failures.length,
+      failures: failures.slice(0, 5),
+    });
   } catch (error) {
     console.error('CSV import error:', error);
     if (error instanceof Error && error.message === 'Unauthorized') {
