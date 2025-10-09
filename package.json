@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma migrate deploy && prisma generate && next build",
-    "vercel-build": "npm run build",
+    "build": "next build",
+    "postinstall": "prisma generate",
+    "vercel-build": "set -e; if [ -n \"$DIRECT_URL\" ] && ! echo \"$DIRECT_URL\" | grep -qi '^prisma://'; then echo '[migrate] Running prisma migrate deploy against DIRECT_URL'; npx prisma migrate deploy --schema=prisma/schema.prisma; else echo '[migrate] Skipped: DIRECT_URL is missing or points to prisma:// (Data Proxy).'; fi; next build",
     "start": "next start",
     "lint": "eslint"
   },
