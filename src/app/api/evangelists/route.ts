@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 interface WhereInput {
   OR?: Array<{
@@ -140,9 +144,10 @@ export async function GET(request: NextRequest) {
       totalPages: Math.ceil(total / limit),
     })
   } catch (error) {
-    console.error('Failed to fetch evangelists:', error)
+    const err = error as { code?: string; message?: string }
+    console.error('[evangelists:list]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }

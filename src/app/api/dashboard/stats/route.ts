@@ -4,6 +4,9 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     // 認証チェック
@@ -91,7 +94,11 @@ export async function GET() {
       itTagEvangelists,
     })
   } catch (error) {
-    console.error('Failed to fetch dashboard stats:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const err = error as { code?: string; message?: string }
+    console.error('[dashboard:stats]', err?.code ?? 'UNKNOWN', err)
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    )
   }
 }

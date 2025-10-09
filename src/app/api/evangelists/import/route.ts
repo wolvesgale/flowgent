@@ -203,12 +203,27 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        const reason =
-          result.reason instanceof Error
-            ? result.reason.message
-            : String(result.reason);
+        const reasonSource = result.reason as { code?: string; message?: string } | Error | unknown;
+        const message =
+          reasonSource instanceof Error
+            ? reasonSource.message
+            : typeof reasonSource === 'object' && reasonSource !== null && 'message' in reasonSource
+              ? String((reasonSource as { message?: unknown }).message)
+              : String(reasonSource);
 
-        failures.push({ index: chunk[idx].index, reason });
+        const code =
+          typeof reasonSource === 'object' && reasonSource !== null && 'code' in reasonSource
+            ? String((reasonSource as { code?: unknown }).code)
+            : undefined;
+
+        if (code) {
+          console.error('[evangelists:import:item]', code, reasonSource);
+        }
+
+        failures.push({
+          index: chunk[idx].index,
+          reason: code ? `${message} (${code})` : message,
+        });
       });
     }
 
@@ -221,15 +236,20 @@ export async function POST(req: NextRequest) {
       success,
       failed,
       failures: failures.slice(0, 5),
+      count: success,
     });
   } catch (error) {
-    console.error('CSV import error:', error);
+    const err = error as { code?: string; message?: string };
+    console.error('[evangelists:import]', err?.code ?? 'UNKNOWN', error);
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     if (error instanceof Error && error.message === 'Forbidden') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    );
   }
 }

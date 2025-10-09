@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { z } from 'zod'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const contactMethodEnum = ['FACEBOOK', 'LINE', 'EMAIL', 'PHONE', 'SLACK'] as const
 const strengthEnum = ['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE'] as const
@@ -72,9 +76,10 @@ export async function GET(
 
     return NextResponse.json(evangelist)
   } catch (error) {
-    console.error('Error fetching evangelist:', error)
+    const err = error as { code?: string; message?: string }
+    console.error('[evangelists:detail:get]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }
@@ -183,9 +188,10 @@ export async function PUT(
 
     return NextResponse.json(updatedEvangelist)
   } catch (error) {
-    console.error('Error updating evangelist:', error)
+    const err = error as { code?: string; message?: string }
+    console.error('[evangelists:detail:put]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }
@@ -226,9 +232,10 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Evangelist deleted successfully' })
   } catch (error) {
-    console.error('Error deleting evangelist:', error)
+    const err = error as { code?: string; message?: string }
+    console.error('[evangelists:detail:delete]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }
