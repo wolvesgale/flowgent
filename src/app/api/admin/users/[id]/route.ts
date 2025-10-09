@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 
@@ -16,7 +13,7 @@ const updateUserSchema = z.object({
 
 // 管理者権限チェック
 async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+  const session = await getSession()
 
   if (!session.isLoggedIn || !session.userId) {
     return { authorized: false, error: 'Unauthorized', status: 401 }

@@ -209,7 +209,7 @@ export default function CSVPreview({ onImport }: CSVPreviewProps) {
                         {field.required && <Badge variant="destructive" className="text-xs">必須</Badge>}
                       </label>
                       <Select
-                        value={field.csvColumn}
+                        value={field.csvColumn ?? ''}
                         onValueChange={(value: string) => updateMapping(field.dbField, value)}
                       >
                         <SelectTrigger>
