@@ -219,28 +219,29 @@ export default function CSVMapper() {
         credentials: 'include', // 401回避（Cookie送信）
         body: JSON.stringify({ rows: chunk }),
       });
-      if (!res.ok) {
-        if (res.status === 401) throw new Error('AUTH');
-        if (res.status === 403) throw new Error('FORBIDDEN');
-        const text = await res.text();
-        throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${text || res.statusText}`);
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        count?: number;
+        success?: number;
+        failed?: number;
+        error?: string;
+      };
+
+      if (res.status === 401) throw new Error('AUTH');
+      if (res.status === 403) throw new Error('FORBIDDEN');
+
+      if (!res.ok || !data?.ok) {
+        const reason = data?.error || res.statusText || `HTTP ${res.status}`;
+        throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${reason}`);
       }
 
-      let processedInBatch = chunk.length;
-      let skippedInBatch = 0;
-
-      const data = (await res.json().catch(() => null)) as
-        | { count?: number; skippedCount?: number }
-        | null;
-
-      if (data) {
-        if (typeof data.count === 'number') {
-          processedInBatch = data.count;
-        }
-        if (typeof data.skippedCount === 'number') {
-          skippedInBatch = data.skippedCount;
-        }
-      }
+      const processedInBatch =
+        typeof data.count === 'number'
+          ? data.count
+          : typeof data.success === 'number'
+            ? data.success
+            : chunk.length;
+      const skippedInBatch = typeof data.failed === 'number' ? data.failed : 0;
 
       processed += processedInBatch;
       skipped += skippedInBatch;
@@ -415,14 +416,14 @@ export default function CSVMapper() {
                     <Select
                       value={
                         Array.isArray(selected)
-                          ? undefined
-                          : typeof selected === 'string' && selected.length > 0
-                          ? selected
-                          : undefined
+                          ? ''
+                          : typeof selected === 'string'
+                            ? selected
+                            : ''
                       }
                       onValueChange={(value) => {
                         setMap((prev) => {
-                          if (value === '__CLEAR__') {
+                          if (value === '__CLEAR__' || value === '') {
                             const next = { ...prev };
                             delete next[field.key];
                             return next;
@@ -431,7 +432,7 @@ export default function CSVMapper() {
                         });
                       }}
                     >
-                      <SelectTrigger className="w-full bg-white">
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="（単一列を選択）" />
                       </SelectTrigger>
                       <SelectContent>

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
+
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 // バリデーションスキーマ
 const innovatorSchema = z.object({
@@ -15,12 +16,13 @@ const innovatorSchema = z.object({
 })
 
 async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+  const session = await getSession()
 
-  if (!session.isLoggedIn || session.role !== 'ADMIN') {
+  if (!session.isLoggedIn) {
     return false
   }
-  return true
+
+  return session.role === 'ADMIN'
 }
 
 export async function GET(request: NextRequest) {
@@ -78,14 +80,15 @@ export async function GET(request: NextRequest) {
       page,
       totalPages: Math.ceil(total / limit),
     })
-  } catch (error) {
-    console.error('Failed to fetch innovators:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    } catch (error) {
+      const err = error as { code?: string; message?: string }
+      console.error('[innovators:list]', err?.code ?? 'UNKNOWN', err)
+      return NextResponse.json(
+        { error: 'Internal server error', code: err?.code },
+        { status: 500 }
+      )
+    }
   }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -104,18 +107,19 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json(innovator, { status: 201 })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return NextResponse.json(
+          { error: 'Invalid request data', details: error.issues },
+          { status: 400 }
+        )
+      }
+
+      const err = error as { code?: string; message?: string }
+      console.error('[innovators:create]', err?.code ?? 'UNKNOWN', err)
       return NextResponse.json(
-        { error: 'Invalid request data', details: error.issues },
-        { status: 400 }
+        { error: 'Internal server error', code: err?.code },
+        { status: 500 }
       )
     }
-
-    console.error('Failed to create innovator:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
   }
-}

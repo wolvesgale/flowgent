@@ -1,23 +1,18 @@
 // src/app/api/dashboard/stats/route.ts
 import { NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 
-async function checkAuth() {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
-  if (!session.isLoggedIn) return null
-  return session
-}
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
     // 認証チェック
-    const session = await checkAuth()
-    if (!session) {
+    const session = await getSession()
+
+    if (!session.isLoggedIn) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -99,7 +94,11 @@ export async function GET() {
       itTagEvangelists,
     })
   } catch (error) {
-    console.error('Failed to fetch dashboard stats:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const err = error as { code?: string; message?: string }
+    console.error('[dashboard:stats]', err?.code ?? 'UNKNOWN', err)
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    )
   }
 }

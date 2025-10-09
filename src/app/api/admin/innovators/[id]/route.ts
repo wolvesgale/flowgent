@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
+
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 // バリデーションスキーマ
 const innovatorUpdateSchema = z.object({
@@ -17,12 +18,13 @@ const innovatorUpdateSchema = z.object({
 })
 
 async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+  const session = await getSession()
 
-  if (!session.isLoggedIn || session.role !== 'ADMIN') {
+  if (!session.isLoggedIn) {
     return false
   }
-  return true
+
+  return session.role === 'ADMIN'
 }
 
 export async function PUT(
@@ -63,21 +65,22 @@ export async function PUT(
     })
 
     return NextResponse.json(updatedInnovator)
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return NextResponse.json(
+          { error: 'Invalid request data', details: error.issues },
+          { status: 400 }
+        )
+      }
+
+      const err = error as { code?: string; message?: string }
+      console.error('[innovators:update]', err?.code ?? 'UNKNOWN', err)
       return NextResponse.json(
-        { error: 'Invalid request data', details: error.issues },
-        { status: 400 }
+        { error: 'Internal server error', code: err?.code },
+        { status: 500 }
       )
     }
-
-    console.error('Failed to update innovator:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
   }
-}
 
 export async function DELETE(
   request: NextRequest,
@@ -113,11 +116,12 @@ export async function DELETE(
     })
 
     return NextResponse.json({ message: 'Innovator deleted successfully' })
-  } catch (error) {
-    console.error('Failed to delete innovator:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    } catch (error) {
+      const err = error as { code?: string; message?: string }
+      console.error('[innovators:delete]', err?.code ?? 'UNKNOWN', err)
+      return NextResponse.json(
+        { error: 'Internal server error', code: err?.code },
+        { status: 500 }
+      )
+    }
   }
-}

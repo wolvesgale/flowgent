@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
+
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const createMeetingSchema = z.object({
   isFirst: z.boolean().default(false),
@@ -19,7 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+    const session = await getSession()
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -44,9 +45,10 @@ export async function GET(
 
     return NextResponse.json(meetings)
   } catch (error) {
-    console.error('Error fetching meetings:', error)
+    const err = error as { code?: string; message?: string }
+    console.error('[evangelists:meetings:get]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }
@@ -58,7 +60,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+    const session = await getSession()
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -102,9 +104,10 @@ export async function POST(
 
     return NextResponse.json(meeting, { status: 201 })
   } catch (error) {
-    console.error('Error creating meeting:', error)
+    const err = error as { code?: string; message?: string }
+    console.error('[evangelists:meetings:post]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }
