@@ -1,23 +1,15 @@
 // src/app/api/dashboard/stats/route.ts
 import { NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
-
-async function checkAuth() {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
-  if (!session.isLoggedIn) return null
-  return session
-}
+import { getSession } from '@/lib/session'
 
 export async function GET() {
   try {
     // 認証チェック
-    const session = await checkAuth()
-    if (!session) {
+    const session = await getSession()
+
+    if (!session.isLoggedIn) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

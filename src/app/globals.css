@@ -49,3 +49,10 @@ button[type="submit"], .btn-primary {
 button[type="submit"]:hover, .btn-primary:hover {
   background: #6b46c1 !important;
 }
+
+[data-radix-popper-content-wrapper] .select-content,
+div[role="listbox"] {
+  background: #fff !important;
+  color: #0f172a !important;
+  opacity: 1 !important;
+}
