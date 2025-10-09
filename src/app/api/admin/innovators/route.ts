@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
 import { z } from 'zod'
 
 // バリデーションスキーマ
@@ -15,12 +12,13 @@ const innovatorSchema = z.object({
 })
 
 async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+  const session = await getSession()
 
-  if (!session.isLoggedIn || session.role !== 'ADMIN') {
+  if (!session.isLoggedIn) {
     return false
   }
-  return true
+
+  return session.role === 'ADMIN'
 }
 
 export async function GET(request: NextRequest) {
