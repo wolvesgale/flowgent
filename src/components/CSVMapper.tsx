@@ -55,6 +55,15 @@ type HeaderInfo = {
 type CsvRow = string[];
 const BATCH_SIZE = 100;
 
+type ImportBatchResponse = {
+  ok?: boolean;
+  count?: number;
+  success?: number;
+  failed?: number;
+  error?: string;
+  message?: string;
+};
+
 const createEmptyMap = () =>
   DB_FIELDS.reduce<Record<FieldKey, string | string[] | undefined>>((acc, field) => {
     acc[field.key] = undefined;
@@ -219,29 +228,36 @@ export default function CSVMapper() {
         credentials: 'include', // 401回避（Cookie送信）
         body: JSON.stringify({ rows: chunk }),
       });
-      const data = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        count?: number;
-        success?: number;
-        failed?: number;
-        error?: string;
-      };
+
+      const text = await res.text();
+      let data: ImportBatchResponse | null = null;
+
+      try {
+        data = text ? (JSON.parse(text) as ImportBatchResponse) : null;
+      } catch (error) {
+        console.warn('Failed to parse import response JSON:', error);
+      }
 
       if (res.status === 401) throw new Error('AUTH');
       if (res.status === 403) throw new Error('FORBIDDEN');
 
-      if (!res.ok || !data?.ok) {
-        const reason = data?.error || res.statusText || `HTTP ${res.status}`;
+      const isSuccess = res.ok && data?.ok === true;
+      if (!isSuccess) {
+        const reason =
+          (data && (data.error || data.message)) ||
+          (text && text.trim()) ||
+          res.statusText ||
+          `HTTP ${res.status}`;
         throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${reason}`);
       }
 
       const processedInBatch =
-        typeof data.count === 'number'
+        typeof data?.count === 'number'
           ? data.count
-          : typeof data.success === 'number'
+          : typeof data?.success === 'number'
             ? data.success
             : chunk.length;
-      const skippedInBatch = typeof data.failed === 'number' ? data.failed : 0;
+      const skippedInBatch = typeof data?.failed === 'number' ? data.failed : 0;
 
       processed += processedInBatch;
       skipped += skippedInBatch;

@@ -2,17 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
+import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const BusinessDomainEnum = z.enum(BUSINESS_DOMAIN_VALUES)
 
 // バリデーションスキーマ
 const innovatorUpdateSchema = z.object({
   company: z.string().min(1, 'Company is required').optional(),
   url: z.union([z.string().url('Invalid URL'), z.literal('')]).optional().transform((value) => (value === '' ? undefined : value)),
   introductionPoint: z.string().optional(),
-  domain: z.enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE']).optional(),
+  domain: z
+    .preprocess(
+      (value) => (value === undefined ? value : mapBusinessDomainOrDefault(value)),
+      z.union([BusinessDomainEnum, z.undefined()])
+    )
+    .optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'No update fields provided',
 })

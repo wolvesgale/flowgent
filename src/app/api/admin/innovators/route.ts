@@ -2,17 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
+import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
+import type { BusinessDomainValue } from '@/lib/business-domain'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-// バリデーションスキーマ
+const BusinessDomainEnum = z.enum(BUSINESS_DOMAIN_VALUES)
+
 const innovatorSchema = z.object({
   company: z.string().min(1, 'Company is required'),
-  url: z.string().url('Invalid URL').optional().or(z.literal('')).transform((value) => value || undefined),
+  url: z
+    .string()
+    .url('Invalid URL')
+    .optional()
+    .or(z.literal(''))
+    .transform((value) => value || undefined),
   introductionPoint: z.string().optional(),
-  domain: z.enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE']),
+  domain: z.preprocess((value) => mapBusinessDomainOrDefault(value), BusinessDomainEnum),
 })
 
 async function checkAdminPermission() {
@@ -47,7 +55,7 @@ export async function GET(request: NextRequest) {
         company?: { contains: string; mode: 'insensitive' }
         introductionPoint?: { contains: string; mode: 'insensitive' }
       }>
-      domain?: 'HR' | 'IT' | 'ACCOUNTING' | 'ADVERTISING' | 'MANAGEMENT' | 'SALES' | 'MANUFACTURING' | 'MEDICAL' | 'FINANCE'
+      domain?: BusinessDomainValue
     }
     
     const where: WhereInput = {}
