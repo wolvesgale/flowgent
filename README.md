@@ -68,7 +68,8 @@ During the Vercel build the script `npm run vercel-build` checks `DIRECT_URL` be
 ## Health Checks
 
 Use `/api/health/db` to verify the deployment environment can reach the database. The endpoint returns `{ ok: true }` on
-success.
+success and now includes an `evangelistsColumns` array so you can confirm the runtime database exposes the latest schema
+columns (e.g. `supportPriority`, `pattern`).
 
 ## Useful Commands
 
