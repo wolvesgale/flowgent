@@ -639,7 +639,7 @@ export default function EvangelistsPage() {
                 <div className="space-y-2">
                   <Label>リスト提供</Label>
                   <Select
-                    value={editForm.listProvided}
+                    value={editForm.listProvided ?? ''}
                     onValueChange={(value) =>
                       setEditForm((prev) => ({ ...prev, listProvided: value as 'true' | 'false' }))
                     }
