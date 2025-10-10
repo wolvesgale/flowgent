@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
@@ -58,17 +58,14 @@ async function checkAdminPermission() {
   return session.role === 'ADMIN'
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: Request, context: unknown) {
   try {
     // 管理者権限チェック
     if (!(await checkAdminPermission())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: idParam } = await params
+    const { id: idParam } = (context as { params: { id: string } }).params
     const id = parseInt(idParam)
     if (isNaN(id)) {
       return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
@@ -122,17 +119,14 @@ export async function PUT(
     }
   }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_request: Request, context: unknown) {
   try {
     // 管理者権限チェック
     if (!(await checkAdminPermission())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: idParam } = await params
+    const { id: idParam } = (context as { params: { id: string } }).params
     const id = parseInt(idParam)
     if (isNaN(id)) {
       return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
