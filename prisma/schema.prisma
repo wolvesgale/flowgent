@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  // directUrl = env("DIRECT_URL") // 任意
+  directUrl = env("DIRECT_URL") // migrate 用の直結 URL（本番/Preview で必須）
 }
 
 model User {
