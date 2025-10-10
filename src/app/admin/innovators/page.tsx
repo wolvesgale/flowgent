@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Search, Plus, Edit, Trash2, Link as LinkIcon, Map } from 'lucide-react'
+import { toast } from 'sonner'
+import { mapBusinessDomainOrDefault } from '@/lib/business-domain'
 
 const DOMAIN_OPTIONS = [
   { value: 'HR', label: '人事' },
@@ -82,7 +84,28 @@ export default function AdminInnovatorsPage() {
     void fetchInnovators()
   }, [fetchInnovators])
 
+  const buildInnovatorPayload = () => {
+    const trimmedCompany = formData.company.trim()
+    if (!trimmedCompany) {
+      toast.error('企業名は必須です')
+      return null
+    }
+
+    const trimmedUrl = formData.url.trim()
+    const trimmedIntroductionPoint = formData.introductionPoint.trim()
+
+    return {
+      company: trimmedCompany,
+      domain: mapBusinessDomainOrDefault(formData.domain),
+      url: trimmedUrl.length > 0 ? trimmedUrl : undefined,
+      introductionPoint: trimmedIntroductionPoint.length > 0 ? trimmedIntroductionPoint : undefined,
+    }
+  }
+
   const handleCreate = async () => {
+    const payload = buildInnovatorPayload()
+    if (!payload) return
+
     try {
       const response = await fetch('/api/admin/innovators', {
         method: 'POST',
@@ -90,21 +113,31 @@ export default function AdminInnovatorsPage() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       })
 
-      if (response.ok) {
-        setIsCreateDialogOpen(false)
-        resetForm()
-        fetchInnovators()
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        toast.error((data as { error?: string } | null)?.error ?? 'イノベータの登録に失敗しました')
+        return
       }
+
+      toast.success('イノベータを登録しました')
+      setIsCreateDialogOpen(false)
+      resetForm()
+      await fetchInnovators()
     } catch (error) {
       console.error('Failed to create innovator:', error)
+      toast.error('イノベータの登録に失敗しました')
     }
   }
 
   const handleEdit = async () => {
     if (!selectedInnovator) return
+
+    const payload = buildInnovatorPayload()
+    if (!payload) return
 
     try {
       const response = await fetch(`/api/admin/innovators/${selectedInnovator.id}`, {
@@ -113,17 +146,24 @@ export default function AdminInnovatorsPage() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       })
 
-      if (response.ok) {
-        setIsEditDialogOpen(false)
-        setSelectedInnovator(null)
-        resetForm()
-        fetchInnovators()
+      const data = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        toast.error((data as { error?: string } | null)?.error ?? 'イノベータの更新に失敗しました')
+        return
       }
+
+      toast.success('イノベータを更新しました')
+      setIsEditDialogOpen(false)
+      setSelectedInnovator(null)
+      resetForm()
+      await fetchInnovators()
     } catch (error) {
       console.error('Failed to update innovator:', error)
+      toast.error('イノベータの更新に失敗しました')
     }
   }
 

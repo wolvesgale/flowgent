@@ -1,26 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
+
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
+import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
+import type { BusinessDomainValue } from '@/lib/business-domain'
 import { z } from 'zod'
 
-// バリデーションスキーマ
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+const BusinessDomainEnum = z.enum(BUSINESS_DOMAIN_VALUES)
+
 const innovatorSchema = z.object({
-  company: z.string().min(1, 'Company is required'),
-  url: z.string().url('Invalid URL').optional().or(z.literal('')).transform((value) => value || undefined),
-  introductionPoint: z.string().optional(),
-  domain: z.enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE']),
+  company: z
+    .string()
+    .transform((value) => value.trim())
+    .pipe(z.string().min(1, 'Company is required')),
+  url: z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return value
+      const trimmed = value.trim()
+      return trimmed.length === 0 ? undefined : trimmed
+    },
+    z.string().url('Invalid URL').optional()
+  ),
+  introductionPoint: z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return value
+      const trimmed = value.trim()
+      return trimmed.length === 0 ? undefined : trimmed
+    },
+    z.string().optional()
+  ),
+  domain: z.preprocess((value) => mapBusinessDomainOrDefault(value), BusinessDomainEnum),
 })
 
 async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+  const session = await getSession()
 
-  if (!session.isLoggedIn || session.role !== 'ADMIN') {
+  if (!session.isLoggedIn) {
     return false
   }
-  return true
+
+  return session.role === 'ADMIN'
 }
 
 export async function GET(request: NextRequest) {
@@ -45,7 +67,7 @@ export async function GET(request: NextRequest) {
         company?: { contains: string; mode: 'insensitive' }
         introductionPoint?: { contains: string; mode: 'insensitive' }
       }>
-      domain?: 'HR' | 'IT' | 'ACCOUNTING' | 'ADVERTISING' | 'MANAGEMENT' | 'SALES' | 'MANUFACTURING' | 'MEDICAL' | 'FINANCE'
+      domain?: BusinessDomainValue
     }
     
     const where: WhereInput = {}
@@ -78,14 +100,15 @@ export async function GET(request: NextRequest) {
       page,
       totalPages: Math.ceil(total / limit),
     })
-  } catch (error) {
-    console.error('Failed to fetch innovators:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    } catch (error) {
+      const err = error as { code?: string; message?: string }
+      console.error('[innovators:list]', err?.code ?? 'UNKNOWN', err)
+      return NextResponse.json(
+        { error: 'Internal server error', code: err?.code },
+        { status: 500 }
+      )
+    }
   }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -101,21 +124,31 @@ export async function POST(request: NextRequest) {
 
     const innovator = await prisma.innovator.create({
       data: validatedData,
+      select: {
+        id: true,
+        company: true,
+        url: true,
+        introductionPoint: true,
+        domain: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     })
 
-    return NextResponse.json(innovator, { status: 201 })
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+    return NextResponse.json({ ok: true, innovator }, { status: 201 })
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return NextResponse.json(
+          { error: 'Invalid request data', details: error.issues },
+          { status: 400 }
+        )
+      }
+
+      const err = error as { code?: string; message?: string }
+      console.error('[innovators:create]', err?.code ?? 'UNKNOWN', err)
       return NextResponse.json(
-        { error: 'Invalid request data', details: error.issues },
-        { status: 400 }
+        { error: 'Internal server error', code: err?.code },
+        { status: 500 }
       )
     }
-
-    console.error('Failed to create innovator:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
   }
-}

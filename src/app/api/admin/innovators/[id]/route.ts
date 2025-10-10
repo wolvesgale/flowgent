@@ -1,28 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
+
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
+import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
 import { z } from 'zod'
 
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+const BusinessDomainEnum = z.enum(BUSINESS_DOMAIN_VALUES)
+
 // バリデーションスキーマ
-const innovatorUpdateSchema = z.object({
-  company: z.string().min(1, 'Company is required').optional(),
-  url: z.union([z.string().url('Invalid URL'), z.literal('')]).optional().transform((value) => (value === '' ? undefined : value)),
-  introductionPoint: z.string().optional(),
-  domain: z.enum(['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE']).optional(),
-}).refine((data) => Object.keys(data).length > 0, {
-  message: 'No update fields provided',
-})
+const innovatorUpdateSchema = z
+  .object({
+    company: z.preprocess(
+      (value) => {
+        if (typeof value !== 'string') return value
+        const trimmed = value.trim()
+        return trimmed.length === 0 ? undefined : trimmed
+      },
+      z.string().min(1, 'Company is required').optional()
+    ),
+    url: z.preprocess(
+      (value) => {
+        if (typeof value !== 'string') return value
+        const trimmed = value.trim()
+        return trimmed.length === 0 ? undefined : trimmed
+      },
+      z.string().url('Invalid URL').optional()
+    ),
+    introductionPoint: z.preprocess(
+      (value) => {
+        if (typeof value !== 'string') return value
+        const trimmed = value.trim()
+        return trimmed.length === 0 ? undefined : trimmed
+      },
+      z.string().optional()
+    ),
+    domain: z
+      .preprocess(
+        (value) => (value === undefined ? value : mapBusinessDomainOrDefault(value)),
+        z.union([BusinessDomainEnum, z.undefined()])
+      )
+      .optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'No update fields provided',
+  })
 
 async function checkAdminPermission() {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+  const session = await getSession()
 
-  if (!session.isLoggedIn || session.role !== 'ADMIN') {
+  if (!session.isLoggedIn) {
     return false
   }
-  return true
+
+  return session.role === 'ADMIN'
 }
 
 export async function PUT(
@@ -60,24 +93,34 @@ export async function PUT(
     const updatedInnovator = await prisma.innovator.update({
       where: { id },
       data: validatedData,
+      select: {
+        id: true,
+        company: true,
+        url: true,
+        introductionPoint: true,
+        domain: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     })
 
-    return NextResponse.json(updatedInnovator)
-  } catch (error) {
-    if (error instanceof z.ZodError) {
+    return NextResponse.json({ ok: true, innovator: updatedInnovator })
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return NextResponse.json(
+          { error: 'Invalid request data', details: error.issues },
+          { status: 400 }
+        )
+      }
+
+      const err = error as { code?: string; message?: string }
+      console.error('[innovators:update]', err?.code ?? 'UNKNOWN', err)
       return NextResponse.json(
-        { error: 'Invalid request data', details: error.issues },
-        { status: 400 }
+        { error: 'Internal server error', code: err?.code },
+        { status: 500 }
       )
     }
-
-    console.error('Failed to update innovator:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
   }
-}
 
 export async function DELETE(
   request: NextRequest,
@@ -113,11 +156,12 @@ export async function DELETE(
     })
 
     return NextResponse.json({ message: 'Innovator deleted successfully' })
-  } catch (error) {
-    console.error('Failed to delete innovator:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    } catch (error) {
+      const err = error as { code?: string; message?: string }
+      console.error('[innovators:delete]', err?.code ?? 'UNKNOWN', err)
+      return NextResponse.json(
+        { error: 'Internal server error', code: err?.code },
+        { status: 500 }
+      )
+    }
   }
-}

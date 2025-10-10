@@ -80,6 +80,55 @@ interface User {
   role: 'ADMIN' | 'CS'
 }
 
+interface EvangelistListSuccessResponse {
+  ok: true
+  items: Evangelist[]
+  total: number
+  page: number
+  limit: number
+}
+
+interface EvangelistListErrorResponse {
+  ok?: false
+  error?: string
+  message?: string
+}
+
+const isEvangelistListResponse = (
+  value: unknown,
+): value is EvangelistListSuccessResponse => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+
+  if (record.ok !== true) {
+    return false
+  }
+
+  return (
+    Array.isArray(record.items) &&
+    typeof record.total === 'number' &&
+    typeof record.page === 'number' &&
+    typeof record.limit === 'number'
+  )
+}
+
+const extractErrorMessage = (value: unknown, fallback: string): string => {
+  if (value && typeof value === 'object') {
+    const record = value as EvangelistListErrorResponse
+    if (typeof record.error === 'string' && record.error) {
+      return record.error
+    }
+    if (typeof record.message === 'string' && record.message) {
+      return record.message
+    }
+  }
+
+  return fallback
+}
+
 type EditFormState = {
   contactMethod: ContactKey | ''
   strength: StrengthKey | ''
@@ -89,6 +138,9 @@ type EditFormState = {
   nextActionDueOn: string
   notes: string
 }
+
+const SELECT_CLEAR_VALUE = '__UNSET__'
+const CS_CLEAR_VALUE = '__UNASSIGNED__'
 
 export default function EvangelistsPage() {
   const [evangelists, setEvangelists] = useState<Evangelist[]>([])
@@ -143,16 +195,38 @@ export default function EvangelistsPage() {
         ...(staleFilter && { stale: staleFilter }),
       })
 
-      const response = await fetch(`/api/evangelists?${params}` , {
+      const response = await fetch(`/api/evangelists?${params}`, {
         credentials: 'include',
       })
-      if (response.ok) {
-        const data = await response.json()
-        setEvangelists(data.evangelists)
-        setTotalPages(Math.ceil(data.total / itemsPerPage))
+      const text = await response.text()
+      let parsed: unknown = null
+      if (text) {
+        try {
+          parsed = JSON.parse(text)
+        } catch (error) {
+          console.error('Failed to parse evangelists response JSON', error)
+        }
       }
+
+      const fallbackMessage =
+        (text && text.length > 0 ? text : '') ||
+        response.statusText ||
+        `HTTP ${response.status}`
+
+      if (!response.ok || !isEvangelistListResponse(parsed)) {
+        const message = extractErrorMessage(parsed, fallbackMessage)
+        throw new Error(message)
+      }
+
+      const data: EvangelistListSuccessResponse = parsed
+
+      setEvangelists(data.items)
+      setTotalPages(Math.max(1, Math.ceil(data.total / itemsPerPage)))
     } catch (error) {
       console.error('Failed to fetch evangelists:', error)
+      toast.error('エバンジェリストの取得に失敗しました')
+      setEvangelists([])
+      setTotalPages(1)
     } finally {
       setLoading(false)
     }
@@ -192,6 +266,7 @@ export default function EvangelistsPage() {
   }
 
   const handleAssign = async (evangelistId: string, newAssignee: string) => {
+    const normalizedAssignee = newAssignee === CS_CLEAR_VALUE ? '' : newAssignee
     try {
       const response = await fetch(`/api/evangelists/${evangelistId}`, {
         method: 'PUT',
@@ -199,7 +274,7 @@ export default function EvangelistsPage() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ assignedCsId: newAssignee || null }),
+        body: JSON.stringify({ assignedCsId: normalizedAssignee || null }),
       })
 
       if (!response.ok) {
@@ -463,9 +538,10 @@ export default function EvangelistsPage() {
                       </TableCell>
                       <TableCell className="min-w-[180px]">
                         <Select
-                          value={evangelist.assignedCsId ?? ''}
+                          value={evangelist.assignedCsId ?? CS_CLEAR_VALUE}
                           onValueChange={(value) => {
-                            if ((evangelist.assignedCsId ?? '') === value) return
+                            const normalized = value === CS_CLEAR_VALUE ? '' : value
+                            if ((evangelist.assignedCsId ?? '') === normalized) return
                             handleAssign(evangelist.id, value)
                           }}
                         >
@@ -473,7 +549,7 @@ export default function EvangelistsPage() {
                             <SelectValue placeholder="未割り当て" />
                           </SelectTrigger>
                           <SelectContent className="bg-white text-slate-900">
-                            <SelectItem value="">未割り当て</SelectItem>
+                            <SelectItem value={CS_CLEAR_VALUE}>未割り当て</SelectItem>
                             {users.map((user) => (
                               <SelectItem key={user.id} value={user.id}>
                                 {user.name}（{user.role === 'ADMIN' ? '管理者' : 'CS'}）
@@ -491,7 +567,7 @@ export default function EvangelistsPage() {
                           </Button>
                           <Link href={`/evangelists/${evangelist.id}`}>
                             <Button variant="outline" size="sm">
-                              詳細
+                              面談
                             </Button>
                           </Link>
                         </div>
@@ -559,16 +635,19 @@ export default function EvangelistsPage() {
                 <div className="space-y-2">
                   <Label>連絡手段</Label>
                   <Select
-                    value={editForm.contactMethod}
+                    value={editForm.contactMethod ? editForm.contactMethod : SELECT_CLEAR_VALUE}
                     onValueChange={(value) =>
-                      setEditForm((prev) => ({ ...prev, contactMethod: value as ContactKey | '' }))
+                      setEditForm((prev) => ({
+                        ...prev,
+                        contactMethod: value === SELECT_CLEAR_VALUE ? '' : (value as ContactKey),
+                      }))
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white">
                       <SelectValue placeholder="未設定" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">未設定</SelectItem>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {Object.entries(CONTACT_LABELS).map(([key, label]) => (
                         <SelectItem key={key} value={key}>
                           {label}
@@ -581,16 +660,19 @@ export default function EvangelistsPage() {
                 <div className="space-y-2">
                   <Label>強み</Label>
                   <Select
-                    value={editForm.strength}
+                    value={editForm.strength ? editForm.strength : SELECT_CLEAR_VALUE}
                     onValueChange={(value) =>
-                      setEditForm((prev) => ({ ...prev, strength: value as StrengthKey | '' }))
+                      setEditForm((prev) => ({
+                        ...prev,
+                        strength: value === SELECT_CLEAR_VALUE ? '' : (value as StrengthKey),
+                      }))
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white">
                       <SelectValue placeholder="未設定" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">未設定</SelectItem>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {Object.entries(STRENGTH_LABELS).map(([key, label]) => (
                         <SelectItem key={key} value={key}>
                           {label}
@@ -603,16 +685,19 @@ export default function EvangelistsPage() {
                 <div className="space-y-2">
                   <Label>管理フェーズ</Label>
                   <Select
-                    value={editForm.managementPhase}
+                    value={editForm.managementPhase ? editForm.managementPhase : SELECT_CLEAR_VALUE}
                     onValueChange={(value) =>
-                      setEditForm((prev) => ({ ...prev, managementPhase: value as ManagementPhaseKey | '' }))
+                      setEditForm((prev) => ({
+                        ...prev,
+                        managementPhase: value === SELECT_CLEAR_VALUE ? '' : (value as ManagementPhaseKey),
+                      }))
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white">
                       <SelectValue placeholder="未設定" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">未設定</SelectItem>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {Object.entries(MANAGEMENT_PHASE_LABELS).map(([key, label]) => (
                         <SelectItem key={key} value={key}>
                           {label}
@@ -630,10 +715,10 @@ export default function EvangelistsPage() {
                       setEditForm((prev) => ({ ...prev, listProvided: value as 'true' | 'false' }))
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-white text-slate-900">
                       <SelectItem value="true">済</SelectItem>
                       <SelectItem value="false">未</SelectItem>
                     </SelectContent>
