@@ -11,7 +11,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Search, Plus, Edit, Trash2, Link as LinkIcon, Map } from 'lucide-react'
 import { toast } from 'sonner'
-import { mapBusinessDomainOrDefault } from '@/lib/business-domain'
 
 const DOMAIN_OPTIONS = [
   { value: 'HR', label: '人事' },
@@ -51,19 +50,24 @@ export default function AdminInnovatorsPage() {
     company: '',
     url: '',
     introductionPoint: '',
-    domain: 'HR' as Domain,
+    domain: 'IT' as Domain,
   })
   const itemsPerPage = 10
 
   const fetchInnovators = useCallback(async () => {
     try {
       setLoading(true)
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: itemsPerPage.toString(),
-        search: searchTerm,
-        domain: domainFilter === 'ALL' ? '' : domainFilter,
-      })
+      const params = new URLSearchParams()
+      params.set('page', currentPage.toString())
+      params.set('limit', itemsPerPage.toString())
+
+      if (searchTerm.trim()) {
+        params.set('search', searchTerm.trim())
+      }
+
+      if (domainFilter !== 'ALL') {
+        params.set('domain', domainFilter)
+      }
 
       const response = await fetch(`/api/admin/innovators?${params}`, {
         credentials: 'include',
@@ -94,9 +98,14 @@ export default function AdminInnovatorsPage() {
     const trimmedUrl = formData.url.trim()
     const trimmedIntroductionPoint = formData.introductionPoint.trim()
 
+    if (!formData.domain) {
+      toast.error('領域を選んでください')
+      return null
+    }
+
     return {
       company: trimmedCompany,
-      domain: mapBusinessDomainOrDefault(formData.domain),
+      domain: formData.domain,
       url: trimmedUrl.length > 0 ? trimmedUrl : undefined,
       introductionPoint: trimmedIntroductionPoint.length > 0 ? trimmedIntroductionPoint : undefined,
     }
@@ -189,7 +198,7 @@ export default function AdminInnovatorsPage() {
       company: '',
       url: '',
       introductionPoint: '',
-      domain: 'HR',
+      domain: 'IT',
     })
   }
 
