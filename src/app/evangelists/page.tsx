@@ -80,6 +80,55 @@ interface User {
   role: 'ADMIN' | 'CS'
 }
 
+interface EvangelistListSuccessResponse {
+  ok: true
+  items: Evangelist[]
+  total: number
+  page: number
+  limit: number
+}
+
+interface EvangelistListErrorResponse {
+  ok?: false
+  error?: string
+  message?: string
+}
+
+const isEvangelistListResponse = (
+  value: unknown,
+): value is EvangelistListSuccessResponse => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+
+  if (record.ok !== true) {
+    return false
+  }
+
+  return (
+    Array.isArray(record.items) &&
+    typeof record.total === 'number' &&
+    typeof record.page === 'number' &&
+    typeof record.limit === 'number'
+  )
+}
+
+const extractErrorMessage = (value: unknown, fallback: string): string => {
+  if (value && typeof value === 'object') {
+    const record = value as EvangelistListErrorResponse
+    if (typeof record.error === 'string' && record.error) {
+      return record.error
+    }
+    if (typeof record.message === 'string' && record.message) {
+      return record.message
+    }
+  }
+
+  return fallback
+}
+
 type EditFormState = {
   contactMethod: ContactKey | ''
   strength: StrengthKey | ''
@@ -146,16 +195,38 @@ export default function EvangelistsPage() {
         ...(staleFilter && { stale: staleFilter }),
       })
 
-      const response = await fetch(`/api/evangelists?${params}` , {
+      const response = await fetch(`/api/evangelists?${params}`, {
         credentials: 'include',
       })
-      if (response.ok) {
-        const data = await response.json()
-        setEvangelists(data.evangelists)
-        setTotalPages(Math.ceil(data.total / itemsPerPage))
+      const text = await response.text()
+      let parsed: unknown = null
+      if (text) {
+        try {
+          parsed = JSON.parse(text)
+        } catch (error) {
+          console.error('Failed to parse evangelists response JSON', error)
+        }
       }
+
+      const fallbackMessage =
+        (text && text.length > 0 ? text : '') ||
+        response.statusText ||
+        `HTTP ${response.status}`
+
+      if (!response.ok || !isEvangelistListResponse(parsed)) {
+        const message = extractErrorMessage(parsed, fallbackMessage)
+        throw new Error(message)
+      }
+
+      const data: EvangelistListSuccessResponse = parsed
+
+      setEvangelists(data.items)
+      setTotalPages(Math.max(1, Math.ceil(data.total / itemsPerPage)))
     } catch (error) {
       console.error('Failed to fetch evangelists:', error)
+      toast.error('エバンジェリストの取得に失敗しました')
+      setEvangelists([])
+      setTotalPages(1)
     } finally {
       setLoading(false)
     }

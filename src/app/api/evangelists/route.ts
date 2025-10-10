@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
@@ -11,32 +12,13 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-interface WhereInput {
-  OR?: Array<{
-    firstName?: { contains: string; mode: 'insensitive' }
-    lastName?: { contains: string; mode: 'insensitive' }
-    email?: { contains: string; mode: 'insensitive' }
-    meetings?: {
-      none?: Record<string, never>
-      every?: {
-        date?: {
-          lt: Date
-        }
-      }
-    }
-  }>
-  meetings?: {
-    none?: Record<string, never>
-    every?: {
-      date?: {
-        lt: Date
-      }
-    }
-  }
-  tags?: {
-    contains: string
-  }
-  assignedCsId?: string
+const SORTABLE_FIELDS: Record<string, true> = {
+  createdAt: true,
+  updatedAt: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  tier: true,
 }
 
 export async function GET(request: NextRequest) {
@@ -44,16 +26,20 @@ export async function GET(request: NextRequest) {
     const session = await getSession()
 
     if (!session.isLoggedIn) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     // クエリパラメータの取得
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '10')
+    const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1'))
+    const limit = Math.min(
+      100,
+      Math.max(1, Number.parseInt(searchParams.get('limit') || '10')),
+    )
     const search = searchParams.get('search') || ''
-    const sortBy = searchParams.get('sortBy') || 'createdAt'
-    const sortOrder = searchParams.get('sortOrder') || 'desc'
+    const tier = searchParams.get('tier') || 'ALL'
+    const requestedSortBy = searchParams.get('sortBy') || 'createdAt'
+    const sortOrder = searchParams.get('sortOrder') === 'asc' ? 'asc' : 'desc'
     const status = searchParams.get('status') || ''
     const stale = searchParams.get('stale') // M3: stale=7 for meetings older than 7 days
     const tag = searchParams.get('tag') // M3: tag filtering
@@ -63,61 +49,80 @@ export async function GET(request: NextRequest) {
 
     const columns = await getEvangelistColumnSet()
 
-    // 検索条件の構築
-    const where: WhereInput = {}
-    
+    const filters: Prisma.EvangelistWhereInput[] = []
+
     if (search) {
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-      ]
+      filters.push({
+        OR: [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ],
+      })
     }
 
     if (status && status !== 'ALL') {
-      // Note: status field might not exist in current schema
-      // where.status = status
+      // status 列は現行スキーマに存在しないため利用しない
     }
 
-    // M3: Advanced filtering
-    if (stale) {
-      const staleDays = parseInt(stale)
-      const staleDate = new Date()
-      staleDate.setDate(staleDate.getDate() - staleDays)
-      
-      where.OR = [
-        // No meetings at all
-        { meetings: { none: {} } },
-        // Latest meeting is older than stale days
-        {
-          meetings: {
-            every: {
-              date: {
-                lt: staleDate
-              }
-            }
-          }
-        }
-      ]
+    if (tier && tier !== 'ALL') {
+      filters.push({ tier: tier as 'TIER1' | 'TIER2' })
     }
 
     if (tag && columns.has('tags')) {
-      // Tags are stored as JSON string, so we need to use contains
-      where.tags = {
-        contains: tag
-      }
+      filters.push({
+        tags: {
+          contains: tag,
+        },
+      })
     }
 
     if (assignedCsId && columns.has('assignedCsId')) {
-      where.assignedCsId = assignedCsId
+      filters.push({ assignedCsId })
     }
 
-    // ソート条件の構築
-    let orderBy: Record<string, 'asc' | 'desc'> | Array<Record<string, 'asc' | 'desc'>>
+    if (stale) {
+      const staleDays = Number.parseInt(stale)
+      if (!Number.isNaN(staleDays) && staleDays > 0) {
+        const staleDate = new Date()
+        staleDate.setDate(staleDate.getDate() - staleDays)
+        filters.push({
+          OR: [
+            { meetings: { none: {} } },
+            {
+              meetings: {
+                every: {
+                  date: {
+                    lt: staleDate,
+                  },
+                },
+              },
+            },
+          ],
+        })
+      }
+    }
+
+    const where: Prisma.EvangelistWhereInput =
+      filters.length > 0 ? { AND: filters } : {}
+
+    const canSortByName = columns.has('firstName') && columns.has('lastName')
+
+    const sortBy =
+      requestedSortBy === 'name' && canSortByName
+        ? 'name'
+        : SORTABLE_FIELDS[requestedSortBy] && columns.has(requestedSortBy)
+          ? requestedSortBy
+          : 'createdAt'
+
+    let orderBy: Prisma.EvangelistOrderByWithRelationInput | Prisma.EvangelistOrderByWithRelationInput[]
     if (sortBy === 'name') {
-      orderBy = [{ firstName: sortOrder as 'asc' | 'desc' }, { lastName: sortOrder as 'asc' | 'desc' }]
+      orderBy = [
+        { firstName: sortOrder },
+        { lastName: sortOrder },
+      ]
     } else {
-      orderBy = { [sortBy]: sortOrder as 'asc' | 'desc' }
+      orderBy = { [sortBy]: sortOrder }
     }
 
     // データ取得
@@ -142,16 +147,17 @@ export async function GET(request: NextRequest) {
     )
 
     return NextResponse.json({
-      evangelists: normalized,
+      ok: true,
+      items: normalized,
       total,
       page,
-      totalPages: Math.ceil(total / limit),
+      limit,
     })
   } catch (error) {
     const err = error as { code?: string; message?: string }
     console.error('[evangelists:list]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error', code: err?.code },
+      { ok: false, error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }
