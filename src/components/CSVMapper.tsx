@@ -437,7 +437,7 @@ export default function CSVMapper() {
                       }
                       onValueChange={(value) => {
                         setMap((prev) => {
-                          if (value === '__CLEAR__') {
+                          if (value === '__CLEAR__' || value === '') {
                             const next = { ...prev };
                             delete next[field.key];
                             return next;
@@ -446,7 +446,7 @@ export default function CSVMapper() {
                         });
                       }}
                     >
-                      <SelectTrigger className="w-full bg-white">
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="（単一列を選択）" />
                       </SelectTrigger>
                       <SelectContent className="bg-white text-slate-900">
