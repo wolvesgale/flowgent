@@ -55,6 +55,15 @@ type HeaderInfo = {
 type CsvRow = string[];
 const BATCH_SIZE = 100;
 
+type ImportBatchResponse = {
+  ok?: boolean;
+  count?: number;
+  success?: number;
+  failed?: number;
+  error?: string;
+  message?: string;
+};
+
 const createEmptyMap = () =>
   DB_FIELDS.reduce<Record<FieldKey, string | string[] | undefined>>((acc, field) => {
     acc[field.key] = undefined;
@@ -219,28 +228,36 @@ export default function CSVMapper() {
         credentials: 'include', // 401回避（Cookie送信）
         body: JSON.stringify({ rows: chunk }),
       });
-      if (!res.ok) {
-        if (res.status === 401) throw new Error('AUTH');
-        if (res.status === 403) throw new Error('FORBIDDEN');
-        const text = await res.text();
-        throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${text || res.statusText}`);
+
+      const text = await res.text();
+      let data: ImportBatchResponse | null = null;
+
+      try {
+        data = text ? (JSON.parse(text) as ImportBatchResponse) : null;
+      } catch (error) {
+        console.warn('Failed to parse import response JSON:', error);
       }
 
-      let processedInBatch = chunk.length;
-      let skippedInBatch = 0;
+      if (res.status === 401) throw new Error('AUTH');
+      if (res.status === 403) throw new Error('FORBIDDEN');
 
-      const data = (await res.json().catch(() => null)) as
-        | { count?: number; skippedCount?: number }
-        | null;
-
-      if (data) {
-        if (typeof data.count === 'number') {
-          processedInBatch = data.count;
-        }
-        if (typeof data.skippedCount === 'number') {
-          skippedInBatch = data.skippedCount;
-        }
+      const isSuccess = res.ok && data?.ok === true;
+      if (!isSuccess) {
+        const reason =
+          (data && (data.error || data.message)) ||
+          (text && text.trim()) ||
+          res.statusText ||
+          `HTTP ${res.status}`;
+        throw new Error(`バッチ ${i / BATCH_SIZE + 1} で失敗: ${reason}`);
       }
+
+      const processedInBatch =
+        typeof data?.count === 'number'
+          ? data.count
+          : typeof data?.success === 'number'
+            ? data.success
+            : chunk.length;
+      const skippedInBatch = typeof data?.failed === 'number' ? data.failed : 0;
 
       processed += processedInBatch;
       skipped += skippedInBatch;
@@ -415,14 +432,14 @@ export default function CSVMapper() {
                     <Select
                       value={
                         Array.isArray(selected)
-                          ? undefined
-                          : typeof selected === 'string' && selected.length > 0
-                          ? selected
-                          : undefined
+                          ? ''
+                          : typeof selected === 'string'
+                            ? selected
+                            : ''
                       }
                       onValueChange={(value) => {
                         setMap((prev) => {
-                          if (value === '__CLEAR__') {
+                          if (value === '__CLEAR__' || value === '') {
                             const next = { ...prev };
                             delete next[field.key];
                             return next;
@@ -431,7 +448,7 @@ export default function CSVMapper() {
                         });
                       }}
                     >
-                      <SelectTrigger className="w-full bg-white">
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="（単一列を選択）" />
                       </SelectTrigger>
                       <SelectContent>

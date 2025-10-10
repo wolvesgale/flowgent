@@ -1,16 +1,53 @@
 // src/app/api/evangelists/import/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getIronSession } from 'iron-session';
-import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
-import { sessionOptions } from '@/lib/session-config';
-import type { SessionData } from '@/lib/session';
+import { getSession, type SessionData } from '@/lib/session';
+
+let evangelistColumnsCache: Set<string> | null = null;
+
+async function loadEvangelistColumns(): Promise<Set<string>> {
+  if (evangelistColumnsCache) {
+    return evangelistColumnsCache;
+  }
+
+  const rows = await prisma.$queryRawUnsafe<{ column_name: string }[]>(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'evangelists'
+    `
+  );
+
+  evangelistColumnsCache = new Set(rows.map((row) => row.column_name));
+  return evangelistColumnsCache;
+}
+
+function filterByColumns<T extends Record<string, unknown>>(
+  data: T,
+  columns: Set<string>
+): T {
+  const filtered: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (!columns.has(key)) {
+      continue;
+    }
+    filtered[key] = value;
+  }
+
+  return filtered as T;
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 async function getSessionUserOrThrow(): Promise<SessionData> {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+  const session = await getSession();
+
   if (!session.isLoggedIn || !session.userId) {
     throw new Error('Unauthorized');
   }
@@ -18,7 +55,7 @@ async function getSessionUserOrThrow(): Promise<SessionData> {
 }
 
 function requireRole(user: SessionData, roles: string[]) {
-  if (!roles.includes(user.role || '')) {
+  if (!user.role || !roles.includes(user.role)) {
     throw new Error('Forbidden');
   }
 }
@@ -66,6 +103,8 @@ function normalizeTier(input?: string | null): 'TIER1' | 'TIER2' | null {
   return up === 'TIER1' || up === 'TIER2' ? up : null;
 }
 
+const BATCH_SIZE = 150;
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUserOrThrow();
@@ -86,7 +125,7 @@ export async function POST(req: NextRequest) {
       const firstName = r.firstName?.trim() ?? '';
       const lastName = r.lastName?.trim() ?? '';
 
-      if (!firstName || !lastName) {
+      if (!firstName && !lastName) {
         return acc;
       }
 
@@ -104,6 +143,8 @@ export async function POST(req: NextRequest) {
       });
       return acc;
     }, []);
+
+    const columns = await loadEvangelistColumns();
 
     const buildCreateData = (r: ImportRow) => ({
       recordId: r.recordId || null,
@@ -168,58 +209,88 @@ export async function POST(req: NextRequest) {
 
     let success = 0;
     const failures: { index: number; reason: string }[] = [];
-    const chunkSize = 25;
 
-    for (let i = 0; i < sanitized.length; i += chunkSize) {
-      const chunk = sanitized.slice(i, i + chunkSize);
+    for (let i = 0; i < sanitized.length; i += BATCH_SIZE) {
+      const chunk = sanitized.slice(i, i + BATCH_SIZE);
 
-      const ops = chunk.map(async ({ row, index }) => {
-        try {
-          const createData = buildCreateData(row);
-          const updateData = buildUpdateData(row);
+      const operations = chunk.map(({ row }) => {
+        const createData = filterByColumns(buildCreateData(row), columns);
+        const updateData = filterByColumns(buildUpdateData(row), columns);
 
-          if (row.recordId) {
-            await prisma.evangelist.upsert({
-              where: { recordId: row.recordId },
-              create: createData,
-              update: updateData,
-            });
-          } else if (row.email) {
-            await prisma.evangelist.upsert({
-              where: { email: row.email },
-              create: createData,
-              update: updateData,
-            });
-          } else {
-            await prisma.evangelist.create({ data: createData });
-          }
-
-          success += 1;
-        } catch (error: unknown) {
-          const reason = error instanceof Error ? error.message : String(error);
-          failures.push({ index, reason });
+        if (row.recordId) {
+          return prisma.evangelist.upsert({
+            where: { recordId: row.recordId },
+            create: createData,
+            update: updateData,
+          });
         }
+
+        if (row.email) {
+          return prisma.evangelist.upsert({
+            where: { email: row.email },
+            create: createData,
+            update: updateData,
+          });
+        }
+
+        return prisma.evangelist.create({ data: createData });
       });
 
-      await Promise.allSettled(ops);
+      const results = await Promise.allSettled(operations);
+
+      results.forEach((result, idx) => {
+        if (result.status === 'fulfilled') {
+          success += 1;
+          return;
+        }
+
+        const reasonSource = result.reason as { code?: string; message?: string } | Error | unknown;
+        const message =
+          reasonSource instanceof Error
+            ? reasonSource.message
+            : typeof reasonSource === 'object' && reasonSource !== null && 'message' in reasonSource
+              ? String((reasonSource as { message?: unknown }).message)
+              : String(reasonSource);
+
+        const code =
+          typeof reasonSource === 'object' && reasonSource !== null && 'code' in reasonSource
+            ? String((reasonSource as { code?: unknown }).code)
+            : undefined;
+
+        if (code) {
+          console.error('[evangelists:import:item]', code, reasonSource);
+        }
+
+        failures.push({
+          index: chunk[idx].index,
+          reason: code ? `${message} (${code})` : message,
+        });
+      });
     }
 
+    const failed = failures.length;
+
     return NextResponse.json({
-      ok: true,
+      ok: failed === 0,
       total: records.length,
       accepted: sanitized.length,
       success,
-      failed: failures.length,
+      failed,
       failures: failures.slice(0, 5),
+      count: success,
     });
   } catch (error) {
-    console.error('CSV import error:', error);
+    const err = error as { code?: string; message?: string };
+    console.error('[evangelists:import]', err?.code ?? 'UNKNOWN', error);
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     if (error instanceof Error && error.message === 'Forbidden') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    );
   }
 }
