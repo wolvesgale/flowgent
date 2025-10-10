@@ -209,14 +209,16 @@ export default function CSVPreview({ onImport }: CSVPreviewProps) {
                         {field.required && <Badge variant="destructive" className="text-xs">必須</Badge>}
                       </label>
                       <Select
-                        value={field.csvColumn}
-                        onValueChange={(value: string) => updateMapping(field.dbField, value)}
+                        value={field.csvColumn === '' ? undefined : field.csvColumn}
+                        onValueChange={(value: string) =>
+                          updateMapping(field.dbField, value === '__CLEAR__' ? '' : value)
+                        }
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="bg-white">
                           <SelectValue placeholder="CSVの列を選択" />
                         </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">選択しない</SelectItem>
+                        <SelectContent className="bg-white text-slate-900">
+                          <SelectItem value="__CLEAR__">選択しない</SelectItem>
                           {csvHeaders.map((header) => (
                             <SelectItem key={header} value={header}>
                               {header}

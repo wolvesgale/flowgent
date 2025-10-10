@@ -100,6 +100,9 @@ const PHASE_OPTIONS = [
   { value: 'CONTINUED_PROPOSAL', label: '継続提案' },
 ] as const
 
+const SELECT_CLEAR_VALUE = '__UNSET__'
+const CS_CLEAR_VALUE = '__UNASSIGNED__'
+
 interface Meeting {
   id: string
   evangelistId: number
@@ -480,11 +483,11 @@ export default function EvangelistDetailPage() {
                   </Label>
                   {isEditing ? (
                     <Select
-                      value={editForm.contactMethod ?? ''}
+                      value={editForm.contactMethod ?? SELECT_CLEAR_VALUE}
                       onValueChange={(value) =>
                         setEditForm(prev => ({
                           ...prev,
-                          contactMethod: value || null,
+                          contactMethod: value === SELECT_CLEAR_VALUE ? null : value,
                         }))
                       }
                     >
@@ -492,7 +495,7 @@ export default function EvangelistDetailPage() {
                         <SelectValue placeholder="連絡手段を選択" />
                       </SelectTrigger>
                       <SelectContent className="bg-white text-slate-900">
-                        <SelectItem value="">未設定</SelectItem>
+                        <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                         {CONTACT_OPTIONS.map((option) => (
                           <SelectItem key={option.value} value={option.value}>
                             {option.label}
@@ -512,14 +515,14 @@ export default function EvangelistDetailPage() {
                   {isEditing ? (
                     <Select
                       value={editForm.tier || 'TIER2'}
-                      onValueChange={(value: 'TIER1' | 'TIER2') => 
+                      onValueChange={(value: 'TIER1' | 'TIER2') =>
                         setEditForm(prev => ({ ...prev, tier: value }))
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-white">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-white text-slate-900">
                         <SelectItem value="TIER1">TIER1</SelectItem>
                         <SelectItem value="TIER2">TIER2</SelectItem>
                       </SelectContent>
@@ -536,11 +539,11 @@ export default function EvangelistDetailPage() {
                 <Label>強み・専門分野</Label>
                 {isEditing ? (
                   <Select
-                    value={editForm.strength ?? ''}
+                    value={editForm.strength ?? SELECT_CLEAR_VALUE}
                     onValueChange={(value) =>
                       setEditForm(prev => ({
                         ...prev,
-                        strength: value || null,
+                        strength: value === SELECT_CLEAR_VALUE ? null : value,
                       }))
                     }
                   >
@@ -548,7 +551,7 @@ export default function EvangelistDetailPage() {
                       <SelectValue placeholder="強みを選択" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-slate-900">
-                      <SelectItem value="">未設定</SelectItem>
+                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {STRENGTH_OPTIONS.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
@@ -567,11 +570,11 @@ export default function EvangelistDetailPage() {
                 <Label>管理フェーズ</Label>
                 {isEditing ? (
                   <Select
-                    value={editForm.managementPhase ?? ''}
+                    value={editForm.managementPhase ?? SELECT_CLEAR_VALUE}
                     onValueChange={(value) =>
                       setEditForm(prev => ({
                         ...prev,
-                        managementPhase: value || null,
+                        managementPhase: value === SELECT_CLEAR_VALUE ? null : value,
                       }))
                     }
                   >
@@ -579,7 +582,7 @@ export default function EvangelistDetailPage() {
                       <SelectValue placeholder="フェーズを選択" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-slate-900">
-                      <SelectItem value="">未設定</SelectItem>
+                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {PHASE_OPTIONS.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
@@ -675,19 +678,19 @@ export default function EvangelistDetailPage() {
                 <div className="space-y-2">
                   <Label>担当CS</Label>
                   <Select
-                    value={editForm.assignedCsId ?? ''}
+                    value={editForm.assignedCsId ?? CS_CLEAR_VALUE}
                     onValueChange={(value) =>
                       setEditForm(prev => ({
                         ...prev,
-                        assignedCsId: value || null,
+                        assignedCsId: value === CS_CLEAR_VALUE ? null : value,
                       }))
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-white">
                       <SelectValue placeholder="CSを選択してください" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">未割り当て</SelectItem>
+                    <SelectContent className="bg-white text-slate-900">
+                      <SelectItem value={CS_CLEAR_VALUE}>未割り当て</SelectItem>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
                           {user.name}（{user.role === 'ADMIN' ? '管理者' : 'CS'}）
