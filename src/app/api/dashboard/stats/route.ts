@@ -1,96 +1,92 @@
-// src/app/api/dashboard/stats/route.ts
 import { NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
 
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
+import { getEvangelistColumnSet } from '@/lib/evangelist-columns'
 
-async function checkAuth() {
-  const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
-  if (!session.isLoggedIn) return null
-  return session
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+function getWeekRange() {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const weekStart = new Date(today)
+  weekStart.setDate(today.getDate() - today.getDay())
+
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekStart.getDate() + 7)
+
+  return { weekStart, weekEnd }
 }
 
 export async function GET() {
   try {
-    // 認証チェック
-    const session = await checkAuth()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const session = await getSession()
+
+    if (!session.isLoggedIn) {
+      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    // 30日前（要フォロー判定）
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-    // 今週の開始/終了
-    const now = new Date()
-    const start = new Date(now)
-    start.setHours(0, 0, 0, 0)
-    const weekStart = new Date(start)
-    weekStart.setDate(start.getDate() - start.getDay()) // 日曜始まり
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekStart.getDate() + 7)
+    const { weekStart, weekEnd } = getWeekRange()
 
-    const [
-      totalEvangelists,
-      unassignedEvangelists,
-      pendingMeetings,
-      requiredInnovators,
-      staleEvangelists,
-      itTagEvangelists,
-    ] = await Promise.all([
-      // 総EVA数
-      prisma.evangelist.count(),
+    const columns = await getEvangelistColumnSet()
 
-      // CS未割当
-      prisma.evangelist.count({
-        where: { assignedCsId: null },
-      }),
-
-      // 今週の面談数
-      prisma.meeting.count({
-        where: {
-          date: { gte: weekStart, lt: weekEnd },
-        },
-      }),
-
-      // 紹介必須イノベータ（introductionPoint 未設定）
-      prisma.innovator.count({
-        where: { introductionPoint: null },
-      }),
-
-      // 要フォロー（面談が一度もない or すべて30日より前）
-      prisma.evangelist.count({
-        where: {
-          OR: [
-            { meetings: { none: {} } },
-            {
-              meetings: {
-                every: {
-                  date: { lt: thirtyDaysAgo },
+    const [totalEvangelists, pendingMeetings, requiredInnovators, staleEvangelists] =
+      await Promise.all([
+        prisma.evangelist.count(),
+        prisma.meeting.count({
+          where: {
+            date: { gte: weekStart, lt: weekEnd },
+          },
+        }),
+        prisma.innovator.count({
+          where: { introductionPoint: null },
+        }),
+        prisma.evangelist.count({
+          where: {
+            OR: [
+              { meetings: { none: {} } },
+              {
+                meetings: {
+                  some: {
+                    date: { lt: thirtyDaysAgo },
+                  },
                 },
               },
-            },
-          ],
-        },
-      }),
+            ],
+          },
+        }),
+      ])
 
-      // ITタグ/強みを持つEVA数
-      // tags は JSON文字列で保存のため、'"IT"' を部分一致で検索（大文字小文字は無視）
-      prisma.evangelist.count({
+    const unassignedEvangelists = columns.has('assignedCsId')
+      ? await prisma.evangelist.count({
+          where: { assignedCsId: null },
+        })
+      : 0
+
+    let itTagEvangelists = 0
+    const itFilters = [] as Array<Record<string, unknown>>
+    if (columns.has('strengths')) {
+      itFilters.push({ strength: { contains: 'IT', mode: 'insensitive' } })
+    }
+    if (columns.has('tags')) {
+      itFilters.push({ tags: { contains: '"IT"' } })
+    }
+
+    if (itFilters.length > 0) {
+      itTagEvangelists = await prisma.evangelist.count({
         where: {
-          OR: [
-            { tags: { contains: '"IT"', mode: 'insensitive' } },
-            { strength: { contains: 'IT', mode: 'insensitive' } },
-          ],
+          OR: itFilters,
         },
-      }),
-    ])
+      })
+    }
 
     return NextResponse.json({
+      ok: true,
       totalEvangelists,
       unassignedEvangelists,
       pendingMeetings,
@@ -99,7 +95,11 @@ export async function GET() {
       itTagEvangelists,
     })
   } catch (error) {
-    console.error('Failed to fetch dashboard stats:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const err = error as { code?: string; message?: string }
+    console.error('[dashboard/stats]', err?.code, err?.message, error)
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    )
   }
 }

@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/session';
+
+export const runtime = 'nodejs';
 
 export async function GET() {
   try {
@@ -12,16 +15,26 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json(
-      {
-        user: {
-          id: session.userId,
-          email: session.email,
-          name: session.name,
-          role: session.role,
-        },
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
       },
-      { 
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Not authenticated' },
+        { status: 401 }
+      );
+    }
+
+    return NextResponse.json(
+      { user },
+      {
         status: 200,
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate',

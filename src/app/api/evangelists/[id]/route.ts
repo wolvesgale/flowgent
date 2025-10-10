@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getIronSession } from 'iron-session'
-import { cookies } from 'next/headers'
+
 import { prisma } from '@/lib/prisma'
-import { sessionOptions } from '@/lib/session-config'
-import type { SessionData } from '@/lib/session'
+import { getSession } from '@/lib/session'
+import {
+  buildEvangelistSelect,
+  filterEvangelistData,
+  getEvangelistColumnSet,
+  normalizeEvangelistResult,
+} from '@/lib/evangelist-columns'
 import { z } from 'zod'
+
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
 const contactMethodEnum = ['FACEBOOK', 'LINE', 'EMAIL', 'PHONE', 'SLACK'] as const
 const strengthEnum = ['HR', 'IT', 'ACCOUNTING', 'ADVERTISING', 'MANAGEMENT', 'SALES', 'MANUFACTURING', 'MEDICAL', 'FINANCE'] as const
@@ -49,7 +56,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+    const session = await getSession()
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -57,27 +64,27 @@ export async function GET(
 
     const { id } = await params
 
+    const columns = await getEvangelistColumnSet()
+    const select = buildEvangelistSelect(columns, {
+      includeAssignedCs: true,
+      includeCount: true,
+    })
+
     const evangelist = await prisma.evangelist.findUnique({
       where: { id },
-      include: {
-        assignedCs: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
+      select,
     })
 
     if (!evangelist) {
       return NextResponse.json({ error: 'Evangelist not found' }, { status: 404 })
     }
 
-    return NextResponse.json(evangelist)
+    return NextResponse.json(normalizeEvangelistResult(evangelist))
   } catch (error) {
-    console.error('Error fetching evangelist:', error)
+    const err = error as { code?: string; message?: string }
+    console.error('[evangelists:detail:get]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }
@@ -89,7 +96,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+    const session = await getSession()
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -110,8 +117,15 @@ export async function PUT(
     const evangelistData = validationResult.data
 
     // EVAが存在するかチェック
+    const columns = await getEvangelistColumnSet()
+    const select = buildEvangelistSelect(columns, {
+      includeAssignedCs: true,
+      includeCount: true,
+    })
+
     const existingEvangelist = await prisma.evangelist.findUnique({
       where: { id },
+      select: { id: true },
     })
 
     if (!existingEvangelist) {
@@ -171,24 +185,20 @@ export async function PUT(
         : null
     }
 
+    const filteredUpdate = filterEvangelistData(updateData, columns)
+
     const updatedEvangelist = await prisma.evangelist.update({
       where: { id },
-      data: updateData,
-      include: {
-        assignedCs: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
+      data: filteredUpdate,
+      select,
     })
 
-    return NextResponse.json(updatedEvangelist)
+    return NextResponse.json(normalizeEvangelistResult(updatedEvangelist))
   } catch (error) {
-    console.error('Error updating evangelist:', error)
+    const err = error as { code?: string; message?: string }
+    console.error('[evangelists:detail:put]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }
@@ -200,7 +210,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getIronSession<SessionData>(await cookies(), sessionOptions)
+    const session = await getSession()
 
     if (!session.isLoggedIn || !session.userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -211,6 +221,7 @@ export async function DELETE(
     // EVAが存在するかチェック
     const existingEvangelist = await prisma.evangelist.findUnique({
       where: { id },
+      select: { id: true },
     })
 
     if (!existingEvangelist) {
@@ -225,13 +236,15 @@ export async function DELETE(
     // EVAを削除
     await prisma.evangelist.delete({
       where: { id },
+      select: { id: true },
     })
 
     return NextResponse.json({ message: 'Evangelist deleted successfully' })
   } catch (error) {
-    console.error('Error deleting evangelist:', error)
+    const err = error as { code?: string; message?: string }
+    console.error('[evangelists:detail:delete]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', code: err?.code },
       { status: 500 }
     )
   }

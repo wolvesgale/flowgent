@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcrypt';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/session';
+import { getIron } from '@/lib/session';
+
+export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,16 +38,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create session
-    const session = await getSession();
-    session.userId = user.id;
-    session.email = user.email;
-    session.name = user.name;
-    session.role = user.role;
-    session.isLoggedIn = true;
-    await session.save();
-
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         user: {
           id: user.id,
@@ -56,6 +49,14 @@ export async function POST(request: NextRequest) {
       },
       { status: 200 }
     );
+
+    const session = await getIron(request, response);
+    session.userId = user.id;
+    session.role = user.role;
+    session.isLoggedIn = true;
+    await session.save();
+
+    return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(

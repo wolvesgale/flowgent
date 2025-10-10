@@ -559,7 +559,7 @@ export default function EvangelistsPage() {
                 <div className="space-y-2">
                   <Label>連絡手段</Label>
                   <Select
-                    value={editForm.contactMethod}
+                    value={editForm.contactMethod ?? ''}
                     onValueChange={(value) =>
                       setEditForm((prev) => ({ ...prev, contactMethod: value as ContactKey | '' }))
                     }
@@ -581,7 +581,7 @@ export default function EvangelistsPage() {
                 <div className="space-y-2">
                   <Label>強み</Label>
                   <Select
-                    value={editForm.strength}
+                    value={editForm.strength ?? ''}
                     onValueChange={(value) =>
                       setEditForm((prev) => ({ ...prev, strength: value as StrengthKey | '' }))
                     }
@@ -603,7 +603,7 @@ export default function EvangelistsPage() {
                 <div className="space-y-2">
                   <Label>管理フェーズ</Label>
                   <Select
-                    value={editForm.managementPhase}
+                    value={editForm.managementPhase ?? ''}
                     onValueChange={(value) =>
                       setEditForm((prev) => ({ ...prev, managementPhase: value as ManagementPhaseKey | '' }))
                     }
@@ -625,7 +625,7 @@ export default function EvangelistsPage() {
                 <div className="space-y-2">
                   <Label>リスト提供</Label>
                   <Select
-                    value={editForm.listProvided}
+                    value={editForm.listProvided ?? ''}
                     onValueChange={(value) =>
                       setEditForm((prev) => ({ ...prev, listProvided: value as 'true' | 'false' }))
                     }
