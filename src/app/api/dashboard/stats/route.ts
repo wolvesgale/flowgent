@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
+import { getEvangelistColumnSet } from '@/lib/evangelist-columns'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,49 +33,57 @@ export async function GET() {
 
     const { weekStart, weekEnd } = getWeekRange()
 
-    const [
-      totalEvangelists,
-      unassignedEvangelists,
-      pendingMeetings,
-      requiredInnovators,
-      staleEvangelists,
-      itTagEvangelists,
-    ] = await Promise.all([
-      prisma.evangelist.count(),
-      prisma.evangelist.count({
-        where: { assignedCsId: null },
-      }),
-      prisma.meeting.count({
-        where: {
-          date: { gte: weekStart, lt: weekEnd },
-        },
-      }),
-      prisma.innovator.count({
-        where: { introductionPoint: null },
-      }),
-      prisma.evangelist.count({
-        where: {
-          OR: [
-            { meetings: { none: {} } },
-            {
-              meetings: {
-                some: {
-                  date: { lt: thirtyDaysAgo },
+    const columns = await getEvangelistColumnSet()
+
+    const [totalEvangelists, pendingMeetings, requiredInnovators, staleEvangelists] =
+      await Promise.all([
+        prisma.evangelist.count(),
+        prisma.meeting.count({
+          where: {
+            date: { gte: weekStart, lt: weekEnd },
+          },
+        }),
+        prisma.innovator.count({
+          where: { introductionPoint: null },
+        }),
+        prisma.evangelist.count({
+          where: {
+            OR: [
+              { meetings: { none: {} } },
+              {
+                meetings: {
+                  some: {
+                    date: { lt: thirtyDaysAgo },
+                  },
                 },
               },
-            },
-          ],
-        },
-      }),
-      prisma.evangelist.count({
+            ],
+          },
+        }),
+      ])
+
+    const unassignedEvangelists = columns.has('assignedCsId')
+      ? await prisma.evangelist.count({
+          where: { assignedCsId: null },
+        })
+      : 0
+
+    let itTagEvangelists = 0
+    const itFilters = [] as Array<Record<string, unknown>>
+    if (columns.has('strengths')) {
+      itFilters.push({ strength: { contains: 'IT', mode: 'insensitive' } })
+    }
+    if (columns.has('tags')) {
+      itFilters.push({ tags: { contains: '"IT"' } })
+    }
+
+    if (itFilters.length > 0) {
+      itTagEvangelists = await prisma.evangelist.count({
         where: {
-          OR: [
-            { strength: { contains: 'IT', mode: 'insensitive' } },
-            { tags: { contains: '"IT"' } },
-          ],
+          OR: itFilters,
         },
-      }),
-    ])
+      })
+    }
 
     return NextResponse.json({
       ok: true,

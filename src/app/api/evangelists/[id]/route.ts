@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
+import {
+  buildEvangelistSelect,
+  filterEvangelistData,
+  getEvangelistColumnSet,
+  normalizeEvangelistResult,
+} from '@/lib/evangelist-columns'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
@@ -58,23 +64,22 @@ export async function GET(
 
     const { id } = await params
 
+    const columns = await getEvangelistColumnSet()
+    const select = buildEvangelistSelect(columns, {
+      includeAssignedCs: true,
+      includeCount: true,
+    })
+
     const evangelist = await prisma.evangelist.findUnique({
       where: { id },
-      include: {
-        assignedCs: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
+      select,
     })
 
     if (!evangelist) {
       return NextResponse.json({ error: 'Evangelist not found' }, { status: 404 })
     }
 
-    return NextResponse.json(evangelist)
+    return NextResponse.json(normalizeEvangelistResult(evangelist))
   } catch (error) {
     const err = error as { code?: string; message?: string }
     console.error('[evangelists:detail:get]', err?.code ?? 'UNKNOWN', err)
@@ -112,8 +117,15 @@ export async function PUT(
     const evangelistData = validationResult.data
 
     // EVAが存在するかチェック
+    const columns = await getEvangelistColumnSet()
+    const select = buildEvangelistSelect(columns, {
+      includeAssignedCs: true,
+      includeCount: true,
+    })
+
     const existingEvangelist = await prisma.evangelist.findUnique({
       where: { id },
+      select: { id: true },
     })
 
     if (!existingEvangelist) {
@@ -173,20 +185,15 @@ export async function PUT(
         : null
     }
 
+    const filteredUpdate = filterEvangelistData(updateData, columns)
+
     const updatedEvangelist = await prisma.evangelist.update({
       where: { id },
-      data: updateData,
-      include: {
-        assignedCs: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
+      data: filteredUpdate,
+      select,
     })
 
-    return NextResponse.json(updatedEvangelist)
+    return NextResponse.json(normalizeEvangelistResult(updatedEvangelist))
   } catch (error) {
     const err = error as { code?: string; message?: string }
     console.error('[evangelists:detail:put]', err?.code ?? 'UNKNOWN', err)
@@ -214,6 +221,7 @@ export async function DELETE(
     // EVAが存在するかチェック
     const existingEvangelist = await prisma.evangelist.findUnique({
       where: { id },
+      select: { id: true },
     })
 
     if (!existingEvangelist) {
@@ -228,6 +236,7 @@ export async function DELETE(
     // EVAを削除
     await prisma.evangelist.delete({
       where: { id },
+      select: { id: true },
     })
 
     return NextResponse.json({ message: 'Evangelist deleted successfully' })

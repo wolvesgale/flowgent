@@ -31,6 +31,7 @@ export async function GET(
     // EVAが存在するかチェック
     const evangelist = await prisma.evangelist.findUnique({
       where: { id },
+      select: { id: true },
     })
 
     if (!evangelist) {
@@ -84,6 +85,7 @@ export async function POST(
     // EVAが存在するかチェック
     const evangelist = await prisma.evangelist.findUnique({
       where: { id },
+      select: { id: true },
     })
 
     if (!evangelist) {

@@ -2,45 +2,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession, type SessionData } from '@/lib/session';
-
-let evangelistColumnsCache: Set<string> | null = null;
-
-async function loadEvangelistColumns(): Promise<Set<string>> {
-  if (evangelistColumnsCache) {
-    return evangelistColumnsCache;
-  }
-
-  const rows = await prisma.$queryRawUnsafe<{ column_name: string }[]>(
-    `
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_schema = current_schema()
-        AND table_name = 'evangelists'
-    `
-  );
-
-  evangelistColumnsCache = new Set(rows.map((row) => row.column_name));
-  return evangelistColumnsCache;
-}
-
-function filterByColumns<T extends Record<string, unknown>>(
-  data: T,
-  columns: Set<string>
-): T {
-  const filtered: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(data)) {
-    if (value === undefined) {
-      continue;
-    }
-    if (!columns.has(key)) {
-      continue;
-    }
-    filtered[key] = value;
-  }
-
-  return filtered as T;
-}
+import {
+  filterEvangelistData,
+  getEvangelistColumnSet,
+} from '@/lib/evangelist-columns';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -144,7 +109,7 @@ export async function POST(req: NextRequest) {
       return acc;
     }, []);
 
-    const columns = await loadEvangelistColumns();
+    const columns = await getEvangelistColumnSet();
 
     const buildCreateData = (r: ImportRow) => ({
       recordId: r.recordId || null,
@@ -214,14 +179,15 @@ export async function POST(req: NextRequest) {
       const chunk = sanitized.slice(i, i + BATCH_SIZE);
 
       const operations = chunk.map(({ row }) => {
-        const createData = filterByColumns(buildCreateData(row), columns);
-        const updateData = filterByColumns(buildUpdateData(row), columns);
+        const createData = filterEvangelistData(buildCreateData(row), columns);
+        const updateData = filterEvangelistData(buildUpdateData(row), columns);
 
         if (row.recordId) {
           return prisma.evangelist.upsert({
             where: { recordId: row.recordId },
             create: createData,
             update: updateData,
+            select: { id: true },
           });
         }
 
@@ -230,10 +196,11 @@ export async function POST(req: NextRequest) {
             where: { email: row.email },
             create: createData,
             update: updateData,
+            select: { id: true },
           });
         }
 
-        return prisma.evangelist.create({ data: createData });
+        return prisma.evangelist.create({ data: createData, select: { id: true } });
       });
 
       const results = await Promise.allSettled(operations);

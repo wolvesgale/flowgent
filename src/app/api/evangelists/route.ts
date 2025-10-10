@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
+import {
+  buildEvangelistSelect,
+  getEvangelistColumnSet,
+  normalizeEvangelistResult,
+} from '@/lib/evangelist-columns'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -56,6 +61,8 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit
 
+    const columns = await getEvangelistColumnSet()
+
     // 検索条件の構築
     const where: WhereInput = {}
     
@@ -94,14 +101,14 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    if (tag) {
+    if (tag && columns.has('tags')) {
       // Tags are stored as JSON string, so we need to use contains
       where.tags = {
         contains: tag
       }
     }
 
-    if (assignedCsId) {
+    if (assignedCsId && columns.has('assignedCsId')) {
       where.assignedCsId = assignedCsId
     }
 
@@ -114,31 +121,28 @@ export async function GET(request: NextRequest) {
     }
 
     // データ取得
+    const select = buildEvangelistSelect(columns, {
+      includeAssignedCs: true,
+      includeCount: true,
+    })
+
     const [evangelists, total] = await Promise.all([
       prisma.evangelist.findMany({
         where,
         orderBy,
         skip,
         take: limit,
-        include: {
-          assignedCs: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          _count: {
-            select: {
-              meetings: true,
-            },
-          },
-        },
+        select,
       }),
       prisma.evangelist.count({ where }),
     ])
 
+    const normalized = evangelists.map((evangelist) =>
+      normalizeEvangelistResult(evangelist),
+    )
+
     return NextResponse.json({
-      evangelists,
+      evangelists: normalized,
       total,
       page,
       totalPages: Math.ceil(total / limit),
