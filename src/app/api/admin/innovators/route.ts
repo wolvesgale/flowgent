@@ -12,14 +12,26 @@ export const dynamic = 'force-dynamic'
 const BusinessDomainEnum = z.enum(BUSINESS_DOMAIN_VALUES)
 
 const innovatorSchema = z.object({
-  company: z.string().min(1, 'Company is required'),
-  url: z
+  company: z
     .string()
-    .url('Invalid URL')
-    .optional()
-    .or(z.literal(''))
-    .transform((value) => value || undefined),
-  introductionPoint: z.string().optional(),
+    .transform((value) => value.trim())
+    .pipe(z.string().min(1, 'Company is required')),
+  url: z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return value
+      const trimmed = value.trim()
+      return trimmed.length === 0 ? undefined : trimmed
+    },
+    z.string().url('Invalid URL').optional()
+  ),
+  introductionPoint: z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return value
+      const trimmed = value.trim()
+      return trimmed.length === 0 ? undefined : trimmed
+    },
+    z.string().optional()
+  ),
   domain: z.preprocess((value) => mapBusinessDomainOrDefault(value), BusinessDomainEnum),
 })
 
@@ -112,9 +124,18 @@ export async function POST(request: NextRequest) {
 
     const innovator = await prisma.innovator.create({
       data: validatedData,
+      select: {
+        id: true,
+        company: true,
+        url: true,
+        introductionPoint: true,
+        domain: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     })
 
-    return NextResponse.json(innovator, { status: 201 })
+    return NextResponse.json({ ok: true, innovator }, { status: 201 })
     } catch (error) {
       if (error instanceof z.ZodError) {
         return NextResponse.json(

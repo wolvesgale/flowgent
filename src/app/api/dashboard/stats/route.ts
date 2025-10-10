@@ -20,6 +20,16 @@ function getWeekRange() {
   return { weekStart, weekEnd }
 }
 
+async function safeCount(label: string, fn: () => Promise<number>): Promise<number> {
+  try {
+    return await fn()
+  } catch (error) {
+    const err = error as { code?: string; message?: string }
+    console.error(`[dashboard/stats:${label}]`, err?.code, err?.message, error)
+    return 0
+  }
+}
+
 export async function GET() {
   try {
     const session = await getSession()
@@ -33,19 +43,30 @@ export async function GET() {
 
     const { weekStart, weekEnd } = getWeekRange()
 
-    const columns = await getEvangelistColumnSet()
+    let columns: Set<string>
+    try {
+      columns = await getEvangelistColumnSet()
+    } catch (error) {
+      const err = error as { code?: string; message?: string }
+      console.error('[dashboard/stats:columns]', err?.code, err?.message, error)
+      columns = new Set<string>()
+    }
 
-    const [totalEvangelists, pendingMeetings, requiredInnovators, staleEvangelists] =
-      await Promise.all([
-        prisma.evangelist.count(),
+    const [totalEvangelists, pendingMeetings, requiredInnovators, staleEvangelists] = await Promise.all([
+      safeCount('totalEvangelists', () => prisma.evangelist.count()),
+      safeCount('pendingMeetings', () =>
         prisma.meeting.count({
           where: {
             date: { gte: weekStart, lt: weekEnd },
           },
-        }),
+        })
+      ),
+      safeCount('requiredInnovators', () =>
         prisma.innovator.count({
           where: { introductionPoint: null },
-        }),
+        })
+      ),
+      safeCount('staleEvangelists', () =>
         prisma.evangelist.count({
           where: {
             OR: [
@@ -59,13 +80,16 @@ export async function GET() {
               },
             ],
           },
-        }),
-      ])
+        })
+      ),
+    ])
 
     const unassignedEvangelists = columns.has('assignedCsId')
-      ? await prisma.evangelist.count({
-          where: { assignedCsId: null },
-        })
+      ? await safeCount('unassignedEvangelists', () =>
+          prisma.evangelist.count({
+            where: { assignedCsId: null },
+          })
+        )
       : 0
 
     let itTagEvangelists = 0
@@ -78,11 +102,13 @@ export async function GET() {
     }
 
     if (itFilters.length > 0) {
-      itTagEvangelists = await prisma.evangelist.count({
-        where: {
-          OR: itFilters,
-        },
-      })
+      itTagEvangelists = await safeCount('itTagEvangelists', () =>
+        prisma.evangelist.count({
+          where: {
+            OR: itFilters,
+          },
+        })
+      )
     }
 
     return NextResponse.json({

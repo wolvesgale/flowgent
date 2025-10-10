@@ -431,11 +431,9 @@ export default function CSVMapper() {
                     {/* 単一列マッピング（Radix Select: 空値禁止→未選択は undefined を使う） */}
                     <Select
                       value={
-                        Array.isArray(selected)
-                          ? ''
-                          : typeof selected === 'string'
-                            ? selected
-                            : ''
+                        !Array.isArray(selected) && typeof selected === 'string' && selected.length > 0
+                          ? selected
+                          : undefined
                       }
                       onValueChange={(value) => {
                         setMap((prev) => {
@@ -451,7 +449,7 @@ export default function CSVMapper() {
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="（単一列を選択）" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-white text-slate-900">
                         <SelectItem value="__CLEAR__">（選択解除）</SelectItem>
                         {headers.map((header) => (
                           <SelectItem key={header.id} value={header.id}>

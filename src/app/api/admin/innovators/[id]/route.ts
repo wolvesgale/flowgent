@@ -11,19 +11,42 @@ export const dynamic = 'force-dynamic'
 const BusinessDomainEnum = z.enum(BUSINESS_DOMAIN_VALUES)
 
 // バリデーションスキーマ
-const innovatorUpdateSchema = z.object({
-  company: z.string().min(1, 'Company is required').optional(),
-  url: z.union([z.string().url('Invalid URL'), z.literal('')]).optional().transform((value) => (value === '' ? undefined : value)),
-  introductionPoint: z.string().optional(),
-  domain: z
-    .preprocess(
-      (value) => (value === undefined ? value : mapBusinessDomainOrDefault(value)),
-      z.union([BusinessDomainEnum, z.undefined()])
-    )
-    .optional(),
-}).refine((data) => Object.keys(data).length > 0, {
-  message: 'No update fields provided',
-})
+const innovatorUpdateSchema = z
+  .object({
+    company: z.preprocess(
+      (value) => {
+        if (typeof value !== 'string') return value
+        const trimmed = value.trim()
+        return trimmed.length === 0 ? undefined : trimmed
+      },
+      z.string().min(1, 'Company is required').optional()
+    ),
+    url: z.preprocess(
+      (value) => {
+        if (typeof value !== 'string') return value
+        const trimmed = value.trim()
+        return trimmed.length === 0 ? undefined : trimmed
+      },
+      z.string().url('Invalid URL').optional()
+    ),
+    introductionPoint: z.preprocess(
+      (value) => {
+        if (typeof value !== 'string') return value
+        const trimmed = value.trim()
+        return trimmed.length === 0 ? undefined : trimmed
+      },
+      z.string().optional()
+    ),
+    domain: z
+      .preprocess(
+        (value) => (value === undefined ? value : mapBusinessDomainOrDefault(value)),
+        z.union([BusinessDomainEnum, z.undefined()])
+      )
+      .optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'No update fields provided',
+  })
 
 async function checkAdminPermission() {
   const session = await getSession()
@@ -70,9 +93,18 @@ export async function PUT(
     const updatedInnovator = await prisma.innovator.update({
       where: { id },
       data: validatedData,
+      select: {
+        id: true,
+        company: true,
+        url: true,
+        introductionPoint: true,
+        domain: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     })
 
-    return NextResponse.json(updatedInnovator)
+    return NextResponse.json({ ok: true, innovator: updatedInnovator })
     } catch (error) {
       if (error instanceof z.ZodError) {
         return NextResponse.json(
