@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
@@ -15,10 +15,7 @@ const createMeetingSchema = z.object({
 })
 
 // GET /api/evangelists/[id]/meetings - 面談履歴取得
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_request: Request, context: unknown) {
   try {
     const session = await getSession()
 
@@ -26,7 +23,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = (context as { params: { id: string } }).params
 
     // EVAが存在するかチェック
     const evangelist = await prisma.evangelist.findUnique({
@@ -56,10 +53,7 @@ export async function GET(
 }
 
 // POST /api/evangelists/[id]/meetings - 面談記録作成
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, context: unknown) {
   try {
     const session = await getSession()
 
@@ -67,7 +61,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = (context as { params: { id: string } }).params
 
     const body = await request.json()
     
