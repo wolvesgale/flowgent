@@ -5,7 +5,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
-import { getInnovatorColumns, innovatorHasColumn } from '@/lib/innovator-columns'
+import { getInnovatorColumns, hasColumn } from '@/lib/live-schema'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
@@ -92,25 +92,32 @@ export async function PUT(request: Request, context: unknown) {
     }
 
     const columns = await getInnovatorColumns()
+    const hasIdColumn = hasColumn(columns, 'id')
+    const hasCompanyColumn = hasColumn(columns, 'company')
+    const hasDomainColumn = hasColumn(columns, 'domain')
+    const hasUrlColumn = hasColumn(columns, 'url')
+    const hasIntroductionPointColumn = hasColumn(columns, 'introductionPoint')
+    const hasCreatedAtColumn = hasColumn(columns, 'createdAt')
+    const hasUpdatedAtColumn = hasColumn(columns, 'updatedAt')
 
     const data: Prisma.InnovatorUpdateInput = {}
 
-    if (validatedData.company !== undefined && innovatorHasColumn(columns, 'company')) {
+    if (validatedData.company !== undefined && hasCompanyColumn) {
       data.company = validatedData.company
     }
 
-    if (validatedData.url !== undefined && innovatorHasColumn(columns, 'url')) {
+    if (validatedData.url !== undefined && hasUrlColumn) {
       data.url = validatedData.url
     }
 
     if (
       validatedData.introductionPoint !== undefined &&
-      innovatorHasColumn(columns, 'introductionPoint')
+      hasIntroductionPointColumn
     ) {
       data.introductionPoint = validatedData.introductionPoint
     }
 
-    if (validatedData.domain !== undefined && innovatorHasColumn(columns, 'domain')) {
+    if (validatedData.domain !== undefined && hasDomainColumn) {
       data.domain = validatedData.domain
     }
 
@@ -121,27 +128,46 @@ export async function PUT(request: Request, context: unknown) {
       )
     }
 
-    const select: Prisma.InnovatorSelect = {
-      id: true,
-      company: true,
-      domain: true,
-      createdAt: true,
-      updatedAt: true,
+    const select: Prisma.InnovatorSelect = {}
+
+    if (hasIdColumn) {
+      select.id = true
     }
 
-    if (innovatorHasColumn(columns, 'url')) {
+    if (hasCompanyColumn) {
+      select.company = true
+    }
+
+    if (hasDomainColumn) {
+      select.domain = true
+    }
+
+    if (hasCreatedAtColumn) {
+      select.createdAt = true
+    }
+
+    if (hasUpdatedAtColumn) {
+      select.updatedAt = true
+    }
+
+    if (hasUrlColumn) {
       select.url = true
     }
 
-    if (innovatorHasColumn(columns, 'introductionPoint')) {
+    if (hasIntroductionPointColumn) {
       select.introductionPoint = true
     }
 
-    const updatedInnovator = await prisma.innovator.update({
+    const updateArgs: Prisma.InnovatorUpdateArgs = {
       where: { id },
       data,
-      select,
-    })
+    }
+
+    if (Object.keys(select).length > 0) {
+      updateArgs.select = select
+    }
+
+    const updatedInnovator = await prisma.innovator.update(updateArgs)
 
     return NextResponse.json({ ok: true, innovator: updatedInnovator })
   } catch (error) {

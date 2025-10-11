@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
 import type { BusinessDomainValue } from '@/lib/business-domain'
-import { getInnovatorColumns, innovatorHasColumn } from '@/lib/innovator-columns'
+import { getInnovatorColumns, hasColumn } from '@/lib/live-schema'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -58,6 +58,13 @@ export async function GET(request: Request) {
 
     // クエリパラメータの取得
     const columns = await getInnovatorColumns()
+    const hasIdColumn = hasColumn(columns, 'id')
+    const hasCompanyColumn = hasColumn(columns, 'company')
+    const hasDomainColumn = hasColumn(columns, 'domain')
+    const hasUrlColumn = hasColumn(columns, 'url')
+    const hasIntroductionPointColumn = hasColumn(columns, 'introductionPoint')
+    const hasCreatedAtColumn = hasColumn(columns, 'createdAt')
+    const hasUpdatedAtColumn = hasColumn(columns, 'updatedAt')
     const { searchParams } = new URL(request.url)
     const page = parsePositiveInt(searchParams.get('page'), 1)
     const limit = parsePositiveInt(searchParams.get('limit'), 10, 100)
@@ -71,20 +78,20 @@ export async function GET(request: Request) {
     const orConditions: Prisma.InnovatorWhereInput[] = []
 
     if (search) {
-      if (innovatorHasColumn(columns, 'company')) {
+      if (hasCompanyColumn) {
         orConditions.push({ company: { contains: search, mode: 'insensitive' } })
       }
 
-      if (innovatorHasColumn(columns, 'introductionPoint')) {
+      if (hasIntroductionPointColumn) {
         orConditions.push({ introductionPoint: { contains: search, mode: 'insensitive' } })
       }
 
-      if (innovatorHasColumn(columns, 'url')) {
+      if (hasUrlColumn) {
         orConditions.push({ url: { contains: search, mode: 'insensitive' } })
       }
     }
 
-    if (domain && innovatorHasColumn(columns, 'domain')) {
+    if (domain && hasDomainColumn) {
       where.domain = domain
     }
 
@@ -92,31 +99,47 @@ export async function GET(request: Request) {
       where.OR = orConditions
     }
 
-    const select: Prisma.InnovatorSelect = {
-      id: true,
-      company: true,
-      domain: true,
-      createdAt: true,
-      updatedAt: true,
-    }
+    const select: Prisma.InnovatorSelect = {}
 
-    if (innovatorHasColumn(columns, 'url')) {
+    if (hasIdColumn) {
+      select.id = true
+    }
+    if (hasCompanyColumn) {
+      select.company = true
+    }
+    if (hasDomainColumn) {
+      select.domain = true
+    }
+    if (hasCreatedAtColumn) {
+      select.createdAt = true
+    }
+    if (hasUpdatedAtColumn) {
+      select.updatedAt = true
+    }
+    if (hasUrlColumn) {
       select.url = true
     }
-
-    if (innovatorHasColumn(columns, 'introductionPoint')) {
+    if (hasIntroductionPointColumn) {
       select.introductionPoint = true
+    }
+
+    const findManyArgs: Prisma.InnovatorFindManyArgs = {
+      where,
+      skip,
+      take: limit,
+    }
+
+    if (hasCreatedAtColumn) {
+      findManyArgs.orderBy = { createdAt: 'desc' }
+    }
+
+    if (Object.keys(select).length > 0) {
+      findManyArgs.select = select
     }
 
     // データ取得
     const [innovators, total] = await Promise.all([
-      prisma.innovator.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-        select,
-      }),
+      prisma.innovator.findMany(findManyArgs),
       prisma.innovator.count({ where }),
     ])
 
@@ -145,60 +168,99 @@ export async function POST(request: Request) {
     }
 
     const columns = await getInnovatorColumns()
+    const hasIdColumn = hasColumn(columns, 'id')
+    const hasCompanyColumn = hasColumn(columns, 'company')
+    const hasDomainColumn = hasColumn(columns, 'domain')
+    const hasUrlColumn = hasColumn(columns, 'url')
+    const hasIntroductionPointColumn = hasColumn(columns, 'introductionPoint')
+    const hasCreatedAtColumn = hasColumn(columns, 'createdAt')
+    const hasUpdatedAtColumn = hasColumn(columns, 'updatedAt')
 
     const body = await request
       .json()
       .catch(() => ({} as Record<string, unknown>))
 
     const company = typeof body.company === 'string' ? body.company.trim() : ''
-    const domain = normalizeDomain(body.domain)
     const url = typeof body.url === 'string' ? body.url.trim() : ''
     const introductionPoint =
       typeof body.introductionPoint === 'string' ? body.introductionPoint.trim() : ''
 
-    if (!company || !domain) {
+    if (!company) {
       return NextResponse.json(
         {
           error: 'Invalid request',
-          details: 'company と domain は必須（domain は定義済みの値のみ許可）',
+          details: 'company は必須です',
         },
         { status: 400 }
       )
     }
 
-    const data: Prisma.InnovatorCreateInput = {
-      company,
-      domain,
+    if (!hasCompanyColumn) {
+      return NextResponse.json(
+        { error: 'Invalid schema', details: 'company 列が存在しないため登録できません' },
+        { status: 500 }
+      )
     }
 
-    if (innovatorHasColumn(columns, 'url') && url.length > 0) {
+    const data: Record<string, unknown> = {
+      company,
+    }
+
+    if (hasDomainColumn) {
+      const domain = normalizeDomain(body.domain)
+      if (!domain) {
+        return NextResponse.json(
+          {
+            error: 'Invalid request',
+            details: 'domain は定義済みの値のみ許可されています',
+          },
+          { status: 400 }
+        )
+      }
+      data.domain = domain
+    }
+
+    if (hasUrlColumn && url.length > 0) {
       data.url = url
     }
 
-    if (innovatorHasColumn(columns, 'introductionPoint') && introductionPoint.length > 0) {
+    if (hasIntroductionPointColumn && introductionPoint.length > 0) {
       data.introductionPoint = introductionPoint
     }
 
-    const select: Prisma.InnovatorSelect = {
-      id: true,
-      company: true,
-      domain: true,
-      createdAt: true,
-      updatedAt: true,
-    }
+    const select: Prisma.InnovatorSelect = {}
 
-    if (innovatorHasColumn(columns, 'url')) {
+    if (hasIdColumn) {
+      select.id = true
+    }
+    if (hasCompanyColumn) {
+      select.company = true
+    }
+    if (hasDomainColumn) {
+      select.domain = true
+    }
+    if (hasCreatedAtColumn) {
+      select.createdAt = true
+    }
+    if (hasUpdatedAtColumn) {
+      select.updatedAt = true
+    }
+    if (hasUrlColumn) {
       select.url = true
     }
-
-    if (innovatorHasColumn(columns, 'introductionPoint')) {
+    if (hasIntroductionPointColumn) {
       select.introductionPoint = true
     }
 
-    const innovator = await prisma.innovator.create({
-      data,
-      select,
-    })
+    const createArgs: Prisma.InnovatorCreateArgs = {
+      data: data as Prisma.InnovatorCreateInput,
+    }
+
+    if (Object.keys(select).length > 0) {
+      createArgs.select = select
+    }
+
+    const innovator = await prisma.innovator.create(createArgs)
 
     return NextResponse.json({ ok: true, innovator }, { status: 201 })
   } catch (error) {
