@@ -35,6 +35,8 @@ model Innovator {
   domain            BusinessDomain
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  requiredIntros    RequiredIntro[]
 }
 
 model Evangelist {
@@ -71,6 +73,7 @@ model Evangelist {
   updatedAt              DateTime @updatedAt
 
   meetings               Meeting[]
+  requiredIntros         RequiredIntro[]
 
   @@map("evangelists")
 }
@@ -134,4 +137,26 @@ model Meeting {
   contactMethod String?    // 面談で確認
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+}
+
+model RequiredIntro {
+  id            String              @id @default(cuid())
+  evangelistId  String
+  innovatorId   Int
+  status        RequiredIntroStatus @default(PENDING)
+  note          String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  evangelist    Evangelist          @relation(fields: [evangelistId], references: [id])
+  innovator     Innovator           @relation(fields: [innovatorId], references: [id])
+
+  @@unique([evangelistId, innovatorId])
+  @@map("required_intros")
+}
+
+enum RequiredIntroStatus {
+  PENDING
+  INTRODUCED
+  SKIPPED
 }

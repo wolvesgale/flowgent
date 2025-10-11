@@ -28,10 +28,26 @@ export async function GET() {
       ORDER BY ordinal_position
     `)
 
+    let requiredIntroColumns: { column_name: string }[] = []
+    try {
+      requiredIntroColumns = await prisma.$queryRawUnsafe<
+        { column_name: string }[]
+      >(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'required_intros'
+        ORDER BY ordinal_position
+      `)
+    } catch (error) {
+      console.warn('[health/db] failed to load required_intros columns', error)
+    }
+
     return NextResponse.json({
       ok: true,
       evangelistsColumns: evangelistColumns.map((column) => column.column_name),
       innovatorsColumns: innovatorColumns.map((column) => column.column_name),
+      requiredIntrosColumns: requiredIntroColumns.map((column) => column.column_name),
     })
   } catch (e) {
     console.error('DB healthcheck failed:', e)

@@ -1,841 +1,223 @@
-'use client'
+import { notFound } from 'next/navigation'
+import Link from 'next/link'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { 
-  ArrowLeft, 
-  User, 
-  Mail, 
-  Phone, 
-  Building, 
-  Calendar, 
-  Edit, 
-  Save, 
-  X,
-  Plus,
-  MessageSquare
-} from 'lucide-react'
+import { prisma } from '@/lib/prisma'
+import {
+  buildEvangelistSelect,
+  getEvangelistColumnSet,
+  normalizeEvangelistResult,
+} from '@/lib/evangelist-columns'
 
-interface Evangelist {
-  id: string
-  firstName?: string | null
-  lastName?: string | null
-  email?: string | null
-  contactMethod?: string | null
-  strength?: string | null
-  notes?: string | null
-  tier: 'TIER1' | 'TIER2'
-  assignedCsId?: string | null
-  assignedCs?: {
-    id: string
-    name: string
-  } | null
-  managementPhase?: string | null
-  listProvided?: boolean | null
-  nextAction?: string | null
-  nextActionDueOn?: string | null
-  createdAt: string
-  updatedAt: string
+import SheetForm from './sheet-form'
+
+export const dynamic = 'force-dynamic'
+
+function formatFullName(firstName?: string | null, lastName?: string | null) {
+  const parts = [lastName, firstName].filter((value) => Boolean(value && value.trim()))
+  return parts.length > 0 ? parts.join(' ') : '—'
 }
 
-interface User {
-  id: string
-  name: string
-  role: 'ADMIN' | 'CS'
-}
+function formatDate(value?: string) {
+  if (!value) {
+    return '—'
+  }
 
-type EditFormState = {
-  firstName: string
-  lastName: string
-  email: string
-  contactMethod?: string | null
-  strength?: string | null
-  managementPhase?: string | null
-  notes: string
-  tier: 'TIER1' | 'TIER2'
-  assignedCsId?: string | null
-  listProvided: boolean
-  nextAction: string
-  nextActionDueOn: string
-}
-
-const STRENGTH_OPTIONS = [
-  { value: 'HR', label: '人事' },
-  { value: 'IT', label: 'IT' },
-  { value: 'ACCOUNTING', label: '会計' },
-  { value: 'ADVERTISING', label: '広告' },
-  { value: 'MANAGEMENT', label: '経営' },
-  { value: 'SALES', label: '営業' },
-  { value: 'MANUFACTURING', label: '製造' },
-  { value: 'MEDICAL', label: '医療' },
-  { value: 'FINANCE', label: '金融' },
-] as const
-
-const CONTACT_OPTIONS = [
-  { value: 'FACEBOOK', label: 'Facebook' },
-  { value: 'LINE', label: 'LINE' },
-  { value: 'EMAIL', label: 'メール' },
-  { value: 'PHONE', label: '電話' },
-  { value: 'SLACK', label: 'Slack' },
-] as const
-
-const PHASE_OPTIONS = [
-  { value: 'INQUIRY', label: '問い合わせ' },
-  { value: 'FIRST_MEETING', label: '初回面談' },
-  { value: 'REGISTERED', label: '登録' },
-  { value: 'LIST_PROVIDED', label: 'リスト提供/突合' },
-  { value: 'INNOVATOR_REVIEW', label: 'イノベータ確認' },
-  { value: 'INTRODUCTION_STARTED', label: '紹介開始' },
-  { value: 'MEETING_SCHEDULED', label: '商談設定' },
-  { value: 'FIRST_RESULT', label: '初回実績' },
-  { value: 'CONTINUED_PROPOSAL', label: '継続提案' },
-] as const
-
-const SELECT_CLEAR_VALUE = '__UNSET__'
-const CS_CLEAR_VALUE = '__UNASSIGNED__'
-
-interface Meeting {
-  id: string
-  evangelistId: number
-  date: string
-  isFirst: boolean
-  summary?: string
-  nextActions?: string
-  contactMethod?: string
-  createdAt: string
-}
-
-const TIER_COLORS = {
-  TIER1: 'bg-blue-100 text-blue-800',
-  TIER2: 'bg-gray-100 text-gray-800'
-}
-
-const formatDate = (value?: string | null) => {
-  if (!value) return ''
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleDateString('ja-JP')
+  if (Number.isNaN(date.getTime())) {
+    return '—'
+  }
+
+  return new Intl.DateTimeFormat('ja-JP', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
 }
 
-export default function EvangelistDetailPage() {
-  const params = useParams()
-  const router = useRouter()
-  const [evangelist, setEvangelist] = useState<Evangelist | null>(null)
-  const [meetings, setMeetings] = useState<Meeting[]>([])
-  const [users, setUsers] = useState<User[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isEditing, setIsEditing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<EditFormState>({
-    firstName: '',
-    lastName: '',
-    email: '',
-    contactMethod: undefined,
-    strength: undefined,
-    managementPhase: undefined,
-    notes: '',
-    tier: 'TIER2',
-    assignedCsId: undefined,
-    listProvided: false,
-    nextAction: '',
-    nextActionDueOn: '',
+function parseTags(tags?: string | null): string[] {
+  if (!tags) return []
+
+  try {
+    const parsed = JSON.parse(tags)
+    return Array.isArray(parsed) ? parsed.filter((value) => typeof value === 'string') : []
+  } catch (error) {
+    console.error('[evangelists:sheet:tags]', error)
+    return []
+  }
+}
+
+export default async function EvangelistSheetPage({
+  params,
+}: {
+  params: { id: string }
+}) {
+  const columns = await getEvangelistColumnSet()
+  const select = buildEvangelistSelect(columns, {
+    includeAssignedCs: true,
   })
 
-  // 新しい面談記録用の状態
-  const [newMeeting, setNewMeeting] = useState({
-    isFirst: false,
-    summary: '',
-    nextActions: '',
-    contactMethod: ''
+  const evangelist = await prisma.evangelist.findUnique({
+    where: { id: params.id },
+    select: {
+      ...select,
+      meetings: {
+        select: {
+          id: true,
+          date: true,
+          isFirst: true,
+          summary: true,
+          nextActions: true,
+          contactMethod: true,
+        },
+        orderBy: { date: 'desc' },
+        take: 1,
+      },
+      requiredIntros: {
+        select: {
+          id: true,
+          status: true,
+          note: true,
+          innovator: {
+            select: {
+              id: true,
+              company: true,
+              url: true,
+            },
+          },
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
   })
-  const [isAddingMeeting, setIsAddingMeeting] = useState(false)
-
-  const fetchUsers = useCallback(async () => {
-    try {
-      const response = await fetch('/api/admin/users?role=CS', {
-        credentials: 'include',
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setUsers((data.users || []) as User[])
-      }
-    } catch (error) {
-      console.error('Failed to fetch users:', error)
-    }
-  }, [])
-
-  const fetchEvangelistData = useCallback(async () => {
-    try {
-      setIsLoading(true)
-      setError(null)
-
-      // EVA詳細データを取得
-      const evangelistResponse = await fetch(`/api/evangelists/${params.id}`, {
-        credentials: 'include',
-      })
-      if (!evangelistResponse.ok) {
-        throw new Error('EVAデータの取得に失敗しました')
-      }
-      const evangelistData: Evangelist = await evangelistResponse.json()
-      setEvangelist(evangelistData)
-      setEditForm({
-        firstName: evangelistData.firstName ?? '',
-        lastName: evangelistData.lastName ?? '',
-        email: evangelistData.email ?? '',
-        contactMethod: evangelistData.contactMethod ?? undefined,
-        strength: evangelistData.strength ?? undefined,
-        managementPhase: evangelistData.managementPhase ?? undefined,
-        notes: evangelistData.notes ?? '',
-        tier: evangelistData.tier,
-        assignedCsId: evangelistData.assignedCsId ?? undefined,
-        listProvided: Boolean(evangelistData.listProvided),
-        nextAction: evangelistData.nextAction ?? '',
-        nextActionDueOn: evangelistData.nextActionDueOn
-          ? evangelistData.nextActionDueOn.slice(0, 10)
-          : '',
-      })
-
-      // 面談履歴を取得
-      const meetingsResponse = await fetch(`/api/evangelists/${params.id}/meetings`, {
-        credentials: 'include',
-      })
-      if (meetingsResponse.ok) {
-        const meetingsData = await meetingsResponse.json()
-        setMeetings(meetingsData)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'データの取得に失敗しました')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [params.id])
-
-  useEffect(() => {
-    if (params.id) {
-      void fetchEvangelistData()
-      void fetchUsers()
-    }
-  }, [params.id, fetchEvangelistData, fetchUsers])
-
-  const handleSave = async () => {
-    try {
-      const payload = {
-        firstName: editForm.firstName,
-        lastName: editForm.lastName,
-        email: editForm.email,
-        contactMethod: editForm.contactMethod ?? null,
-        strength: editForm.strength ?? null,
-        managementPhase: editForm.managementPhase ?? null,
-        notes: editForm.notes,
-        tier: editForm.tier,
-        assignedCsId: editForm.assignedCsId ?? null,
-        listProvided: editForm.listProvided,
-        nextAction: editForm.nextAction ? editForm.nextAction : null,
-        nextActionDueOn: editForm.nextActionDueOn
-          ? new Date(editForm.nextActionDueOn).toISOString()
-          : null,
-      }
-
-      const response = await fetch(`/api/evangelists/${params.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      })
-
-      if (!response.ok) {
-        throw new Error('更新に失敗しました')
-      }
-
-      const updatedData: Evangelist = await response.json()
-      setEvangelist(updatedData)
-      setEditForm({
-        firstName: updatedData.firstName ?? '',
-        lastName: updatedData.lastName ?? '',
-        email: updatedData.email ?? '',
-        contactMethod: updatedData.contactMethod ?? undefined,
-        strength: updatedData.strength ?? undefined,
-        managementPhase: updatedData.managementPhase ?? undefined,
-        notes: updatedData.notes ?? '',
-        tier: updatedData.tier,
-        assignedCsId: updatedData.assignedCsId ?? undefined,
-        listProvided: Boolean(updatedData.listProvided),
-        nextAction: updatedData.nextAction ?? '',
-        nextActionDueOn: updatedData.nextActionDueOn
-          ? updatedData.nextActionDueOn.slice(0, 10)
-          : '',
-      })
-      setIsEditing(false)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '更新に失敗しました')
-    }
-  }
-
-  const handleAddMeeting = async () => {
-    try {
-      const response = await fetch(`/api/evangelists/${params.id}/meetings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(newMeeting),
-      })
-
-      if (!response.ok) {
-        throw new Error('面談記録の追加に失敗しました')
-      }
-
-      const meetingData = await response.json()
-      setMeetings(prev => [meetingData, ...prev])
-      setNewMeeting({
-        isFirst: false,
-        summary: '',
-        nextActions: '',
-        contactMethod: ''
-      })
-      setIsAddingMeeting(false)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '面談記録の追加に失敗しました')
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      </div>
-    )
-  }
 
   if (!evangelist) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <Alert>
-          <AlertDescription>EVAが見つかりませんでした</AlertDescription>
-        </Alert>
-      </div>
-    )
+    notFound()
   }
 
+  const normalized = normalizeEvangelistResult(evangelist)
+  const latestMeeting = evangelist.meetings[0]
+  const tags = parseTags((normalized as { tags?: string | null }).tags)
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* ヘッダー */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.back()}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            戻る
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">
-              {evangelist.firstName} {evangelist.lastName}
-            </h1>
-            <p className="text-muted-foreground">{evangelist.email}</p>
-          </div>
+    <div className="mx-auto max-w-4xl space-y-8 p-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">面談シート</h1>
+          <p className="text-sm text-slate-500">EVAの最新情報と面談メモを記録します。</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge className={TIER_COLORS[evangelist.tier]}>
-            {evangelist.tier}
-          </Badge>
-          {!isEditing ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditing(true)}
-              className="flex items-center gap-2"
-            >
-              <Edit className="h-4 w-4" />
-              編集
-            </Button>
-          ) : (
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setIsEditing(false)
-                  if (evangelist) {
-                    setEditForm({
-                      firstName: evangelist.firstName ?? '',
-                      lastName: evangelist.lastName ?? '',
-                      email: evangelist.email ?? '',
-                      contactMethod: evangelist.contactMethod ?? undefined,
-                      strength: evangelist.strength ?? undefined,
-                      managementPhase: evangelist.managementPhase ?? undefined,
-                      notes: evangelist.notes ?? '',
-                      tier: evangelist.tier,
-                      assignedCsId: evangelist.assignedCsId ?? undefined,
-                      listProvided: Boolean(evangelist.listProvided),
-                      nextAction: evangelist.nextAction ?? '',
-                      nextActionDueOn: evangelist.nextActionDueOn
-                        ? evangelist.nextActionDueOn.slice(0, 10)
-                        : '',
-                    })
-                  }
-                }}
-                className="flex items-center gap-2"
-              >
-                <X className="h-4 w-4" />
-                キャンセル
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSave}
-                className="flex items-center gap-2"
-              >
-                <Save className="h-4 w-4" />
-                保存
-              </Button>
-            </div>
-          )}
-        </div>
+        <Button asChild variant="outline">
+          <Link href="/evangelists">← 一覧へ戻る</Link>
+        </Button>
       </div>
 
-      {/* タブコンテンツ */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="overview">概要</TabsTrigger>
-          <TabsTrigger value="meetings">面談シート</TabsTrigger>
-        </TabsList>
-
-        {/* 概要タブ */}
-        <TabsContent value="overview" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                基本情報
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>氏名</Label>
-                  {isEditing ? (
-                    <div className="flex gap-2">
-                      <Input
-                        value={editForm.firstName || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, firstName: e.target.value }))}
-                        placeholder="姓"
-                      />
-                      <Input
-                        value={editForm.lastName || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, lastName: e.target.value }))}
-                        placeholder="名"
-                      />
-                    </div>
-                  ) : (
-                    <p className="text-sm">{evangelist.firstName} {evangelist.lastName}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    メールアドレス
-                  </Label>
-                  {isEditing ? (
-                    <Input
-                      type="email"
-                      value={editForm.email || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-                    />
-                  ) : (
-                    <p className="text-sm">{evangelist.email}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <Phone className="h-4 w-4" />
-                    連絡先
-                  </Label>
-                  {isEditing ? (
-                    <Select
-                      value={editForm.contactMethod ?? SELECT_CLEAR_VALUE}
-                      onValueChange={(value) =>
-                        setEditForm(prev => ({
-                          ...prev,
-                          contactMethod: value === SELECT_CLEAR_VALUE ? null : value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger className="bg-white">
-                        <SelectValue placeholder="連絡手段を選択" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white text-slate-900">
-                        <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
-                        {CONTACT_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-sm">
-                      {CONTACT_OPTIONS.find(option => option.value === evangelist.contactMethod)?.label || '未設定'}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label>ティア</Label>
-                  {isEditing ? (
-                    <Select
-                      value={editForm.tier || 'TIER2'}
-                      onValueChange={(value: 'TIER1' | 'TIER2') =>
-                        setEditForm(prev => ({ ...prev, tier: value }))
-                      }
-                    >
-                      <SelectTrigger className="bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white text-slate-900">
-                        <SelectItem value="TIER1">TIER1</SelectItem>
-                        <SelectItem value="TIER2">TIER2</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Badge className={TIER_COLORS[evangelist.tier]}>
-                      {evangelist.tier}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>強み・専門分野</Label>
-                {isEditing ? (
-                  <Select
-                    value={editForm.strength ?? SELECT_CLEAR_VALUE}
-                    onValueChange={(value) =>
-                      setEditForm(prev => ({
-                        ...prev,
-                        strength: value === SELECT_CLEAR_VALUE ? null : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="強みを選択" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
-                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
-                      {STRENGTH_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm whitespace-pre-wrap">
-                    {STRENGTH_OPTIONS.find(option => option.value === evangelist.strength)?.label || '未設定'}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>管理フェーズ</Label>
-                {isEditing ? (
-                  <Select
-                    value={editForm.managementPhase ?? SELECT_CLEAR_VALUE}
-                    onValueChange={(value) =>
-                      setEditForm(prev => ({
-                        ...prev,
-                        managementPhase: value === SELECT_CLEAR_VALUE ? null : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="フェーズを選択" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
-                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
-                      {PHASE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm whitespace-pre-wrap">
-                    {PHASE_OPTIONS.find(option => option.value === evangelist.managementPhase)?.label || '未設定'}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>リスト提供</Label>
-                {isEditing ? (
-                  <Select
-                    value={editForm.listProvided ? 'true' : 'false'}
-                    onValueChange={(value) =>
-                      setEditForm(prev => ({
-                        ...prev,
-                        listProvided: value === 'true',
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
-                      <SelectItem value="true">済</SelectItem>
-                      <SelectItem value="false">未</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm">{evangelist.listProvided ? '済' : '未'}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>ネクストアクション</Label>
-                {isEditing ? (
-                  <Textarea
-                    value={editForm.nextAction}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, nextAction: e.target.value }))}
-                    placeholder="次のアクションを入力"
-                    rows={3}
-                  />
-                ) : (
-                  <p className="text-sm whitespace-pre-wrap">{evangelist.nextAction || '未設定'}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>NA期日</Label>
-                {isEditing ? (
-                  <Input
-                    type="date"
-                    value={editForm.nextActionDueOn}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, nextActionDueOn: e.target.value }))}
-                  />
-                ) : (
-                  <p className="text-sm">{formatDate(evangelist.nextActionDueOn) || '未設定'}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>備考</Label>
-                {isEditing ? (
-                  <Textarea
-                    value={editForm.notes || ''}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
-                    placeholder="備考を入力"
-                    rows={3}
-                  />
-                ) : (
-                  <p className="text-sm whitespace-pre-wrap">{evangelist.notes || '未設定'}</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 担当CS情報 */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                担当CS情報
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {isEditing ? (
-                <div className="space-y-2">
-                  <Label>担当CS</Label>
-                  <Select
-                    value={editForm.assignedCsId ?? CS_CLEAR_VALUE}
-                    onValueChange={(value) =>
-                      setEditForm(prev => ({
-                        ...prev,
-                        assignedCsId: value === CS_CLEAR_VALUE ? null : value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="bg-white">
-                      <SelectValue placeholder="CSを選択してください" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
-                      <SelectItem value={CS_CLEAR_VALUE}>未割り当て</SelectItem>
-                      {users.map((user) => (
-                        <SelectItem key={user.id} value={user.id}>
-                          {user.name}（{user.role === 'ADMIN' ? '管理者' : 'CS'}）
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold">基本情報</h2>
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-slate-500">氏名</dt>
+            <dd className="font-medium">{formatFullName(normalized.firstName, normalized.lastName)}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">メール</dt>
+            <dd className="font-medium">{normalized.email || '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">Tier</dt>
+            <dd className="font-medium">{normalized.tier}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">担当CS</dt>
+            <dd className="font-medium">
+              {normalized.assignedCs?.name ?? (normalized.assignedCsId ? '割り当て済み' : '未割り当て')}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">強み</dt>
+            <dd className="font-medium">{normalized.strength ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">希望連絡手段</dt>
+            <dd className="font-medium">{normalized.contactMethod ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">フェーズ</dt>
+            <dd className="font-medium">{normalized.managementPhase ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">最終更新</dt>
+            <dd className="font-medium">{formatDate(normalized.updatedAt)}</dd>
+          </div>
+          <div className="sm:col-span-2">
+            <dt className="text-slate-500">タグ</dt>
+            <dd className="flex flex-wrap gap-2 pt-1 text-xs font-medium">
+              {tags.length === 0 ? (
+                <span className="text-slate-500">設定なし</span>
               ) : (
-                <p className="text-sm">
-                  {evangelist.assignedCs ? evangelist.assignedCs.name : '未割り当て'}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* 面談シートタブ */}
-        <TabsContent value="meetings" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">面談履歴</h2>
-            <Button
-              onClick={() => setIsAddingMeeting(true)}
-              className="flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              面談記録を追加
-            </Button>
-          </div>
-
-          {/* 新しい面談記録の追加フォーム */}
-          {isAddingMeeting && (
-            <Card>
-              <CardHeader>
-                <CardTitle>新しい面談記録</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="isFirst"
-                    checked={newMeeting.isFirst}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewMeeting(prev => ({ ...prev, isFirst: e.target.checked }))}
-                  />
-                  <Label htmlFor="isFirst">初回面談</Label>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>連絡方法</Label>
-                  <Input
-                    value={newMeeting.contactMethod}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewMeeting(prev => ({ ...prev, contactMethod: e.target.value }))}
-                    placeholder="電話、メール、対面など"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>面談サマリー</Label>
-                  <Textarea
-                    value={newMeeting.summary}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewMeeting(prev => ({ ...prev, summary: e.target.value }))}
-                    placeholder="面談の内容をまとめてください"
-                    rows={4}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>次回アクション</Label>
-                  <Textarea
-                    value={newMeeting.nextActions}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewMeeting(prev => ({ ...prev, nextActions: e.target.value }))}
-                    placeholder="次回までに行うアクションを記載"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <Button onClick={handleAddMeeting}>
-                    保存
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setIsAddingMeeting(false)
-                      setNewMeeting({
-                        isFirst: false,
-                        summary: '',
-                        nextActions: '',
-                        contactMethod: ''
-                      })
-                    }}
+                tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700"
                   >
-                    キャンセル
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 面談履歴一覧 */}
-          <div className="space-y-4">
-            {meetings.length === 0 ? (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
-                  <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>まだ面談記録がありません</p>
-                </CardContent>
-              </Card>
-            ) : (
-              meetings.map((meeting) => (
-                <Card key={meeting.id}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        {new Date(meeting.date).toLocaleDateString('ja-JP')}
-                        {meeting.isFirst && (
-                          <Badge variant="secondary" className="text-xs">初回</Badge>
-                        )}
-                      </CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {meeting.contactMethod}
-                      </p>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {meeting.summary && (
-                      <div>
-                        <h4 className="font-medium mb-2">面談サマリー</h4>
-                        <p className="text-sm whitespace-pre-wrap">{meeting.summary}</p>
-                      </div>
-                    )}
-                    {meeting.nextActions && (
-                      <div>
-                        <h4 className="font-medium mb-2">次回アクション</h4>
-                        <p className="text-sm whitespace-pre-wrap">{meeting.nextActions}</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))
-            )}
+                    {tag}
+                  </span>
+                ))
+              )}
+            </dd>
           </div>
-        </TabsContent>
-      </Tabs>
+        </dl>
+      </section>
+
+      <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold">紹介必須イノベータ</h2>
+        {evangelist.requiredIntros.length === 0 ? (
+          <p className="text-sm text-slate-500">現在設定されているイノベータはありません。</p>
+        ) : (
+          <ul className="space-y-3 text-sm">
+            {evangelist.requiredIntros.map((intro) => (
+              <li key={intro.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-medium text-slate-900">{intro.innovator.company}</p>
+                  <span className="text-xs font-semibold uppercase text-slate-500">{intro.status}</span>
+                </div>
+                {intro.innovator.url ? (
+                  <a
+                    href={intro.innovator.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 underline"
+                  >
+                    {intro.innovator.url}
+                  </a>
+                ) : null}
+                {intro.note ? <p className="mt-2 text-xs text-slate-600">備考: {intro.note}</p> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <SheetForm
+        evangelist={{
+          id: normalized.id,
+          strength: normalized.strength ?? '',
+          contactPref: normalized.contactMethod ?? '',
+          managementPhase: normalized.managementPhase ?? '',
+        }}
+        latestMeeting={
+          latestMeeting
+            ? {
+                id: latestMeeting.id,
+                date: latestMeeting.date.toISOString(),
+                isFirst: latestMeeting.isFirst,
+                summary: latestMeeting.summary ?? '',
+                nextActions: latestMeeting.nextActions ?? '',
+                contactMethod: latestMeeting.contactMethod ?? '',
+              }
+            : null
+        }
+      />
     </div>
   )
 }
