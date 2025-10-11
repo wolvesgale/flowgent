@@ -567,7 +567,7 @@ export default function EvangelistsPage() {
                           </Button>
                           <Link href={`/evangelists/${evangelist.id}`}>
                             <Button variant="outline" size="sm">
-                              詳細
+                              面談
                             </Button>
                           </Link>
                         </div>
