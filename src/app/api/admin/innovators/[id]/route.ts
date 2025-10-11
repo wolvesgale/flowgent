@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 
+import type { Prisma } from '@prisma/client'
+
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
+import { getInnovatorColumns, innovatorHasColumn } from '@/lib/innovator-columns'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
@@ -72,12 +75,13 @@ export async function PUT(request: Request, context: unknown) {
     }
 
     const body = await request.json()
-    
+
     // バリデーション
     const validatedData = innovatorUpdateSchema.parse(body)
 
     const existingInnovator = await prisma.innovator.findUnique({
-      where: { id }
+      where: { id },
+      select: { id: true },
     })
 
     if (!existingInnovator) {
@@ -87,37 +91,75 @@ export async function PUT(request: Request, context: unknown) {
       )
     }
 
+    const columns = await getInnovatorColumns()
+
+    const data: Prisma.InnovatorUpdateInput = {}
+
+    if (validatedData.company !== undefined && innovatorHasColumn(columns, 'company')) {
+      data.company = validatedData.company
+    }
+
+    if (validatedData.url !== undefined && innovatorHasColumn(columns, 'url')) {
+      data.url = validatedData.url
+    }
+
+    if (
+      validatedData.introductionPoint !== undefined &&
+      innovatorHasColumn(columns, 'introductionPoint')
+    ) {
+      data.introductionPoint = validatedData.introductionPoint
+    }
+
+    if (validatedData.domain !== undefined && innovatorHasColumn(columns, 'domain')) {
+      data.domain = validatedData.domain
+    }
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json(
+        { error: 'No valid fields to update for current schema' },
+        { status: 400 }
+      )
+    }
+
+    const select: Prisma.InnovatorSelect = {
+      id: true,
+      company: true,
+      domain: true,
+      createdAt: true,
+      updatedAt: true,
+    }
+
+    if (innovatorHasColumn(columns, 'url')) {
+      select.url = true
+    }
+
+    if (innovatorHasColumn(columns, 'introductionPoint')) {
+      select.introductionPoint = true
+    }
+
     const updatedInnovator = await prisma.innovator.update({
       where: { id },
-      data: validatedData,
-      select: {
-        id: true,
-        company: true,
-        url: true,
-        introductionPoint: true,
-        domain: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      data,
+      select,
     })
 
     return NextResponse.json({ ok: true, innovator: updatedInnovator })
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return NextResponse.json(
-          { error: 'Invalid request data', details: error.issues },
-          { status: 400 }
-        )
-      }
-
-      const err = error as { code?: string; message?: string }
-      console.error('[innovators:update]', err?.code ?? 'UNKNOWN', err)
+  } catch (error) {
+    if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Internal server error', code: err?.code },
-        { status: 500 }
+        { error: 'Invalid request data', details: error.issues },
+        { status: 400 }
       )
     }
+
+    const err = error as { code?: string; message?: string }
+    console.error('[innovators:update]', err?.code ?? 'UNKNOWN', err)
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    )
   }
+}
 
 export async function DELETE(_request: Request, context: unknown) {
   try {
@@ -134,7 +176,8 @@ export async function DELETE(_request: Request, context: unknown) {
 
     // 存在チェック
     const existingInnovator = await prisma.innovator.findUnique({
-      where: { id }
+      where: { id },
+      select: { id: true },
     })
 
     if (!existingInnovator) {
@@ -146,16 +189,16 @@ export async function DELETE(_request: Request, context: unknown) {
 
     // イノベータ削除
     await prisma.innovator.delete({
-      where: { id }
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Innovator deleted successfully' })
-    } catch (error) {
-      const err = error as { code?: string; message?: string }
-      console.error('[innovators:delete]', err?.code ?? 'UNKNOWN', err)
-      return NextResponse.json(
-        { error: 'Internal server error', code: err?.code },
-        { status: 500 }
-      )
-    }
+  } catch (error) {
+    const err = error as { code?: string; message?: string }
+    console.error('[innovators:delete]', err?.code ?? 'UNKNOWN', err)
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    )
   }
+}
