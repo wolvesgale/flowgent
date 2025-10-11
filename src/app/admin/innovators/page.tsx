@@ -31,7 +31,7 @@ interface Innovator {
   company: string
   url?: string | null
   introductionPoint?: string | null
-  domain: Domain
+  domain?: Domain | null
   createdAt: string
   updatedAt: string
 }
@@ -208,7 +208,7 @@ export default function AdminInnovatorsPage() {
       company: innovator.company,
       url: innovator.url || '',
       introductionPoint: innovator.introductionPoint || '',
-      domain: innovator.domain,
+      domain: (innovator.domain ?? 'IT') as Domain,
     })
     setIsEditDialogOpen(true)
   }
@@ -464,7 +464,9 @@ export default function AdminInnovatorsPage() {
                         {innovator.introductionPoint || '—'}
                       </TableCell>
                       <TableCell>
-                        {DOMAIN_OPTIONS.find((option) => option.value === innovator.domain)?.label ?? innovator.domain}
+                        {innovator.domain
+                          ? DOMAIN_OPTIONS.find((option) => option.value === innovator.domain)?.label ?? innovator.domain
+                          : '—'}
                       </TableCell>
                       <TableCell>{formatDate(innovator.createdAt)}</TableCell>
                       <TableCell>
