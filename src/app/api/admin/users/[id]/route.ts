@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { z } from 'zod'
@@ -32,17 +32,14 @@ async function checkAdminPermission() {
 }
 
 // GET /api/admin/users/[id] - ユーザー詳細取得
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_request: Request, context: unknown) {
   try {
     const authCheck = await checkAdminPermission()
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
 
-    const { id } = await params
+    const { id } = (context as { params: { id: string } }).params
 
     const user = await prisma.user.findUnique({
       where: { id },
@@ -80,17 +77,14 @@ export async function GET(
 }
 
 // PUT /api/admin/users/[id] - ユーザー更新
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: Request, context: unknown) {
   try {
     const authCheck = await checkAdminPermission()
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
 
-    const { id } = await params
+    const { id } = (context as { params: { id: string } }).params
 
     const body = await request.json()
     
@@ -173,17 +167,14 @@ export async function PUT(
 }
 
 // DELETE /api/admin/users/[id] - ユーザー削除
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_request: Request, context: unknown) {
   try {
     const authCheck = await checkAdminPermission()
     if (!authCheck.authorized) {
       return NextResponse.json({ error: authCheck.error }, { status: authCheck.status })
     }
 
-    const { id } = await params
+    const { id } = (context as { params: { id: string } }).params
 
     // ユーザーが存在するかチェック
     const existingUser = await prisma.user.findUnique({

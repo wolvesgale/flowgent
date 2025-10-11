@@ -11,7 +11,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Search, Plus, Edit, Trash2, Link as LinkIcon, Map } from 'lucide-react'
 import { toast } from 'sonner'
-import { mapBusinessDomainOrDefault } from '@/lib/business-domain'
 
 const DOMAIN_OPTIONS = [
   { value: 'HR', label: '人事' },
@@ -32,7 +31,7 @@ interface Innovator {
   company: string
   url?: string | null
   introductionPoint?: string | null
-  domain: Domain
+  domain?: Domain | null
   createdAt: string
   updatedAt: string
 }
@@ -51,19 +50,24 @@ export default function AdminInnovatorsPage() {
     company: '',
     url: '',
     introductionPoint: '',
-    domain: 'HR' as Domain,
+    domain: 'IT' as Domain,
   })
   const itemsPerPage = 10
 
   const fetchInnovators = useCallback(async () => {
     try {
       setLoading(true)
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: itemsPerPage.toString(),
-        search: searchTerm,
-        domain: domainFilter === 'ALL' ? '' : domainFilter,
-      })
+      const params = new URLSearchParams()
+      params.set('page', currentPage.toString())
+      params.set('limit', itemsPerPage.toString())
+
+      if (searchTerm.trim()) {
+        params.set('search', searchTerm.trim())
+      }
+
+      if (domainFilter !== 'ALL') {
+        params.set('domain', domainFilter)
+      }
 
       const response = await fetch(`/api/admin/innovators?${params}`, {
         credentials: 'include',
@@ -94,9 +98,14 @@ export default function AdminInnovatorsPage() {
     const trimmedUrl = formData.url.trim()
     const trimmedIntroductionPoint = formData.introductionPoint.trim()
 
+    if (!formData.domain) {
+      toast.error('領域を選んでください')
+      return null
+    }
+
     return {
       company: trimmedCompany,
-      domain: mapBusinessDomainOrDefault(formData.domain),
+      domain: formData.domain,
       url: trimmedUrl.length > 0 ? trimmedUrl : undefined,
       introductionPoint: trimmedIntroductionPoint.length > 0 ? trimmedIntroductionPoint : undefined,
     }
@@ -189,7 +198,7 @@ export default function AdminInnovatorsPage() {
       company: '',
       url: '',
       introductionPoint: '',
-      domain: 'HR',
+      domain: 'IT',
     })
   }
 
@@ -199,7 +208,7 @@ export default function AdminInnovatorsPage() {
       company: innovator.company,
       url: innovator.url || '',
       introductionPoint: innovator.introductionPoint || '',
-      domain: innovator.domain,
+      domain: (innovator.domain ?? 'IT') as Domain,
     })
     setIsEditDialogOpen(true)
   }
@@ -455,7 +464,9 @@ export default function AdminInnovatorsPage() {
                         {innovator.introductionPoint || '—'}
                       </TableCell>
                       <TableCell>
-                        {DOMAIN_OPTIONS.find((option) => option.value === innovator.domain)?.label ?? innovator.domain}
+                        {innovator.domain
+                          ? DOMAIN_OPTIONS.find((option) => option.value === innovator.domain)?.label ?? innovator.domain
+                          : '—'}
                       </TableCell>
                       <TableCell>{formatDate(innovator.createdAt)}</TableCell>
                       <TableCell>
