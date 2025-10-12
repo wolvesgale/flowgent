@@ -193,6 +193,8 @@ export async function POST(request: Request) {
           { status: 400 }
         )
       }
+      data.domain = domain
+    }
 
       domain = normalizeDomain(rawDomain)
       if (!domain) {
