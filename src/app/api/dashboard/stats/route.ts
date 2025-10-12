@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { getEvangelistColumnSet } from '@/lib/evangelist-columns'
+import { getInnovatorColumns, hasColumn } from '@/lib/live-schema'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -52,6 +53,17 @@ export async function GET() {
       columns = new Set<string>()
     }
 
+    let innovatorColumns: Set<string>
+    try {
+      innovatorColumns = await getInnovatorColumns()
+    } catch (error) {
+      const err = error as { code?: string; message?: string }
+      console.error('[dashboard/stats:innovatorColumns]', err?.code, err?.message, error)
+      innovatorColumns = new Set<string>()
+    }
+
+    const hasIntroductionPointColumn = hasColumn(innovatorColumns, 'introductionPoint')
+
     const [totalEvangelists, pendingMeetings, requiredInnovators, staleEvangelists] = await Promise.all([
       safeCount('totalEvangelists', () => prisma.evangelist.count()),
       safeCount('pendingMeetings', () =>
@@ -61,11 +73,13 @@ export async function GET() {
           },
         })
       ),
-      safeCount('requiredInnovators', () =>
-        prisma.innovator.count({
-          where: { introductionPoint: null },
-        })
-      ),
+      hasIntroductionPointColumn
+        ? safeCount('requiredInnovators', () =>
+            prisma.innovator.count({
+              where: { introductionPoint: null },
+            })
+          )
+        : Promise.resolve(0),
       safeCount('staleEvangelists', () =>
         prisma.evangelist.count({
           where: {

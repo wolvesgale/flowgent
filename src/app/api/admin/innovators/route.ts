@@ -1,39 +1,49 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+
+import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
-import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
+import { BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
 import type { BusinessDomainValue } from '@/lib/business-domain'
-import { z } from 'zod'
+import { getInnovatorColumns } from '@/lib/live-schema'
+import {
+  buildSelect,
+  computeAvailability,
+  mapPayloadToData,
+  type InnovatorPayload,
+} from './column-helpers'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const BusinessDomainEnum = z.enum(BUSINESS_DOMAIN_VALUES)
+const BUSINESS_DOMAIN_SET = new Set<BusinessDomainValue>(BUSINESS_DOMAIN_VALUES)
 
-const innovatorSchema = z.object({
-  company: z
-    .string()
-    .transform((value) => value.trim())
-    .pipe(z.string().min(1, 'Company is required')),
-  url: z.preprocess(
-    (value) => {
-      if (typeof value !== 'string') return value
-      const trimmed = value.trim()
-      return trimmed.length === 0 ? undefined : trimmed
-    },
-    z.string().url('Invalid URL').optional()
-  ),
-  introductionPoint: z.preprocess(
-    (value) => {
-      if (typeof value !== 'string') return value
-      const trimmed = value.trim()
-      return trimmed.length === 0 ? undefined : trimmed
-    },
-    z.string().optional()
-  ),
-  domain: z.preprocess((value) => mapBusinessDomainOrDefault(value), BusinessDomainEnum),
-})
+function normalizeDomain(input: unknown): BusinessDomainValue | undefined {
+  if (input == null) {
+    return undefined
+  }
+
+  const normalized = String(input).trim().toUpperCase() as BusinessDomainValue
+  if (!normalized) {
+    return undefined
+  }
+
+  return BUSINESS_DOMAIN_SET.has(normalized) ? normalized : undefined
+}
+
+function parsePositiveInt(value: string | null, defaultValue: number, max?: number) {
+  const parsed = Number.parseInt((value ?? '').trim(), 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultValue
+  }
+
+  if (typeof max === 'number') {
+    return Math.min(parsed, max)
+  }
+
+  return parsed
+}
 
 async function checkAdminPermission() {
   const session = await getSession()
@@ -45,7 +55,7 @@ async function checkAdminPermission() {
   return session.role === 'ADMIN'
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
     // 管理者権限チェック
     if (!(await checkAdminPermission())) {
@@ -53,44 +63,63 @@ export async function GET(request: NextRequest) {
     }
 
     // クエリパラメータの取得
+    const columns = await getInnovatorColumns()
+    const availability = computeAvailability(columns)
     const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '10')
-    const search = searchParams.get('search') || ''
-    const domain = searchParams.get('domain') || ''
+    const page = parsePositiveInt(searchParams.get('page'), 1)
+    const limit = parsePositiveInt(searchParams.get('limit'), 10, 100)
+    const search = (searchParams.get('search') ?? '').trim()
+    const domain = availability.domain
+      ? normalizeDomain(searchParams.get('domain'))
+      : undefined
 
     const skip = (page - 1) * limit
 
     // 検索条件の構築
-    interface WhereInput {
-      OR?: Array<{
-        company?: { contains: string; mode: 'insensitive' }
-        introductionPoint?: { contains: string; mode: 'insensitive' }
-      }>
-      domain?: BusinessDomainValue
-    }
-    
-    const where: WhereInput = {}
-    
+    const where: Prisma.InnovatorWhereInput = {}
+    const orConditions: Prisma.InnovatorWhereInput[] = []
+
     if (search) {
-      where.OR = [
-        { company: { contains: search, mode: 'insensitive' } },
-        { introductionPoint: { contains: search, mode: 'insensitive' } },
-      ]
+      if (availability.company) {
+        orConditions.push({ company: { contains: search, mode: 'insensitive' } })
+      }
+
+      if (availability.introductionPoint) {
+        orConditions.push({ introductionPoint: { contains: search, mode: 'insensitive' } })
+      }
+
+      if (availability.url) {
+        orConditions.push({ url: { contains: search, mode: 'insensitive' } })
+      }
     }
 
-    if (domain && domain !== 'ALL') {
-      where.domain = domain as WhereInput['domain']
+    if (domain && availability.domain) {
+      where.domain = domain
+    }
+
+    if (orConditions.length > 0) {
+      where.OR = orConditions
+    }
+
+    const findManyArgs: Prisma.InnovatorFindManyArgs = {
+      where,
+      skip,
+      take: limit,
+    }
+
+    const select = buildSelect(availability)
+
+    if (availability.createdAt) {
+      findManyArgs.orderBy = { createdAt: 'desc' }
+    }
+
+    if (select) {
+      findManyArgs.select = select
     }
 
     // データ取得
     const [innovators, total] = await Promise.all([
-      prisma.innovator.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
+      prisma.innovator.findMany(findManyArgs),
       prisma.innovator.count({ where }),
     ])
 
@@ -98,57 +127,120 @@ export async function GET(request: NextRequest) {
       innovators,
       total,
       page,
+      limit,
       totalPages: Math.ceil(total / limit),
     })
-    } catch (error) {
-      const err = error as { code?: string; message?: string }
-      console.error('[innovators:list]', err?.code ?? 'UNKNOWN', err)
-      return NextResponse.json(
-        { error: 'Internal server error', code: err?.code },
-        { status: 500 }
-      )
-    }
+  } catch (error) {
+    const err = error as { code?: string; message?: string }
+    console.error('[innovators:list]', err?.code ?? 'UNKNOWN', err)
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    )
   }
+}
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     // 管理者権限チェック
     if (!(await checkAdminPermission())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    
-    // バリデーション
-    const validatedData = innovatorSchema.parse(body)
+    const columns = await getInnovatorColumns()
+    const availability = computeAvailability(columns)
 
-    const innovator = await prisma.innovator.create({
-      data: validatedData,
-      select: {
-        id: true,
-        company: true,
-        url: true,
-        introductionPoint: true,
-        domain: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const body = await request
+      .json()
+      .catch(() => ({} as Record<string, unknown>))
 
-    return NextResponse.json({ ok: true, innovator }, { status: 201 })
-    } catch (error) {
-      if (error instanceof z.ZodError) {
+    const company = typeof body.company === 'string' ? body.company.trim() : ''
+    const url = typeof body.url === 'string' ? body.url.trim() : ''
+    const introductionPoint =
+      typeof body.introductionPoint === 'string' ? body.introductionPoint.trim() : ''
+    const rawDomain = body.domain
+    const domainProvided =
+      rawDomain !== undefined && rawDomain !== null && String(rawDomain).trim().length > 0
+
+    if (!company) {
+      return NextResponse.json(
+        {
+          error: 'Invalid request',
+          details: 'company は必須です',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (!availability.company) {
+      return NextResponse.json(
+        {
+          error: 'Invalid schema',
+          details: 'name/company 列が存在しないため登録できません',
+        },
+        { status: 500 }
+      )
+    }
+
+    let domain: BusinessDomainValue | undefined
+    if (availability.domain) {
+      if (!domainProvided) {
         return NextResponse.json(
-          { error: 'Invalid request data', details: error.issues },
+          {
+            error: 'Invalid request',
+            details: 'domain は必須です',
+          },
           { status: 400 }
         )
       }
 
-      const err = error as { code?: string; message?: string }
-      console.error('[innovators:create]', err?.code ?? 'UNKNOWN', err)
-      return NextResponse.json(
-        { error: 'Internal server error', code: err?.code },
-        { status: 500 }
-      )
+      domain = normalizeDomain(rawDomain)
+      if (!domain) {
+        return NextResponse.json(
+          {
+            error: 'Invalid request',
+            details: 'domain は定義済みの値のみ許可されています',
+          },
+          { status: 400 }
+        )
+      }
     }
+
+    const payload: InnovatorPayload = {
+      company,
+    }
+
+    if (availability.domain && domain) {
+      payload.domain = domain
+    }
+    if (availability.url && url.length > 0) {
+      payload.url = url
+    }
+    if (availability.introductionPoint && introductionPoint.length > 0) {
+      payload.introductionPoint = introductionPoint
+    }
+
+    const data = mapPayloadToData(payload, availability)
+    const select = buildSelect(availability)
+
+    const createArgs: Prisma.InnovatorCreateArgs = {
+      data: data as Prisma.InnovatorCreateInput,
+    }
+
+    if (select) {
+      createArgs.select = select
+    }
+
+    const innovator = await prisma.innovator.create(createArgs)
+
+    return NextResponse.json({ ok: true, innovator }, { status: 201 })
+  } catch (error) {
+    const err = error as { code?: string; message?: string }
+    console.error('[innovators:create]', err?.code ?? 'UNKNOWN', err)
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    )
   }
+}
+

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
@@ -51,10 +51,7 @@ const updateEvangelistSchema = z
   })
 
 // GET /api/evangelists/[id] - EVA詳細取得
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_request: Request, context: unknown) {
   try {
     const session = await getSession()
 
@@ -62,7 +59,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = (context as { params: { id: string } }).params
 
     const columns = await getEvangelistColumnSet()
     const select = buildEvangelistSelect(columns, {
@@ -91,10 +88,7 @@ export async function GET(
 }
 
 // PUT /api/evangelists/[id] - EVA情報更新
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: Request, context: unknown) {
   try {
     const session = await getSession()
 
@@ -102,7 +96,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = (context as { params: { id: string } }).params
     const body = await request.json()
     
     // バリデーション
@@ -205,10 +199,7 @@ export async function PUT(
 }
 
 // DELETE /api/evangelists/[id] - EVA削除
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_request: Request, context: unknown) {
   try {
     const session = await getSession()
 
@@ -216,7 +207,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = (context as { params: { id: string } }).params
 
     // EVAが存在するかチェック
     const existingEvangelist = await prisma.evangelist.findUnique({

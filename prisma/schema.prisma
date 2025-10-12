@@ -28,13 +28,15 @@ enum Role {
 }
 
 model Innovator {
-  id                Int      @id @default(autoincrement())
-  company           String
+  id                Int               @id @default(autoincrement())
+  company           String            @map("name")
   url               String?
   introductionPoint String?
-  domain            BusinessDomain
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  domain            BusinessDomain?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@map("Innovator")
 }
 
 model Evangelist {

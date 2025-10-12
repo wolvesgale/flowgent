@@ -1,8 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+
+import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
+import { getInnovatorColumns } from '@/lib/live-schema'
+import {
+  buildSelect,
+  computeAvailability,
+  mapPayloadToData,
+  type InnovatorPayload,
+} from '../column-helpers'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
@@ -58,29 +67,27 @@ async function checkAdminPermission() {
   return session.role === 'ADMIN'
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: Request, context: unknown) {
   try {
     // 管理者権限チェック
     if (!(await checkAdminPermission())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: idParam } = await params
+    const { id: idParam } = (context as { params: { id: string } }).params
     const id = parseInt(idParam)
     if (isNaN(id)) {
       return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
     }
 
     const body = await request.json()
-    
+
     // バリデーション
     const validatedData = innovatorUpdateSchema.parse(body)
 
     const existingInnovator = await prisma.innovator.findUnique({
-      where: { id }
+      where: { id },
+      select: { id: true },
     })
 
     if (!existingInnovator) {
@@ -90,49 +97,75 @@ export async function PUT(
       )
     }
 
-    const updatedInnovator = await prisma.innovator.update({
-      where: { id },
-      data: validatedData,
-      select: {
-        id: true,
-        company: true,
-        url: true,
-        introductionPoint: true,
-        domain: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
+    const columns = await getInnovatorColumns()
+    const availability = computeAvailability(columns)
 
-    return NextResponse.json({ ok: true, innovator: updatedInnovator })
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return NextResponse.json(
-          { error: 'Invalid request data', details: error.issues },
-          { status: 400 }
-        )
-      }
+    const payload: InnovatorPayload = {}
 
-      const err = error as { code?: string; message?: string }
-      console.error('[innovators:update]', err?.code ?? 'UNKNOWN', err)
+    if (validatedData.company !== undefined) {
+      payload.company = validatedData.company
+    }
+
+    if (validatedData.url !== undefined) {
+      payload.url = validatedData.url
+    }
+
+    if (validatedData.introductionPoint !== undefined) {
+      payload.introductionPoint = validatedData.introductionPoint
+    }
+
+    if (validatedData.domain !== undefined) {
+      payload.domain = validatedData.domain
+    }
+
+    const data = mapPayloadToData(payload, availability)
+
+    if (Object.keys(data).length === 0) {
       return NextResponse.json(
-        { error: 'Internal server error', code: err?.code },
-        { status: 500 }
+        { error: 'No valid fields to update for current schema' },
+        { status: 400 }
       )
     }
-  }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+    const select = buildSelect(availability)
+
+    const updateArgs: Prisma.InnovatorUpdateArgs = {
+      where: { id },
+      data: data as Prisma.InnovatorUpdateInput,
+    }
+
+    if (select) {
+      updateArgs.select = select
+    }
+
+    const updatedInnovator = await prisma.innovator.update(updateArgs)
+
+    return NextResponse.json({ ok: true, innovator: updatedInnovator })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Invalid request data', details: error.issues },
+        { status: 400 }
+      )
+    }
+
+    const err = error as { code?: string; message?: string }
+    console.error('[innovators:update]', err?.code ?? 'UNKNOWN', err)
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(_request: Request, context: unknown) {
   try {
     // 管理者権限チェック
     if (!(await checkAdminPermission())) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: idParam } = await params
+    const { id: idParam } = (context as { params: { id: string } }).params
     const id = parseInt(idParam)
     if (isNaN(id)) {
       return NextResponse.json({ error: 'Invalid ID' }, { status: 400 })
@@ -140,7 +173,8 @@ export async function DELETE(
 
     // 存在チェック
     const existingInnovator = await prisma.innovator.findUnique({
-      where: { id }
+      where: { id },
+      select: { id: true },
     })
 
     if (!existingInnovator) {
@@ -152,16 +186,16 @@ export async function DELETE(
 
     // イノベータ削除
     await prisma.innovator.delete({
-      where: { id }
+      where: { id },
     })
 
     return NextResponse.json({ message: 'Innovator deleted successfully' })
-    } catch (error) {
-      const err = error as { code?: string; message?: string }
-      console.error('[innovators:delete]', err?.code ?? 'UNKNOWN', err)
-      return NextResponse.json(
-        { error: 'Internal server error', code: err?.code },
-        { status: 500 }
-      )
-    }
+  } catch (error) {
+    const err = error as { code?: string; message?: string }
+    console.error('[innovators:delete]', err?.code ?? 'UNKNOWN', err)
+    return NextResponse.json(
+      { error: 'Internal server error', code: err?.code },
+      { status: 500 }
+    )
   }
+}
