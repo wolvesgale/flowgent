@@ -6,7 +6,13 @@ import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
 import type { BusinessDomainValue } from '@/lib/business-domain'
-import { getInnovatorColumns, hasColumn } from '@/lib/live-schema'
+import { getInnovatorColumns } from '@/lib/live-schema'
+import {
+  buildSelect,
+  computeAvailability,
+  mapPayloadToData,
+  type InnovatorPayload,
+} from './column-helpers'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -58,18 +64,14 @@ export async function GET(request: Request) {
 
     // クエリパラメータの取得
     const columns = await getInnovatorColumns()
-    const hasIdColumn = hasColumn(columns, 'id')
-    const hasCompanyColumn = hasColumn(columns, 'company')
-    const hasDomainColumn = hasColumn(columns, 'domain')
-    const hasUrlColumn = hasColumn(columns, 'url')
-    const hasIntroductionPointColumn = hasColumn(columns, 'introductionPoint')
-    const hasCreatedAtColumn = hasColumn(columns, 'createdAt')
-    const hasUpdatedAtColumn = hasColumn(columns, 'updatedAt')
+    const availability = computeAvailability(columns)
     const { searchParams } = new URL(request.url)
     const page = parsePositiveInt(searchParams.get('page'), 1)
     const limit = parsePositiveInt(searchParams.get('limit'), 10, 100)
     const search = (searchParams.get('search') ?? '').trim()
-    const domain = normalizeDomain(searchParams.get('domain'))
+    const domain = availability.domain
+      ? normalizeDomain(searchParams.get('domain'))
+      : undefined
 
     const skip = (page - 1) * limit
 
@@ -78,49 +80,25 @@ export async function GET(request: Request) {
     const orConditions: Prisma.InnovatorWhereInput[] = []
 
     if (search) {
-      if (hasCompanyColumn) {
+      if (availability.company) {
         orConditions.push({ company: { contains: search, mode: 'insensitive' } })
       }
 
-      if (hasIntroductionPointColumn) {
+      if (availability.introductionPoint) {
         orConditions.push({ introductionPoint: { contains: search, mode: 'insensitive' } })
       }
 
-      if (hasUrlColumn) {
+      if (availability.url) {
         orConditions.push({ url: { contains: search, mode: 'insensitive' } })
       }
     }
 
-    if (domain && hasDomainColumn) {
+    if (domain && availability.domain) {
       where.domain = domain
     }
 
     if (orConditions.length > 0) {
       where.OR = orConditions
-    }
-
-    const select: Prisma.InnovatorSelect = {}
-
-    if (hasIdColumn) {
-      select.id = true
-    }
-    if (hasCompanyColumn) {
-      select.company = true
-    }
-    if (hasDomainColumn) {
-      select.domain = true
-    }
-    if (hasCreatedAtColumn) {
-      select.createdAt = true
-    }
-    if (hasUpdatedAtColumn) {
-      select.updatedAt = true
-    }
-    if (hasUrlColumn) {
-      select.url = true
-    }
-    if (hasIntroductionPointColumn) {
-      select.introductionPoint = true
     }
 
     const findManyArgs: Prisma.InnovatorFindManyArgs = {
@@ -129,11 +107,13 @@ export async function GET(request: Request) {
       take: limit,
     }
 
-    if (hasCreatedAtColumn) {
+    const select = buildSelect(availability)
+
+    if (availability.createdAt) {
       findManyArgs.orderBy = { createdAt: 'desc' }
     }
 
-    if (Object.keys(select).length > 0) {
+    if (select) {
       findManyArgs.select = select
     }
 
@@ -168,13 +148,7 @@ export async function POST(request: Request) {
     }
 
     const columns = await getInnovatorColumns()
-    const hasIdColumn = hasColumn(columns, 'id')
-    const hasCompanyColumn = hasColumn(columns, 'company')
-    const hasDomainColumn = hasColumn(columns, 'domain')
-    const hasUrlColumn = hasColumn(columns, 'url')
-    const hasIntroductionPointColumn = hasColumn(columns, 'introductionPoint')
-    const hasCreatedAtColumn = hasColumn(columns, 'createdAt')
-    const hasUpdatedAtColumn = hasColumn(columns, 'updatedAt')
+    const availability = computeAvailability(columns)
 
     const body = await request
       .json()
@@ -184,6 +158,9 @@ export async function POST(request: Request) {
     const url = typeof body.url === 'string' ? body.url.trim() : ''
     const introductionPoint =
       typeof body.introductionPoint === 'string' ? body.introductionPoint.trim() : ''
+    const rawDomain = body.domain
+    const domainProvided =
+      rawDomain !== undefined && rawDomain !== null && String(rawDomain).trim().length > 0
 
     if (!company) {
       return NextResponse.json(
@@ -195,19 +172,31 @@ export async function POST(request: Request) {
       )
     }
 
-    if (!hasCompanyColumn) {
+    if (!availability.company) {
       return NextResponse.json(
-        { error: 'Invalid schema', details: 'company 列が存在しないため登録できません' },
+        {
+          error: 'Invalid schema',
+          details: 'name/company 列が存在しないため登録できません',
+        },
         { status: 500 }
       )
     }
 
-    const data: Record<string, unknown> = {
-      company,
+    let domain: BusinessDomainValue | undefined
+    if (availability.domain) {
+      if (!domainProvided) {
+        return NextResponse.json(
+          {
+            error: 'Invalid request',
+            details: 'domain は必須です',
+          },
+          { status: 400 }
+        )
+      }
+      data.domain = domain
     }
 
-    if (hasDomainColumn) {
-      const domain = normalizeDomain(body.domain)
+      domain = normalizeDomain(rawDomain)
       if (!domain) {
         return NextResponse.json(
           {
@@ -217,46 +206,30 @@ export async function POST(request: Request) {
           { status: 400 }
         )
       }
-      data.domain = domain
     }
 
-    if (hasUrlColumn && url.length > 0) {
-      data.url = url
+    const payload: InnovatorPayload = {
+      company,
     }
 
-    if (hasIntroductionPointColumn && introductionPoint.length > 0) {
-      data.introductionPoint = introductionPoint
+    if (availability.domain && domain) {
+      payload.domain = domain
+    }
+    if (availability.url && url.length > 0) {
+      payload.url = url
+    }
+    if (availability.introductionPoint && introductionPoint.length > 0) {
+      payload.introductionPoint = introductionPoint
     }
 
-    const select: Prisma.InnovatorSelect = {}
-
-    if (hasIdColumn) {
-      select.id = true
-    }
-    if (hasCompanyColumn) {
-      select.company = true
-    }
-    if (hasDomainColumn) {
-      select.domain = true
-    }
-    if (hasCreatedAtColumn) {
-      select.createdAt = true
-    }
-    if (hasUpdatedAtColumn) {
-      select.updatedAt = true
-    }
-    if (hasUrlColumn) {
-      select.url = true
-    }
-    if (hasIntroductionPointColumn) {
-      select.introductionPoint = true
-    }
+    const data = mapPayloadToData(payload, availability)
+    const select = buildSelect(availability)
 
     const createArgs: Prisma.InnovatorCreateArgs = {
       data: data as Prisma.InnovatorCreateInput,
     }
 
-    if (Object.keys(select).length > 0) {
+    if (select) {
       createArgs.select = select
     }
 

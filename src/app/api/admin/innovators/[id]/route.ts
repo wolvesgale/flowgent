@@ -5,7 +5,13 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
-import { getInnovatorColumns, hasColumn } from '@/lib/live-schema'
+import { getInnovatorColumns } from '@/lib/live-schema'
+import {
+  buildSelect,
+  computeAvailability,
+  mapPayloadToData,
+  type InnovatorPayload,
+} from '../column-helpers'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
@@ -92,34 +98,27 @@ export async function PUT(request: Request, context: unknown) {
     }
 
     const columns = await getInnovatorColumns()
-    const hasIdColumn = hasColumn(columns, 'id')
-    const hasCompanyColumn = hasColumn(columns, 'company')
-    const hasDomainColumn = hasColumn(columns, 'domain')
-    const hasUrlColumn = hasColumn(columns, 'url')
-    const hasIntroductionPointColumn = hasColumn(columns, 'introductionPoint')
-    const hasCreatedAtColumn = hasColumn(columns, 'createdAt')
-    const hasUpdatedAtColumn = hasColumn(columns, 'updatedAt')
+    const availability = computeAvailability(columns)
 
-    const data: Prisma.InnovatorUpdateInput = {}
+    const payload: InnovatorPayload = {}
 
-    if (validatedData.company !== undefined && hasCompanyColumn) {
-      data.company = validatedData.company
+    if (validatedData.company !== undefined) {
+      payload.company = validatedData.company
     }
 
-    if (validatedData.url !== undefined && hasUrlColumn) {
-      data.url = validatedData.url
+    if (validatedData.url !== undefined) {
+      payload.url = validatedData.url
     }
 
-    if (
-      validatedData.introductionPoint !== undefined &&
-      hasIntroductionPointColumn
-    ) {
-      data.introductionPoint = validatedData.introductionPoint
+    if (validatedData.introductionPoint !== undefined) {
+      payload.introductionPoint = validatedData.introductionPoint
     }
 
-    if (validatedData.domain !== undefined && hasDomainColumn) {
-      data.domain = validatedData.domain
+    if (validatedData.domain !== undefined) {
+      payload.domain = validatedData.domain
     }
+
+    const data = mapPayloadToData(payload, availability)
 
     if (Object.keys(data).length === 0) {
       return NextResponse.json(
@@ -128,42 +127,14 @@ export async function PUT(request: Request, context: unknown) {
       )
     }
 
-    const select: Prisma.InnovatorSelect = {}
-
-    if (hasIdColumn) {
-      select.id = true
-    }
-
-    if (hasCompanyColumn) {
-      select.company = true
-    }
-
-    if (hasDomainColumn) {
-      select.domain = true
-    }
-
-    if (hasCreatedAtColumn) {
-      select.createdAt = true
-    }
-
-    if (hasUpdatedAtColumn) {
-      select.updatedAt = true
-    }
-
-    if (hasUrlColumn) {
-      select.url = true
-    }
-
-    if (hasIntroductionPointColumn) {
-      select.introductionPoint = true
-    }
+    const select = buildSelect(availability)
 
     const updateArgs: Prisma.InnovatorUpdateArgs = {
       where: { id },
-      data,
+      data: data as Prisma.InnovatorUpdateInput,
     }
 
-    if (Object.keys(select).length > 0) {
+    if (select) {
       updateArgs.select = select
     }
 

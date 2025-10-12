@@ -36,20 +36,30 @@ export async function getInnovatorColumns(): Promise<ColumnSet> {
   return cachedInnovatorColumns
 }
 
+export function resolveColumnName(
+  columns: ColumnSet,
+  ...candidates: string[]
+): string | null {
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue
+    }
+
+    const target = candidate.toLowerCase()
+    for (const column of columns) {
+      if (column === candidate || column.toLowerCase() === target) {
+        return column
+      }
+    }
+  }
+
+  return null
+}
+
+export function hasAnyColumn(columns: ColumnSet, ...names: string[]): boolean {
+  return resolveColumnName(columns, ...names) !== null
+}
+
 export function hasColumn(columns: ColumnSet, name: string): boolean {
-  if (!name) {
-    return false
-  }
-
-  const target = name.toLowerCase()
-  for (const column of columns) {
-    if (column === name) {
-      return true
-    }
-    if (column.toLowerCase() === target) {
-      return true
-    }
-  }
-
-  return false
+  return hasAnyColumn(columns, name)
 }

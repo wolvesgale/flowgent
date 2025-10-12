@@ -28,7 +28,7 @@ type Domain = (typeof DOMAIN_OPTIONS)[number]['value']
 
 interface Innovator {
   id: number
-  company: string
+  company?: string | null
   url?: string | null
   introductionPoint?: string | null
   domain?: Domain | null
@@ -53,6 +53,13 @@ export default function AdminInnovatorsPage() {
     domain: 'IT' as Domain,
   })
   const itemsPerPage = 10
+  const baseFieldClass = 'bg-white text-slate-900 placeholder:text-slate-400 border-slate-300'
+  const inputFieldClass = `col-span-3 ${baseFieldClass}`
+  const textareaFieldClass = `col-span-3 ${baseFieldClass}`
+  const selectTriggerClass = `col-span-3 ${baseFieldClass}`
+  const selectContentClass = 'bg-white text-slate-900 border border-slate-300 shadow-lg'
+  const filterSelectTriggerClass = baseFieldClass
+  const filterSelectContentClass = 'bg-white text-slate-900 border border-slate-300 shadow-lg'
 
   const fetchInnovators = useCallback(async () => {
     try {
@@ -205,7 +212,7 @@ export default function AdminInnovatorsPage() {
   const openEditDialog = (innovator: Innovator) => {
     setSelectedInnovator(innovator)
     setFormData({
-      company: innovator.company,
+      company: innovator.company ?? '',
       url: innovator.url || '',
       introductionPoint: innovator.introductionPoint || '',
       domain: (innovator.domain ?? 'IT') as Domain,
@@ -245,7 +252,8 @@ export default function AdminInnovatorsPage() {
                   id="company"
                   value={formData.company}
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-                  className="col-span-3"
+                  className={inputFieldClass}
+                  placeholder="例: 株式会社テスト"
                 />
               </div>
 
@@ -257,17 +265,18 @@ export default function AdminInnovatorsPage() {
                   id="url"
                   value={formData.url}
                   onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
-                  className="col-span-3"
+                  className={inputFieldClass}
+                  placeholder="https://example.com"
                 />
               </div>
 
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">領域</Label>
                 <Select value={formData.domain} onValueChange={(value: Domain) => setFormData((prev) => ({ ...prev, domain: value }))}>
-                  <SelectTrigger className="col-span-3 bg-white">
+                  <SelectTrigger className={selectTriggerClass}>
                     <SelectValue placeholder="領域を選択" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white text-slate-900">
+                  <SelectContent className={selectContentClass}>
                     {DOMAIN_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -285,7 +294,8 @@ export default function AdminInnovatorsPage() {
                   id="introductionPoint"
                   value={formData.introductionPoint}
                   onChange={(e) => setFormData((prev) => ({ ...prev, introductionPoint: e.target.value }))}
-                  className="col-span-3"
+                  className={textareaFieldClass}
+                  placeholder="例: 自社プロダクトの特徴や紹介ポイント"
                   rows={4}
                 />
               </div>
@@ -316,7 +326,8 @@ export default function AdminInnovatorsPage() {
                   id="edit-company"
                   value={formData.company}
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-                  className="col-span-3"
+                  className={inputFieldClass}
+                  placeholder="例: 株式会社テスト"
                 />
               </div>
 
@@ -328,17 +339,18 @@ export default function AdminInnovatorsPage() {
                   id="edit-url"
                   value={formData.url}
                   onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
-                  className="col-span-3"
+                  className={inputFieldClass}
+                  placeholder="https://example.com"
                 />
               </div>
 
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">領域</Label>
                 <Select value={formData.domain} onValueChange={(value: Domain) => setFormData((prev) => ({ ...prev, domain: value }))}>
-                  <SelectTrigger className="col-span-3 bg-white">
+                  <SelectTrigger className={selectTriggerClass}>
                     <SelectValue placeholder="領域を選択" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white text-slate-900">
+                  <SelectContent className={selectContentClass}>
                     {DOMAIN_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -356,7 +368,8 @@ export default function AdminInnovatorsPage() {
                   id="edit-introductionPoint"
                   value={formData.introductionPoint}
                   onChange={(e) => setFormData((prev) => ({ ...prev, introductionPoint: e.target.value }))}
-                  className="col-span-3"
+                  className={textareaFieldClass}
+                  placeholder="例: 自社プロダクトの特徴や紹介ポイント"
                   rows={4}
                 />
               </div>
@@ -385,7 +398,7 @@ export default function AdminInnovatorsPage() {
                   placeholder="企業名または紹介ポイントで検索..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className={`pl-10 ${baseFieldClass}`}
                 />
               </div>
 
@@ -403,10 +416,10 @@ export default function AdminInnovatorsPage() {
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Select value={domainFilter} onValueChange={(value: 'ALL' | Domain) => setDomainFilter(value)}>
-                <SelectTrigger className="bg-white">
+                <SelectTrigger className={filterSelectTriggerClass}>
                   <SelectValue placeholder="領域を選択" />
                 </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900">
+                <SelectContent className={filterSelectContentClass}>
                   <SelectItem value="ALL">全ての領域</SelectItem>
                   {DOMAIN_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
@@ -442,9 +455,11 @@ export default function AdminInnovatorsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {innovators.map((innovator) => (
-                    <TableRow key={innovator.id}>
-                      <TableCell className="font-medium">{innovator.company}</TableCell>
+                  {innovators.map((innovator) => {
+                    const companyName = (innovator.company ?? '').trim()
+                    return (
+                      <TableRow key={innovator.id}>
+                        <TableCell className="font-medium">{companyName || '—'}</TableCell>
                       <TableCell>
                         {innovator.url ? (
                           <a
@@ -463,24 +478,25 @@ export default function AdminInnovatorsPage() {
                       <TableCell className="max-w-xs whitespace-pre-wrap text-sm text-slate-700">
                         {innovator.introductionPoint || '—'}
                       </TableCell>
-                      <TableCell>
-                        {innovator.domain
-                          ? DOMAIN_OPTIONS.find((option) => option.value === innovator.domain)?.label ?? innovator.domain
-                          : '—'}
-                      </TableCell>
-                      <TableCell>{formatDate(innovator.createdAt)}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEditDialog(innovator)}>
-                            <Edit className="mr-1 h-4 w-4" />編集
-                          </Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDelete(innovator.id)}>
-                            <Trash2 className="mr-1 h-4 w-4" />削除
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        <TableCell>
+                          {innovator.domain
+                            ? DOMAIN_OPTIONS.find((option) => option.value === innovator.domain)?.label ?? innovator.domain
+                            : '—'}
+                        </TableCell>
+                        <TableCell>{formatDate(innovator.createdAt)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => openEditDialog(innovator)}>
+                              <Edit className="mr-1 h-4 w-4" />編集
+                            </Button>
+                            <Button variant="destructive" size="sm" onClick={() => handleDelete(innovator.id)}>
+                              <Trash2 className="mr-1 h-4 w-4" />削除
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
 
