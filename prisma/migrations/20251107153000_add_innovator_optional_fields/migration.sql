@@ -1,3 +1,2 @@
-ALTER TABLE "Innovator"
-  ADD COLUMN IF NOT EXISTS "url" TEXT,
-  ADD COLUMN IF NOT EXISTS "introPoint" TEXT;
+ALTER TABLE "Innovator" ADD COLUMN "url" TEXT;
+ALTER TABLE "Innovator" ADD COLUMN "introPoint" TEXT;
