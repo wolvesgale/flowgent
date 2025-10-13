@@ -4,9 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") // migrate 用の直結 URL（本番/Preview で必須）
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -29,11 +28,13 @@ enum Role {
 
 model Innovator {
   id        Int      @id @default(autoincrement())
-  company   String   @map("name")
+  company   String   @map("name") // DB列 name をアプリの company として扱う
+  url       String?
+  introPoint String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("innovators")
+  @@map("Innovator") // 実テーブル名は単数形の Innovator
 }
 
 model Evangelist {
