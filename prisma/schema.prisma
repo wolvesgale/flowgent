@@ -28,13 +28,10 @@ enum Role {
 }
 
 model Innovator {
-  id                Int               @id @default(autoincrement())
-  company           String
-  url               String?
-  introductionPoint String?
-  domain            BusinessDomain?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  id        Int      @id @default(autoincrement())
+  company   String   @map("name")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("Innovator")
 }
@@ -111,18 +108,6 @@ enum EvangelistPhase {
   INNOVATOR_REVIEW
   INTRODUCING
   FOLLOW_UP
-}
-
-enum BusinessDomain {
-  HR
-  IT
-  ACCOUNTING
-  ADVERTISING
-  MANAGEMENT
-  SALES
-  MANUFACTURING
-  MEDICAL
-  FINANCE
 }
 
 model Meeting {

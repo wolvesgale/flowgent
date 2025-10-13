@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server'
 
-import type { Prisma } from '@prisma/client'
-
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
-import { mapBusinessDomainOrDefault, BUSINESS_DOMAIN_VALUES } from '@/lib/business-domain'
-import { getInnovatorColumns, hasColumn } from '@/lib/live-schema'
 import { z } from 'zod'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-const BusinessDomainEnum = z.enum(BUSINESS_DOMAIN_VALUES)
 
 // バリデーションスキーマ
 const innovatorUpdateSchema = z
@@ -22,33 +16,8 @@ const innovatorUpdateSchema = z
         const trimmed = value.trim()
         return trimmed.length === 0 ? undefined : trimmed
       },
-      z.string().min(1, 'Company is required').optional()
+      z.string().min(1, 'Company is required')
     ),
-    url: z.preprocess(
-      (value) => {
-        if (typeof value !== 'string') return value
-        const trimmed = value.trim()
-        return trimmed.length === 0 ? undefined : trimmed
-      },
-      z.string().url('Invalid URL').optional()
-    ),
-    introductionPoint: z.preprocess(
-      (value) => {
-        if (typeof value !== 'string') return value
-        const trimmed = value.trim()
-        return trimmed.length === 0 ? undefined : trimmed
-      },
-      z.string().optional()
-    ),
-    domain: z
-      .preprocess(
-        (value) => (value === undefined ? value : mapBusinessDomainOrDefault(value)),
-        z.union([BusinessDomainEnum, z.undefined()])
-      )
-      .optional(),
-  })
-  .refine((data) => Object.keys(data).length > 0, {
-    message: 'No update fields provided',
   })
 
 async function checkAdminPermission() {
@@ -91,83 +60,11 @@ export async function PUT(request: Request, context: unknown) {
       )
     }
 
-    const columns = await getInnovatorColumns()
-    const hasIdColumn = hasColumn(columns, 'id')
-    const hasCompanyColumn = hasColumn(columns, 'company')
-    const hasDomainColumn = hasColumn(columns, 'domain')
-    const hasUrlColumn = hasColumn(columns, 'url')
-    const hasIntroductionPointColumn = hasColumn(columns, 'introductionPoint')
-    const hasCreatedAtColumn = hasColumn(columns, 'createdAt')
-    const hasUpdatedAtColumn = hasColumn(columns, 'updatedAt')
-
-    const data: Prisma.InnovatorUpdateInput = {}
-
-    if (validatedData.company !== undefined && hasCompanyColumn) {
-      data.company = validatedData.company
-    }
-
-    if (validatedData.url !== undefined && hasUrlColumn) {
-      data.url = validatedData.url
-    }
-
-    if (
-      validatedData.introductionPoint !== undefined &&
-      hasIntroductionPointColumn
-    ) {
-      data.introductionPoint = validatedData.introductionPoint
-    }
-
-    if (validatedData.domain !== undefined && hasDomainColumn) {
-      data.domain = validatedData.domain
-    }
-
-    if (Object.keys(data).length === 0) {
-      return NextResponse.json(
-        { error: 'No valid fields to update for current schema' },
-        { status: 400 }
-      )
-    }
-
-    const select: Prisma.InnovatorSelect = {}
-
-    if (hasIdColumn) {
-      select.id = true
-    }
-
-    if (hasCompanyColumn) {
-      select.company = true
-    }
-
-    if (hasDomainColumn) {
-      select.domain = true
-    }
-
-    if (hasCreatedAtColumn) {
-      select.createdAt = true
-    }
-
-    if (hasUpdatedAtColumn) {
-      select.updatedAt = true
-    }
-
-    if (hasUrlColumn) {
-      select.url = true
-    }
-
-    if (hasIntroductionPointColumn) {
-      select.introductionPoint = true
-    }
-
-    const updateArgs: Prisma.InnovatorUpdateArgs = {
+    const updatedInnovator = await prisma.innovator.update({
       where: { id },
-      data,
-    }
-
-    if (Object.keys(select).length > 0) {
-      updateArgs.select = select
-    }
-
-    const updatedInnovator = await prisma.innovator.update(updateArgs)
+      data: { company: validatedData.company },
+      select: { id: true, company: true, createdAt: true, updatedAt: true },
+    })
 
     return NextResponse.json({ ok: true, innovator: updatedInnovator })
   } catch (error) {
