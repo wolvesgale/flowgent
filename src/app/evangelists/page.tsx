@@ -545,10 +545,10 @@ export default function EvangelistsPage() {
                             handleAssign(evangelist.id, value)
                           }}
                         >
-                          <SelectTrigger className="bg-white">
+                          <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                             <SelectValue placeholder="未割り当て" />
                           </SelectTrigger>
-                          <SelectContent className="bg-white text-slate-900">
+                          <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                             <SelectItem value={CS_CLEAR_VALUE}>未割り当て</SelectItem>
                             {users.map((user) => (
                               <SelectItem key={user.id} value={user.id}>
@@ -643,10 +643,10 @@ export default function EvangelistsPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
+                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue placeholder="未設定" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
+                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {Object.entries(CONTACT_LABELS).map(([key, label]) => (
                         <SelectItem key={key} value={key}>
@@ -668,10 +668,10 @@ export default function EvangelistsPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
+                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue placeholder="未設定" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
+                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {Object.entries(STRENGTH_LABELS).map(([key, label]) => (
                         <SelectItem key={key} value={key}>
@@ -693,10 +693,10 @@ export default function EvangelistsPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
+                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue placeholder="未設定" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
+                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {Object.entries(MANAGEMENT_PHASE_LABELS).map(([key, label]) => (
                         <SelectItem key={key} value={key}>
@@ -715,10 +715,10 @@ export default function EvangelistsPage() {
                       setEditForm((prev) => ({ ...prev, listProvided: value as 'true' | 'false' }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
+                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
+                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectItem value="true">済</SelectItem>
                       <SelectItem value="false">未</SelectItem>
                     </SelectContent>

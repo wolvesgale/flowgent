@@ -446,10 +446,10 @@ export default function CSVMapper() {
                         });
                       }}
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                         <SelectValue placeholder="（単一列を選択）" />
                       </SelectTrigger>
-                      <SelectContent className="bg-white text-slate-900">
+                      <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                         <SelectItem value="__CLEAR__">（選択解除）</SelectItem>
                         {headers.map((header) => (
                           <SelectItem key={header.id} value={header.id}>
