@@ -7,108 +7,85 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Search, Plus, Edit, Trash2, Link as LinkIcon, Map } from 'lucide-react'
 import { toast } from 'sonner'
-
-const DOMAIN_OPTIONS = [
-  { value: 'HR', label: '人事' },
-  { value: 'IT', label: 'IT' },
-  { value: 'ACCOUNTING', label: '会計' },
-  { value: 'ADVERTISING', label: '広告' },
-  { value: 'MANAGEMENT', label: '経営' },
-  { value: 'SALES', label: '営業' },
-  { value: 'MANUFACTURING', label: '製造' },
-  { value: 'MEDICAL', label: '医療' },
-  { value: 'FINANCE', label: '金融' },
-] as const
-
-type Domain = (typeof DOMAIN_OPTIONS)[number]['value']
+import { Search, Plus, Edit, Trash2 } from 'lucide-react'
 
 interface Innovator {
   id: number
   company: string
-  url?: string | null
-  introductionPoint?: string | null
-  domain?: Domain | null
   createdAt: string
   updatedAt: string
+}
+
+const ITEMS_PER_PAGE = 10
+
+type InnovatorResponse = {
+  items?: unknown
+  total?: unknown
+}
+
+type CreateOrUpdatePayload = {
+  company: string
 }
 
 export default function AdminInnovatorsPage() {
   const [innovators, setInnovators] = useState<Innovator[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [domainFilter, setDomainFilter] = useState<'ALL' | Domain>('ALL')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedInnovator, setSelectedInnovator] = useState<Innovator | null>(null)
-  const [formData, setFormData] = useState({
-    company: '',
-    url: '',
-    introductionPoint: '',
-    domain: 'IT' as Domain,
-  })
-  const itemsPerPage = 10
+  const [formData, setFormData] = useState({ company: '' })
 
   const fetchInnovators = useCallback(async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams()
       params.set('page', currentPage.toString())
-      params.set('limit', itemsPerPage.toString())
+      params.set('limit', ITEMS_PER_PAGE.toString())
 
       if (searchTerm.trim()) {
         params.set('search', searchTerm.trim())
       }
 
-      if (domainFilter !== 'ALL') {
-        params.set('domain', domainFilter)
-      }
-
-      const response = await fetch(`/api/admin/innovators?${params}`, {
+      const response = await fetch(`/api/admin/innovators?${params.toString()}`, {
         credentials: 'include',
       })
-      if (response.ok) {
-        const data = await response.json()
-        setInnovators(data.innovators)
-        setTotalPages(Math.ceil(data.total / itemsPerPage))
+
+      const data = (await response.json().catch(() => null)) as InnovatorResponse | null
+      const items = Array.isArray(data?.items) ? (data?.items as Innovator[]) : []
+
+      setInnovators(items)
+      const total = typeof data?.total === 'number' ? data.total : items.length
+      const pages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE) || 1)
+      setTotalPages(pages)
+
+      if (!response.ok) {
+        throw new Error((data as { error?: string } | null)?.error ?? 'Failed to fetch innovators')
       }
     } catch (error) {
       console.error('Failed to fetch innovators:', error)
+      setInnovators([])
+      setTotalPages(1)
     } finally {
       setLoading(false)
     }
-  }, [currentPage, searchTerm, domainFilter])
+  }, [currentPage, searchTerm])
 
   useEffect(() => {
     void fetchInnovators()
   }, [fetchInnovators])
 
-  const buildInnovatorPayload = () => {
+  const buildInnovatorPayload = (): CreateOrUpdatePayload | null => {
     const trimmedCompany = formData.company.trim()
     if (!trimmedCompany) {
       toast.error('企業名は必須です')
       return null
     }
 
-    const trimmedUrl = formData.url.trim()
-    const trimmedIntroductionPoint = formData.introductionPoint.trim()
-
-    if (!formData.domain) {
-      toast.error('領域を選んでください')
-      return null
-    }
-
-    return {
-      company: trimmedCompany,
-      domain: formData.domain,
-      url: trimmedUrl.length > 0 ? trimmedUrl : undefined,
-      introductionPoint: trimmedIntroductionPoint.length > 0 ? trimmedIntroductionPoint : undefined,
-    }
+    return { company: trimmedCompany }
   }
 
   const handleCreate = async () => {
@@ -118,17 +95,15 @@ export default function AdminInnovatorsPage() {
     try {
       const response = await fetch('/api/admin/innovators', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload),
       })
 
-      const data = await response.json().catch(() => null)
+      const data = (await response.json().catch(() => null)) as { error?: string } | null
 
       if (!response.ok) {
-        toast.error((data as { error?: string } | null)?.error ?? 'イノベータの登録に失敗しました')
+        toast.error(data?.error ?? 'イノベータの登録に失敗しました')
         return
       }
 
@@ -151,17 +126,15 @@ export default function AdminInnovatorsPage() {
     try {
       const response = await fetch(`/api/admin/innovators/${selectedInnovator.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload),
       })
 
-      const data = await response.json().catch(() => null)
+      const data = (await response.json().catch(() => null)) as { error?: string } | null
 
       if (!response.ok) {
-        toast.error((data as { error?: string } | null)?.error ?? 'イノベータの更新に失敗しました')
+        toast.error(data?.error ?? 'イノベータの更新に失敗しました')
         return
       }
 
@@ -185,37 +158,33 @@ export default function AdminInnovatorsPage() {
         credentials: 'include',
       })
 
-      if (response.ok) {
-        fetchInnovators()
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null
+        toast.error(data?.error ?? 'イノベータの削除に失敗しました')
+        return
       }
+
+      toast.success('イノベータを削除しました')
+      await fetchInnovators()
     } catch (error) {
       console.error('Failed to delete innovator:', error)
+      toast.error('イノベータの削除に失敗しました')
     }
   }
 
   const resetForm = () => {
-    setFormData({
-      company: '',
-      url: '',
-      introductionPoint: '',
-      domain: 'IT',
-    })
+    setFormData({ company: '' })
   }
 
   const openEditDialog = (innovator: Innovator) => {
     setSelectedInnovator(innovator)
-    setFormData({
-      company: innovator.company,
-      url: innovator.url || '',
-      introductionPoint: innovator.introductionPoint || '',
-      domain: (innovator.domain ?? 'IT') as Domain,
-    })
+    setFormData({ company: innovator.company })
     setIsEditDialogOpen(true)
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('ja-JP')
-  }
+  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('ja-JP')
+  const safeInnovators = Array.isArray(innovators) ? innovators : []
+  const itemCount = safeInnovators.length
 
   return (
     <div className="container mx-auto py-6">
@@ -234,7 +203,7 @@ export default function AdminInnovatorsPage() {
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>新しいイノベータを追加</DialogTitle>
-              <DialogDescription>企業情報と領域を入力してください。</DialogDescription>
+              <DialogDescription>企業名を入力してください。</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
@@ -246,47 +215,6 @@ export default function AdminInnovatorsPage() {
                   value={formData.company}
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
                   className="col-span-3"
-                />
-              </div>
-
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="url" className="text-right">
-                  URL
-                </Label>
-                <Input
-                  id="url"
-                  value={formData.url}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
-                  className="col-span-3"
-                />
-              </div>
-
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">領域</Label>
-                <Select value={formData.domain} onValueChange={(value: Domain) => setFormData((prev) => ({ ...prev, domain: value }))}>
-                  <SelectTrigger className="col-span-3 bg-white">
-                    <SelectValue placeholder="領域を選択" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white text-slate-900">
-                    {DOMAIN_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label htmlFor="introductionPoint" className="text-right">
-                  紹介ポイント
-                </Label>
-                <Textarea
-                  id="introductionPoint"
-                  value={formData.introductionPoint}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, introductionPoint: e.target.value }))}
-                  className="col-span-3"
-                  rows={4}
                 />
               </div>
             </div>
@@ -304,7 +232,7 @@ export default function AdminInnovatorsPage() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>イノベータ情報を編集</DialogTitle>
-            <DialogDescription>企業情報と領域を更新します。</DialogDescription>
+            <DialogDescription>企業名を更新します。</DialogDescription>
           </DialogHeader>
           {selectedInnovator && (
             <div className="grid gap-4 py-4">
@@ -317,47 +245,6 @@ export default function AdminInnovatorsPage() {
                   value={formData.company}
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
                   className="col-span-3"
-                />
-              </div>
-
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit-url" className="text-right">
-                  URL
-                </Label>
-                <Input
-                  id="edit-url"
-                  value={formData.url}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
-                  className="col-span-3"
-                />
-              </div>
-
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">領域</Label>
-                <Select value={formData.domain} onValueChange={(value: Domain) => setFormData((prev) => ({ ...prev, domain: value }))}>
-                  <SelectTrigger className="col-span-3 bg-white">
-                    <SelectValue placeholder="領域を選択" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white text-slate-900">
-                    {DOMAIN_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label htmlFor="edit-introductionPoint" className="text-right">
-                  紹介ポイント
-                </Label>
-                <Textarea
-                  id="edit-introductionPoint"
-                  value={formData.introductionPoint}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, introductionPoint: e.target.value }))}
-                  className="col-span-3"
-                  rows={4}
                 />
               </div>
             </div>
@@ -378,22 +265,20 @@ export default function AdminInnovatorsPage() {
         </CardHeader>
         <CardContent>
           <div className="mb-6 space-y-4">
-            <div className="flex gap-4">
+            <div className="flex flex-col gap-4 md:flex-row">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="企業名または紹介ポイントで検索..."
+                  placeholder="企業名で検索..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
-
               <Button
                 variant="outline"
                 onClick={() => {
                   setSearchTerm('')
-                  setDomainFilter('ALL')
                   setCurrentPage(1)
                 }}
               >
@@ -401,28 +286,9 @@ export default function AdminInnovatorsPage() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <Select value={domainFilter} onValueChange={(value: 'ALL' | Domain) => setDomainFilter(value)}>
-                <SelectTrigger className="bg-white">
-                  <SelectValue placeholder="領域を選択" />
-                </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900">
-                  <SelectItem value="ALL">全ての領域</SelectItem>
-                  {DOMAIN_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="flex items-center gap-2 rounded-md border border-purple-200 bg-purple-50/80 px-3 py-2 text-purple-700">
-                <Map className="h-4 w-4" />
-                <div className="text-sm">
-                  <p className="font-semibold">登録件数</p>
-                  <p>{innovators.length} 件</p>
-                </div>
-              </div>
+            <div className="rounded-md border border-purple-200 bg-purple-50/80 px-3 py-2 text-purple-700">
+              <p className="text-sm font-semibold">登録件数</p>
+              <p className="text-sm">{itemCount} 件</p>
             </div>
           </div>
 
@@ -434,41 +300,17 @@ export default function AdminInnovatorsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>企業名</TableHead>
-                    <TableHead>URL</TableHead>
-                    <TableHead>紹介ポイント</TableHead>
-                    <TableHead>領域</TableHead>
                     <TableHead>登録日</TableHead>
+                    <TableHead>更新日</TableHead>
                     <TableHead>アクション</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {innovators.map((innovator) => (
+                  {safeInnovators.map((innovator) => (
                     <TableRow key={innovator.id}>
-                      <TableCell className="font-medium">{innovator.company}</TableCell>
-                      <TableCell>
-                        {innovator.url ? (
-                          <a
-                            href={innovator.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 text-purple-700 underline-offset-2 hover:underline"
-                          >
-                            <LinkIcon className="h-4 w-4" />
-                            サイトを見る
-                          </a>
-                        ) : (
-                          '—'
-                        )}
-                      </TableCell>
-                      <TableCell className="max-w-xs whitespace-pre-wrap text-sm text-slate-700">
-                        {innovator.introductionPoint || '—'}
-                      </TableCell>
-                      <TableCell>
-                        {innovator.domain
-                          ? DOMAIN_OPTIONS.find((option) => option.value === innovator.domain)?.label ?? innovator.domain
-                          : '—'}
-                      </TableCell>
-                      <TableCell>{formatDate(innovator.createdAt)}</TableCell>
+                      <TableCell className="font-medium">{innovator.company ?? '—'}</TableCell>
+                      <TableCell>{innovator.createdAt ? formatDate(innovator.createdAt) : '—'}</TableCell>
+                      <TableCell>{innovator.updatedAt ? formatDate(innovator.updatedAt) : '—'}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button variant="outline" size="sm" onClick={() => openEditDialog(innovator)}>
@@ -506,7 +348,7 @@ export default function AdminInnovatorsPage() {
                 </div>
               )}
 
-              {innovators.length === 0 && (
+              {itemCount === 0 && (
                 <div className="py-8 text-center text-muted-foreground">イノベータが見つかりませんでした</div>
               )}
             </>

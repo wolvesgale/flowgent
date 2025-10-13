@@ -214,10 +214,10 @@ export default function CSVPreview({ onImport }: CSVPreviewProps) {
                           updateMapping(field.dbField, value === '__CLEAR__' ? '' : value)
                         }
                       >
-                        <SelectTrigger className="bg-white">
+                        <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                           <SelectValue placeholder="CSVの列を選択" />
                         </SelectTrigger>
-                        <SelectContent className="bg-white text-slate-900">
+                        <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                           <SelectItem value="__CLEAR__">選択しない</SelectItem>
                           {csvHeaders.map((header) => (
                             <SelectItem key={header} value={header}>

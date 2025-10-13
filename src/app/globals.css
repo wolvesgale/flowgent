@@ -56,3 +56,5 @@ div[role="listbox"] {
   color: #0f172a !important;
   opacity: 1 !important;
 }
+[data-radix-select-content],[role="listbox"]{background:#fff !important;color:#0f172a !important}
+[data-radix-select-trigger],.radix-select-trigger{background:#fff !important;color:#0f172a !important}

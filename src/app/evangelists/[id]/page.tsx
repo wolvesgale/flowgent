@@ -491,10 +491,10 @@ export default function EvangelistDetailPage() {
                         }))
                       }
                     >
-                      <SelectTrigger className="bg-white">
+                      <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                         <SelectValue placeholder="連絡手段を選択" />
                       </SelectTrigger>
-                      <SelectContent className="bg-white text-slate-900">
+                      <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                         <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                         {CONTACT_OPTIONS.map((option) => (
                           <SelectItem key={option.value} value={option.value}>
@@ -519,10 +519,10 @@ export default function EvangelistDetailPage() {
                         setEditForm(prev => ({ ...prev, tier: value }))
                       }
                     >
-                      <SelectTrigger className="bg-white">
+                      <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-white text-slate-900">
+                      <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                         <SelectItem value="TIER1">TIER1</SelectItem>
                         <SelectItem value="TIER2">TIER2</SelectItem>
                       </SelectContent>
@@ -547,10 +547,10 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
+                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue placeholder="強みを選択" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
+                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {STRENGTH_OPTIONS.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
@@ -578,10 +578,10 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
+                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue placeholder="フェーズを選択" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
+                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
                       {PHASE_OPTIONS.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
@@ -609,10 +609,10 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
+                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
+                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectItem value="true">済</SelectItem>
                       <SelectItem value="false">未</SelectItem>
                     </SelectContent>
@@ -686,10 +686,10 @@ export default function EvangelistDetailPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white">
+                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue placeholder="CSを選択してください" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900">
+                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectItem value={CS_CLEAR_VALUE}>未割り当て</SelectItem>
                       {users.map((user) => (
                         <SelectItem key={user.id} value={user.id}>
