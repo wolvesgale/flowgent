@@ -5,9 +5,6 @@ import { prisma } from '@/lib/prisma'
 import type { SessionData } from '@/lib/session'
 import type { Prisma } from '@prisma/client'
 
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
 async function getSessionUserOrThrow(): Promise<SessionData> {
   const session = await getIronSession<SessionData>(await cookies(), {
     password: process.env.SESSION_PASSWORD!,
@@ -32,9 +29,7 @@ export async function GET(req: NextRequest) {
     const search = (url.searchParams.get('search') ?? '').trim()
 
     const where: Prisma.InnovatorWhereInput = {}
-    if (search) {
-      where.company = { contains: search }
-    }
+    if (search) where.company = { contains: search }
 
     const [total, items] = await Promise.all([
       prisma.innovator.count({ where }),
@@ -43,22 +38,17 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
-        select: {
-          id: true,
-          company: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: { id: true, company: true, createdAt: true, updatedAt: true },
       }),
     ])
 
     return NextResponse.json({ total, items, page, limit })
-  } catch (error: unknown) {
+  } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       if (error.message === 'Forbidden') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-    console.error('[innovators:list:minimal]', error)
+    console.error('[innovators:list:min]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -73,27 +63,20 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json()) as CreateBody
     const company = (body.company ?? body.name ?? '').trim()
-    if (!company) {
-      return NextResponse.json({ error: 'company is required' }, { status: 400 })
-    }
+    if (!company) return NextResponse.json({ error: 'company is required' }, { status: 400 })
 
     const created = await prisma.innovator.create({
       data: { company },
-      select: {
-        id: true,
-        company: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: { id: true, company: true, createdAt: true, updatedAt: true },
     })
 
     return NextResponse.json(created)
-  } catch (error: unknown) {
+  } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       if (error.message === 'Forbidden') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-    console.error('[innovators:create:minimal]', error)
+    console.error('[innovators:create:min]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
