@@ -247,6 +247,11 @@ export async function POST(req: NextRequest) {
       },
     })
 
+    const created = await prisma.innovator.create({
+      data: { company },
+      select: { id: true, createdAt: true, updatedAt: true, company: true },
+    })
+
     return NextResponse.json({
       id: createdInnovator.id,
       company: createdInnovator.company,
