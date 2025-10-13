@@ -30,6 +30,8 @@ enum Role {
 model Innovator {
   id        Int      @id @default(autoincrement())
   company   String   @map("name") // DB列 name をアプリの company として扱う
+  url       String?
+  introPoint String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
