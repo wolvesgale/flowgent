@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getIronSession } from 'iron-session'
 import { cookies } from 'next/headers'
-import { prisma } from '@/lib/prisma'
-import { getInnovatorSchemaSnapshot, resolveInnovatorColumn } from '@/lib/innovator-columns'
-import type { SessionData } from '@/lib/session'
 import { Prisma } from '@prisma/client'
+import { randomUUID } from 'node:crypto'
+
+import { prisma } from '@/lib/prisma'
+import type { SessionData } from '@/lib/session'
+import {
+  getInnovatorColumnMetaCached,
+  getInnovatorSchemaSnapshot,
+  resolveInnovatorColumn,
+} from '@/lib/innovator-columns'
 
 async function getSessionUserOrThrow(): Promise<SessionData> {
   const session = await getIronSession<SessionData>(await cookies(), {
@@ -18,25 +24,6 @@ function requireRole(user: SessionData, roles: string[]) {
   if (!roles.includes(user.role || '')) throw new Error('Forbidden')
 }
 
-type InnovatorResponseItem = {
-  id: number
-  company: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-function quoteIdentifier(identifier: string): Prisma.Sql {
-  const escaped = identifier.replace(/"/g, '""')
-  return Prisma.raw(`"${escaped}"`)
-}
-
-function normalizeCompanyValue(value: unknown): string {
-  if (typeof value === 'string') {
-    return value
-  }
-  return value == null ? '' : String(value)
-}
-
 export async function GET(req: NextRequest) {
   try {
     const user = await getSessionUserOrThrow()
@@ -47,77 +34,37 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') ?? '10')))
     const search = (url.searchParams.get('search') ?? '').trim()
 
-    const snapshot = await getInnovatorSchemaSnapshot()
-    const columns = snapshot.columns
-    const tableName = snapshot.tableName ?? 'innovators'
-    const nameColumn = resolveInnovatorColumn(columns, 'name')
-    const companyColumn = resolveInnovatorColumn(columns, 'company')
-
-    if (!nameColumn && !companyColumn) {
-      return NextResponse.json(
-        { error: 'innovators table must have a name/company-like column' },
-        { status: 500 }
-      )
-    }
+    const where = search
+      ? { company: { contains: search, mode: 'insensitive' as const } }
+      : {}
 
     const skip = (page - 1) * limit
 
-    if (nameColumn) {
-      const where: Prisma.InnovatorWhereInput = {}
-      if (search) where.company = { contains: search }
+    const [total, rows] = await Promise.all([
+      prisma.innovator.count({ where }),
+      prisma.innovator.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          createdAt: true,
+          updatedAt: true,
+          company: true,
+          url: true,
+          introPoint: true,
+        },
+      }),
+    ])
 
-      const [total, rows] = await Promise.all([
-        prisma.innovator.count({ where }),
-        prisma.innovator.findMany({
-          where,
-          orderBy: { createdAt: 'desc' },
-          skip,
-          take: limit,
-          select: { id: true, company: true, createdAt: true, updatedAt: true },
-        }),
-      ])
-
-      const items: InnovatorResponseItem[] = rows.map((row) => ({
-        id: row.id,
-        company: normalizeCompanyValue(row.company),
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-      }))
-
-      return NextResponse.json({ total, items, page, limit })
-    }
-
-    const targetColumn = companyColumn!
-    const tableIdentifier = quoteIdentifier(tableName)
-    const columnIdentifier = quoteIdentifier(targetColumn)
-    const likeValue = `%${search}%`
-    const whereSql = search
-      ? Prisma.sql`WHERE ${columnIdentifier} ILIKE ${likeValue}`
-      : Prisma.sql``
-
-    const totalResult = await prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
-      SELECT COUNT(*)::bigint AS count
-      FROM ${tableIdentifier}
-      ${whereSql}
-    `)
-    const total = Number(totalResult[0]?.count ?? 0)
-
-    const rows = await prisma.$queryRaw<
-      Array<{ id: number; company: string | null; createdAt: Date; updatedAt: Date }>
-    >(Prisma.sql`
-      SELECT "id", ${columnIdentifier} AS "company", "createdAt", "updatedAt"
-      FROM ${tableIdentifier}
-      ${whereSql}
-      ORDER BY "createdAt" DESC
-      OFFSET ${skip}
-      LIMIT ${limit}
-    `)
-
-    const items: InnovatorResponseItem[] = rows.map((row) => ({
-      id: row.id,
-      company: normalizeCompanyValue(row.company),
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+    const items = rows.map(({ id, createdAt, updatedAt, company, url, introPoint }) => ({
+      id,
+      company,
+      url: url ?? null,
+      introPoint: introPoint ?? null,
+      createdAt,
+      updatedAt,
     }))
 
     return NextResponse.json({ total, items, page, limit })
@@ -131,66 +78,182 @@ export async function GET(req: NextRequest) {
   }
 }
 
-type CreateBody = { company?: string; name?: string }
+type InnovatorRow = {
+  id: number
+  company: string
+  url?: string | null
+  introPoint?: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+function escapeIdentifier(identifier: string) {
+  return `"${identifier.replace(/"/g, '""')}"`
+}
+
+async function insertInnovatorWithEmail(options: {
+  company: string
+  email: string
+  meta: Awaited<ReturnType<typeof getInnovatorColumnMetaCached>>
+  url: string | null
+  introPoint: string | null
+}) {
+  const snapshot = await getInnovatorSchemaSnapshot()
+
+  const resolvedTable = escapeIdentifier(options.meta.tableName)
+  const nameColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'name') ?? 'name')
+  const emailColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'email') ?? 'email')
+  const idColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
+  const createdAtColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'createdAt') ?? 'createdAt')
+  const updatedAtColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'updatedAt') ?? 'updatedAt')
+  const urlColumn = resolveInnovatorColumn(snapshot.columns, 'url')
+  const introPointColumn = resolveInnovatorColumn(snapshot.columns, 'introPoint')
+
+  const insertColumns: Prisma.Sql[] = [Prisma.raw(nameColumn), Prisma.raw(emailColumn)]
+  const insertValues: Prisma.Sql[] = [Prisma.sql`${options.company}`, Prisma.sql`${options.email}`]
+
+  if (options.url !== null && urlColumn) {
+    insertColumns.push(Prisma.raw(escapeIdentifier(urlColumn)))
+    insertValues.push(Prisma.sql`${options.url}`)
+  }
+
+  if (options.introPoint !== null && introPointColumn) {
+    insertColumns.push(Prisma.raw(escapeIdentifier(introPointColumn)))
+    insertValues.push(Prisma.sql`${options.introPoint}`)
+  }
+
+  const returningColumns: Prisma.Sql[] = [
+    Prisma.sql`${Prisma.raw(idColumn)} AS "id"`,
+    Prisma.sql`${Prisma.raw(nameColumn)} AS "company"`,
+  ]
+
+  if (urlColumn) {
+    returningColumns.push(
+      Prisma.sql`${Prisma.raw(escapeIdentifier(urlColumn))} AS "url"`,
+    )
+  }
+
+  if (introPointColumn) {
+    returningColumns.push(
+      Prisma.sql`${Prisma.raw(escapeIdentifier(introPointColumn))} AS "introPoint"`,
+    )
+  }
+
+  returningColumns.push(
+    Prisma.sql`${Prisma.raw(createdAtColumn)} AS "createdAt"`,
+    Prisma.sql`${Prisma.raw(updatedAtColumn)} AS "updatedAt"`,
+  )
+
+  const rows = await prisma.$queryRaw<InnovatorRow[]>(
+    Prisma.sql`
+      INSERT INTO ${Prisma.raw(resolvedTable)} (${Prisma.join(insertColumns, ', ')})
+      VALUES (${Prisma.join(insertValues, ', ')})
+      RETURNING ${Prisma.join(returningColumns, ', ')}
+    `,
+  )
+
+  if (!rows.length) {
+    throw new Error('Failed to insert innovator')
+  }
+
+  return rows[0]
+}
 
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUserOrThrow()
     requireRole(user, ['ADMIN', 'CS'])
 
-    const body = (await req.json()) as CreateBody
-    const company = (body.company ?? body.name ?? '').trim()
-    if (!company) return NextResponse.json({ error: 'company required' }, { status: 400 })
+    const rawBody = (await req.json().catch(() => null)) as unknown
 
-    const snapshot = await getInnovatorSchemaSnapshot()
-    const columns = snapshot.columns
-    const tableName = snapshot.tableName ?? 'innovators'
-    const nameColumn = resolveInnovatorColumn(columns, 'name')
-    const companyColumn = resolveInnovatorColumn(columns, 'company')
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    }
 
-    if (!nameColumn && !companyColumn) {
+    const body = rawBody as Record<string, unknown>
+    const allowedKeys = ['company', 'url', 'introPoint'] as const
+    const unknownKeys = Object.keys(body).filter(
+      (key) => !allowedKeys.includes(key as (typeof allowedKeys)[number]),
+    )
+    if (unknownKeys.length > 0) {
       return NextResponse.json(
-        { error: 'innovators table must have a name/company-like column' },
-        { status: 500 }
+        {
+          error: 'Only { company, url, introPoint } are allowed',
+          unknownKeys,
+        },
+        { status: 400 },
       )
     }
 
-    if (nameColumn) {
-      const created = await prisma.innovator.create({
-        data: { company },
-        select: { id: true, company: true, createdAt: true, updatedAt: true },
+    const company = typeof body.company === 'string' ? body.company.trim() : ''
+    if (!company) {
+      return NextResponse.json({ error: 'company is required' }, { status: 400 })
+    }
+
+    if (body.url != null && typeof body.url !== 'string') {
+      return NextResponse.json({ error: 'url must be a string' }, { status: 400 })
+    }
+
+    if (body.introPoint != null && typeof body.introPoint !== 'string') {
+      return NextResponse.json({ error: 'introPoint must be a string' }, { status: 400 })
+    }
+
+    const trimmedUrl = typeof body.url === 'string' ? body.url.trim() : ''
+    const url = trimmedUrl.length > 0 ? trimmedUrl : null
+
+    const trimmedIntroPoint =
+      typeof body.introPoint === 'string' ? body.introPoint.trim() : ''
+    const introPoint = trimmedIntroPoint.length > 0 ? trimmedIntroPoint : null
+
+    const columnMeta = await getInnovatorColumnMetaCached()
+
+    if (columnMeta.emailRequired) {
+      const placeholderEmail = `innovator+${randomUUID()}@placeholder.invalid`
+      const insertedInnovator = await insertInnovatorWithEmail({
+        company,
+        email: placeholderEmail,
+        meta: columnMeta,
+        url,
+        introPoint,
       })
 
       return NextResponse.json({
-        id: created.id,
-        company: normalizeCompanyValue(created.company),
-        createdAt: created.createdAt,
-        updatedAt: created.updatedAt,
+        id: insertedInnovator.id,
+        company: insertedInnovator.company,
+        url: insertedInnovator.url ?? null,
+        introPoint: insertedInnovator.introPoint ?? null,
+        createdAt: insertedInnovator.createdAt,
+        updatedAt: insertedInnovator.updatedAt,
       })
     }
 
-    const targetColumn = companyColumn!
-    const tableIdentifier = quoteIdentifier(tableName)
-    const columnIdentifier = quoteIdentifier(targetColumn)
-
-    const rows = await prisma.$queryRaw<
-      Array<{ id: number; company: string | null; createdAt: Date; updatedAt: Date }>
-    >(Prisma.sql`
-      INSERT INTO ${tableIdentifier} (${columnIdentifier})
-      VALUES (${company})
-      RETURNING "id", ${columnIdentifier} AS "company", "createdAt", "updatedAt"
-    `)
-
-    const created = rows[0]
-    if (!created) {
-      throw new Error('Failed to insert innovator')
+    const createData: Prisma.InnovatorCreateInput = { company }
+    if (url !== null) {
+      createData.url = url
+    }
+    if (introPoint !== null) {
+      createData.introPoint = introPoint
     }
 
+    const createdInnovator = await prisma.innovator.create({
+      data: createData,
+      select: {
+        id: true,
+        createdAt: true,
+        updatedAt: true,
+        company: true,
+        url: true,
+        introPoint: true,
+      },
+    })
+
     return NextResponse.json({
-      id: created.id,
-      company: normalizeCompanyValue(created.company),
-      createdAt: created.createdAt,
-      updatedAt: created.updatedAt,
+      id: createdInnovator.id,
+      company: createdInnovator.company,
+      url: createdInnovator.url ?? null,
+      introPoint: createdInnovator.introPoint ?? null,
+      createdAt: createdInnovator.createdAt,
+      updatedAt: createdInnovator.updatedAt,
     })
   } catch (error) {
     if (error instanceof Error) {
