@@ -62,11 +62,24 @@ export async function PUT(request: Request, context: unknown) {
 
     const updatedInnovator = await prisma.innovator.update({
       where: { id },
-      data: { company: validatedData.company },
-      select: { id: true, company: true, createdAt: true, updatedAt: true },
+      data: { name: validatedData.company },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        updatedAt: true,
+        url: true,
+        introPoint: true,
+      },
     })
 
-    return NextResponse.json({ ok: true, innovator: updatedInnovator })
+    return NextResponse.json({
+      ok: true,
+      innovator: {
+        ...updatedInnovator,
+        company: updatedInnovator.name,
+      },
+    })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
