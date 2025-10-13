@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postinstall": "prisma generate",
-    "vercel-build": "set -e; if [ -n \"$DIRECT_URL\" ] && ! echo \"$DIRECT_URL\" | grep -qi '^prisma://'; then echo '[migrate] Running prisma migrate deploy against DIRECT_URL'; npx prisma migrate deploy --schema=prisma/schema.prisma; else echo '[migrate] Skipped: DIRECT_URL is missing or points to prisma:// (Data Proxy).'; fi; next build",
+    "postinstall": "npm run prisma:generate",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
+    "vercel-build": "set -e; npm run prisma:generate; CONNECTION_URL=''; for candidate in \"$DIRECT_URL\" \"$DATABASE_URL\" \"$PRISMA_DATABASE_URL\"; do if [ -n \"$candidate\" ] && ! echo \"$candidate\" | grep -qi '^prisma://'; then CONNECTION_URL=\"$candidate\"; break; fi; done; if [ -n \"$CONNECTION_URL\" ]; then export DATABASE_URL=\"$CONNECTION_URL\"; echo '[migrate] Running prisma migrate deploy'; npm run prisma:migrate:deploy; else echo '[migrate] Skipped: no usable database connection string found for migrate deploy.'; fi; next build",
     "start": "next start",
     "lint": "eslint"
   },
