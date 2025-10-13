@@ -160,6 +160,16 @@ export async function POST(req: NextRequest) {
       select: { id: true, createdAt: true, updatedAt: true, company: true },
     })
 
+    const extraKeys = Object.keys(body).filter((key) => key !== 'company')
+    if (extraKeys.length > 0) {
+      return NextResponse.json({ error: 'Unexpected payload properties' }, { status: 400 })
+    }
+
+    const created = await prisma.innovator.create({
+      data: { company },
+      select: { id: true, createdAt: true, updatedAt: true, company: true },
+    })
+
     return NextResponse.json({
       id: createdInnovator.id,
       company: createdInnovator.company,
