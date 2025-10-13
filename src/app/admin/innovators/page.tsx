@@ -264,10 +264,10 @@ export default function AdminInnovatorsPage() {
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">領域</Label>
                 <Select value={formData.domain} onValueChange={(value: Domain) => setFormData((prev) => ({ ...prev, domain: value }))}>
-                  <SelectTrigger className="col-span-3 bg-white">
+                  <SelectTrigger className="col-span-3 bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                     <SelectValue placeholder="領域を選択" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white text-slate-900">
+                  <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                     {DOMAIN_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -335,10 +335,10 @@ export default function AdminInnovatorsPage() {
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">領域</Label>
                 <Select value={formData.domain} onValueChange={(value: Domain) => setFormData((prev) => ({ ...prev, domain: value }))}>
-                  <SelectTrigger className="col-span-3 bg-white">
+                  <SelectTrigger className="col-span-3 bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                     <SelectValue placeholder="領域を選択" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white text-slate-900">
+                  <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                     {DOMAIN_OPTIONS.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -403,10 +403,10 @@ export default function AdminInnovatorsPage() {
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <Select value={domainFilter} onValueChange={(value: 'ALL' | Domain) => setDomainFilter(value)}>
-                <SelectTrigger className="bg-white">
+                <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                   <SelectValue placeholder="領域を選択" />
                 </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900">
+                <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
                   <SelectItem value="ALL">全ての領域</SelectItem>
                   {DOMAIN_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
