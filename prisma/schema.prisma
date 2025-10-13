@@ -33,7 +33,7 @@ model Innovator {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("Innovator")
+  @@map("innovators")
 }
 
 model Evangelist {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
+import { getInnovatorSchemaSnapshot } from '@/lib/innovator-columns'
 
 export const runtime = 'nodejs'
 
@@ -18,20 +19,13 @@ export async function GET() {
       ORDER BY ordinal_position
     `)
 
-    const innovatorColumns = await prisma.$queryRawUnsafe<
-      { column_name: string }[]
-    >(`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_schema = current_schema()
-        AND table_name = 'innovators'
-      ORDER BY ordinal_position
-    `)
+    const innovatorSnapshot = await getInnovatorSchemaSnapshot({ refresh: true })
+    const innovatorColumns = Array.from(innovatorSnapshot.columns).sort((a, b) => a.localeCompare(b))
 
     return NextResponse.json({
       ok: true,
       evangelistsColumns: evangelistColumns.map((column) => column.column_name),
-      innovatorsColumns: innovatorColumns.map((column) => column.column_name),
+      innovatorsColumns: innovatorColumns,
     })
   } catch (e) {
     console.error('DB healthcheck failed:', e)

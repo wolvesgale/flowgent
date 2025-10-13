@@ -28,6 +28,12 @@ type CreateOrUpdatePayload = {
   company: string
 }
 
+const normalizeString = (value: unknown) => {
+  if (typeof value === 'string') return value
+  if (value == null) return ''
+  return String(value)
+}
+
 export default function AdminInnovatorsPage() {
   const [innovators, setInnovators] = useState<Innovator[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,6 +44,8 @@ export default function AdminInnovatorsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedInnovator, setSelectedInnovator] = useState<Innovator | null>(null)
   const [formData, setFormData] = useState({ company: '' })
+  const [formError, setFormError] = useState<string | null>(null)
+  const [createPending, setCreatePending] = useState(false)
 
   const fetchInnovators = useCallback(async () => {
     try {
@@ -55,7 +63,21 @@ export default function AdminInnovatorsPage() {
       })
 
       const data = (await response.json().catch(() => null)) as InnovatorResponse | null
-      const items = Array.isArray(data?.items) ? (data?.items as Innovator[]) : []
+      const rawItems = Array.isArray(data?.items) ? (data.items as unknown[]) : []
+      const items: Innovator[] = rawItems.flatMap((item) => {
+        if (!item || typeof item !== 'object') return []
+        const record = item as Record<string, unknown>
+        const id = Number(record.id)
+        if (!Number.isFinite(id)) return []
+        return [
+          {
+            id,
+            company: normalizeString(record.company),
+            createdAt: normalizeString(record.createdAt),
+            updatedAt: normalizeString(record.updatedAt),
+          },
+        ]
+      })
 
       setInnovators(items)
       const total = typeof data?.total === 'number' ? data.total : items.length
@@ -82,9 +104,11 @@ export default function AdminInnovatorsPage() {
     const trimmedCompany = formData.company.trim()
     if (!trimmedCompany) {
       toast.error('企業名は必須です')
+      setFormError('企業名は必須です')
       return null
     }
 
+    setFormError(null)
     return { company: trimmedCompany }
   }
 
@@ -93,6 +117,8 @@ export default function AdminInnovatorsPage() {
     if (!payload) return
 
     try {
+      setCreatePending(true)
+      setFormError(null)
       const response = await fetch('/api/admin/innovators', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,6 +129,10 @@ export default function AdminInnovatorsPage() {
       const data = (await response.json().catch(() => null)) as { error?: string } | null
 
       if (!response.ok) {
+        if (response.status === 400) {
+          setFormError(data?.error ?? '企業名は必須です')
+          return
+        }
         toast.error(data?.error ?? 'イノベータの登録に失敗しました')
         return
       }
@@ -114,6 +144,8 @@ export default function AdminInnovatorsPage() {
     } catch (error) {
       console.error('Failed to create innovator:', error)
       toast.error('イノベータの登録に失敗しました')
+    } finally {
+      setCreatePending(false)
     }
   }
 
@@ -174,6 +206,8 @@ export default function AdminInnovatorsPage() {
 
   const resetForm = () => {
     setFormData({ company: '' })
+    setFormError(null)
+    setCreatePending(false)
   }
 
   const openEditDialog = (innovator: Innovator) => {
@@ -193,7 +227,15 @@ export default function AdminInnovatorsPage() {
           <h1 className="text-3xl font-bold">イノベータ管理</h1>
           <p className="text-muted-foreground">イノベータの一覧と管理（管理者専用）</p>
         </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog
+          open={isCreateDialogOpen}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open)
+            if (!open) {
+              resetForm()
+            }
+          }}
+        >
           <DialogTrigger asChild>
             <Button onClick={resetForm}>
               <Plus className="mr-2 h-4 w-4" />
@@ -214,15 +256,30 @@ export default function AdminInnovatorsPage() {
                   id="company"
                   value={formData.company}
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-                  className="col-span-3"
+                  placeholder="企業名"
+                  required
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
                 />
               </div>
+              {formError && (
+                <div className="col-span-4 text-sm text-red-600" role="alert">
+                  {formError}
+                </div>
+              )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsCreateDialogOpen(false)
+                  resetForm()
+                }}
+              >
                 キャンセル
               </Button>
-              <Button onClick={handleCreate}>登録</Button>
+              <Button onClick={handleCreate} disabled={createPending}>
+                {createPending ? '登録中...' : '登録'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -244,7 +301,8 @@ export default function AdminInnovatorsPage() {
                   id="edit-company"
                   value={formData.company}
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-                  className="col-span-3"
+                  placeholder="企業名"
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
                 />
               </div>
             </div>
@@ -272,7 +330,7 @@ export default function AdminInnovatorsPage() {
                   placeholder="企業名で検索..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
                 />
               </div>
               <Button
