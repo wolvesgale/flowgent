@@ -27,12 +27,12 @@ enum Role {
 }
 
 model Innovator {
-  id        Int      @id @default(autoincrement())
-  company   String   @map("name") // DB列 name をアプリの company として扱う
-  url       String?
+  id         Int      @id @default(autoincrement())
+  company    String
+  url        String?
   introPoint String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@map("Innovator") // 実テーブル名は単数形の Innovator
 }

@@ -101,7 +101,11 @@ async function insertInnovatorWithEmail(options: {
   const snapshot = await getInnovatorSchemaSnapshot()
 
   const resolvedTable = escapeIdentifier(options.meta.tableName)
-  const nameColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'name') ?? 'name')
+  const resolvedCompanyColumnName =
+    resolveInnovatorColumn(snapshot.columns, 'company') ??
+    resolveInnovatorColumn(snapshot.columns, 'name') ??
+    'company'
+  const companyColumn = escapeIdentifier(resolvedCompanyColumnName)
   const emailColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'email') ?? 'email')
   const idColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
   const createdAtColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'createdAt') ?? 'createdAt')
@@ -109,7 +113,7 @@ async function insertInnovatorWithEmail(options: {
   const urlColumn = resolveInnovatorColumn(snapshot.columns, 'url')
   const introPointColumn = resolveInnovatorColumn(snapshot.columns, 'introPoint')
 
-  const insertColumns: Prisma.Sql[] = [Prisma.raw(nameColumn), Prisma.raw(emailColumn)]
+  const insertColumns: Prisma.Sql[] = [Prisma.raw(companyColumn), Prisma.raw(emailColumn)]
   const insertValues: Prisma.Sql[] = [Prisma.sql`${options.company}`, Prisma.sql`${options.email}`]
 
   if (options.url !== null && urlColumn) {
@@ -124,7 +128,7 @@ async function insertInnovatorWithEmail(options: {
 
   const returningColumns: Prisma.Sql[] = [
     Prisma.sql`${Prisma.raw(idColumn)} AS "id"`,
-    Prisma.sql`${Prisma.raw(nameColumn)} AS "company"`,
+    Prisma.sql`${Prisma.raw(companyColumn)} AS "company"`,
   ]
 
   if (urlColumn) {
@@ -171,38 +175,31 @@ export async function POST(req: NextRequest) {
     }
 
     const body = rawBody as Record<string, unknown>
-    const allowedKeys = ['company', 'url', 'introPoint'] as const
-    const unknownKeys = Object.keys(body).filter(
-      (key) => !allowedKeys.includes(key as (typeof allowedKeys)[number]),
-    )
-    if (unknownKeys.length > 0) {
-      return NextResponse.json(
-        {
-          error: 'Only { company, url, introPoint } are allowed',
-          unknownKeys,
-        },
-        { status: 400 },
-      )
-    }
 
-    const company = typeof body.company === 'string' ? body.company.trim() : ''
+    const company =
+      typeof body.company === 'string'
+        ? body.company.trim()
+        : typeof body.company === 'number'
+          ? String(body.company).trim()
+          : ''
     if (!company) {
       return NextResponse.json({ error: 'company is required' }, { status: 400 })
     }
 
-    if (body.url != null && typeof body.url !== 'string') {
-      return NextResponse.json({ error: 'url must be a string' }, { status: 400 })
-    }
-
-    if (body.introPoint != null && typeof body.introPoint !== 'string') {
-      return NextResponse.json({ error: 'introPoint must be a string' }, { status: 400 })
-    }
-
-    const trimmedUrl = typeof body.url === 'string' ? body.url.trim() : ''
+    const trimmedUrl =
+      typeof body.url === 'string'
+        ? body.url.trim()
+        : typeof body.url === 'number'
+          ? String(body.url).trim()
+          : ''
     const url = trimmedUrl.length > 0 ? trimmedUrl : null
 
     const trimmedIntroPoint =
-      typeof body.introPoint === 'string' ? body.introPoint.trim() : ''
+      typeof body.introPoint === 'string'
+        ? body.introPoint.trim()
+        : typeof body.introPoint === 'number'
+          ? String(body.introPoint).trim()
+          : ''
     const introPoint = trimmedIntroPoint.length > 0 ? trimmedIntroPoint : null
 
     const columnMeta = await getInnovatorColumnMetaCached()
