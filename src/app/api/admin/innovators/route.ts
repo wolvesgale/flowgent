@@ -275,6 +275,21 @@ export async function POST(req: NextRequest) {
         updatedAt: innovatorRow.updatedAt,
       }
     }
+    if (introPoint !== null) {
+      createData.introPoint = introPoint
+    }
+
+    const createdInnovator = await prisma.innovator.create({
+      data: createData,
+      select: {
+        id: true,
+        createdAt: true,
+        updatedAt: true,
+        company: true,
+        url: true,
+        introPoint: true,
+      },
+    })
 
     return NextResponse.json({
       id: created.id,
