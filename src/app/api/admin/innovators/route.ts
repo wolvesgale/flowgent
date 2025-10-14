@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') ?? '10')))
     const search = (url.searchParams.get('search') ?? '').trim()
 
-    const where = search
-      ? { company: { contains: search, mode: 'insensitive' as const } }
+    const where: Prisma.InnovatorWhereInput = search
+      ? { name: { contains: search, mode: 'insensitive' } }
       : {}
 
     const skip = (page - 1) * limit
@@ -51,16 +51,16 @@ export async function GET(req: NextRequest) {
           id: true,
           createdAt: true,
           updatedAt: true,
-          company: true,
+          name: true,
           url: true,
           introPoint: true,
         },
       }),
     ])
 
-    const items = rows.map(({ id, createdAt, updatedAt, company, url, introPoint }) => ({
+    const items = rows.map(({ id, createdAt, updatedAt, name, url, introPoint }) => ({
       id,
-      company,
+      company: name,
       url: url ?? null,
       introPoint: introPoint ?? null,
       createdAt,
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 
 type InnovatorRow = {
   id: number
-  company: string
+  name: string
   url?: string | null
   introPoint?: string | null
   createdAt: Date
@@ -102,9 +102,9 @@ async function insertInnovatorWithEmail(options: {
 
   const resolvedTable = escapeIdentifier(options.meta.tableName)
   const resolvedCompanyColumnName =
-    resolveInnovatorColumn(snapshot.columns, 'company') ??
     resolveInnovatorColumn(snapshot.columns, 'name') ??
-    'company'
+    resolveInnovatorColumn(snapshot.columns, 'company') ??
+    'name'
   const companyColumn = escapeIdentifier(resolvedCompanyColumnName)
   const emailColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'email') ?? 'email')
   const idColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
@@ -128,7 +128,7 @@ async function insertInnovatorWithEmail(options: {
 
   const returningColumns: Prisma.Sql[] = [
     Prisma.sql`${Prisma.raw(idColumn)} AS "id"`,
-    Prisma.sql`${Prisma.raw(companyColumn)} AS "company"`,
+    Prisma.sql`${Prisma.raw(companyColumn)} AS "name"`,
   ]
 
   if (urlColumn) {
@@ -176,6 +176,18 @@ export async function POST(req: NextRequest) {
 
     const body = rawBody as Record<string, unknown>
 
+    const allowedKeys = ['company', 'url', 'introPoint']
+    const unknownKeys = Object.keys(body).filter((key) => !allowedKeys.includes(key))
+    if (unknownKeys.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Only { company, url, introPoint } are allowed',
+          unknownKeys,
+        },
+        { status: 400 },
+      )
+    }
+
     const company =
       typeof body.company === 'string'
         ? body.company.trim()
@@ -202,7 +214,26 @@ export async function POST(req: NextRequest) {
           : ''
     const introPoint = trimmedIntroPoint.length > 0 ? trimmedIntroPoint : null
 
+    const data: Prisma.InnovatorCreateInput & Record<string, unknown> = {
+      name: company,
+    }
+    if (url !== null) {
+      data.url = url
+    }
+    if (introPoint !== null) {
+      data.introPoint = introPoint
+    }
+
     const columnMeta = await getInnovatorColumnMetaCached()
+
+    let created: {
+      id: string | number
+      name: string
+      url: string | null
+      introPoint: string | null
+      createdAt: Date
+      updatedAt: Date
+    }
 
     if (columnMeta.emailRequired) {
       const placeholderEmail = `innovator+${randomUUID()}@placeholder.invalid`
@@ -214,19 +245,26 @@ export async function POST(req: NextRequest) {
         introPoint,
       })
 
-      return NextResponse.json({
+      created = {
         id: insertedInnovator.id,
-        company: insertedInnovator.company,
+        name: insertedInnovator.name,
         url: insertedInnovator.url ?? null,
         introPoint: insertedInnovator.introPoint ?? null,
         createdAt: insertedInnovator.createdAt,
         updatedAt: insertedInnovator.updatedAt,
+      }
+    } else {
+      created = await prisma.innovator.create({
+        data,
+        select: {
+          id: true,
+          createdAt: true,
+          updatedAt: true,
+          name: true,
+          url: true,
+          introPoint: true,
+        },
       })
-    }
-
-    const createData: Prisma.InnovatorCreateInput = { company }
-    if (url !== null) {
-      createData.url = url
     }
     if (introPoint !== null) {
       createData.introPoint = introPoint
@@ -245,17 +283,25 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json({
-      id: createdInnovator.id,
-      company: createdInnovator.company,
-      url: createdInnovator.url ?? null,
-      introPoint: createdInnovator.introPoint ?? null,
-      createdAt: createdInnovator.createdAt,
-      updatedAt: createdInnovator.updatedAt,
+      id: created.id,
+      company: created.name,
+      url: created.url ?? null,
+      introPoint: created.introPoint ?? null,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
     })
   } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       if (error.message === 'Forbidden') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2011') {
+        return NextResponse.json({ error: 'name (company) is required' }, { status: 400 })
+      }
+      if (error.code === 'P2022') {
+        return NextResponse.json({ error: 'DB column mismatch. Run migrations.' }, { status: 500 })
+      }
     }
     console.error('[innovators:create]', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
