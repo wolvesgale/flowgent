@@ -87,10 +87,6 @@ type InnovatorRow = {
   updatedAt: Date
 }
 
-function escapeIdentifier(identifier: string) {
-  return `"${identifier.replace(/"/g, '""')}"`
-}
-
 async function insertInnovatorRaw(options: {
   company: string
   url: string | null
@@ -101,19 +97,21 @@ async function insertInnovatorRaw(options: {
   const snapshot = await getInnovatorSchemaSnapshot()
   const meta = options.meta ?? (await getInnovatorColumnMetaCached())
 
-  const table = escapeIdentifier(meta.tableName)
+  const esc = (identifier: string) => `"${identifier.replace(/"/g, '""')}"`
+
+  const table = esc(meta.tableName)
   const companyColumnName =
     resolveInnovatorColumn(snapshot.columns, 'company') ??
     resolveInnovatorColumn(snapshot.columns, 'name') ??
     'company'
-  const companyColumn = escapeIdentifier(companyColumnName)
+  const companyColumn = esc(companyColumnName)
 
   const emailColumnName = resolveInnovatorColumn(snapshot.columns, 'email')
-  const idColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
-  const createdAtColumn = escapeIdentifier(
+  const idColumn = esc(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
+  const createdAtColumn = esc(
     resolveInnovatorColumn(snapshot.columns, 'createdAt') ?? 'createdAt',
   )
-  const updatedAtColumn = escapeIdentifier(
+  const updatedAtColumn = esc(
     resolveInnovatorColumn(snapshot.columns, 'updatedAt') ?? 'updatedAt',
   )
   const urlColumnName = resolveInnovatorColumn(snapshot.columns, 'url')
@@ -123,17 +121,17 @@ async function insertInnovatorRaw(options: {
   const values: Prisma.Sql[] = [Prisma.sql`${options.company}`]
 
   if (options.email && emailColumnName) {
-    columns.push(Prisma.raw(escapeIdentifier(emailColumnName)))
+    columns.push(Prisma.raw(esc(emailColumnName)))
     values.push(Prisma.sql`${options.email}`)
   }
 
   if (options.url !== null && urlColumnName) {
-    columns.push(Prisma.raw(escapeIdentifier(urlColumnName)))
+    columns.push(Prisma.raw(esc(urlColumnName)))
     values.push(Prisma.sql`${options.url}`)
   }
 
   if (options.introPoint !== null && introColumnName) {
-    columns.push(Prisma.raw(escapeIdentifier(introColumnName)))
+    columns.push(Prisma.raw(esc(introColumnName)))
     values.push(Prisma.sql`${options.introPoint}`)
   }
 
@@ -146,13 +144,13 @@ async function insertInnovatorRaw(options: {
 
   if (urlColumnName) {
     returning.push(
-      Prisma.sql`${Prisma.raw(escapeIdentifier(urlColumnName))} AS "url"`,
+      Prisma.sql`${Prisma.raw(esc(urlColumnName))} AS "url"`,
     )
   }
 
   if (introColumnName) {
     returning.push(
-      Prisma.sql`${Prisma.raw(escapeIdentifier(introColumnName))} AS "introPoint"`,
+      Prisma.sql`${Prisma.raw(esc(introColumnName))} AS "introPoint"`,
     )
   }
 
