@@ -13,6 +13,8 @@ import { Search, Plus, Edit, Trash2 } from 'lucide-react'
 interface Innovator {
   id: number
   company: string
+  url: string | null
+  introPoint: string | null
   createdAt: string
   updatedAt: string
 }
@@ -26,6 +28,14 @@ type InnovatorResponse = {
 
 type CreateOrUpdatePayload = {
   company: string
+  email?: string
+  url?: string
+  introPoint?: string
+}
+
+type InnovatorMeta = {
+  hasEmail: boolean
+  emailRequired: boolean
 }
 
 const normalizeString = (value: unknown) => {
@@ -43,9 +53,10 @@ export default function AdminInnovatorsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedInnovator, setSelectedInnovator] = useState<Innovator | null>(null)
-  const [formData, setFormData] = useState({ company: '' })
+  const [formData, setFormData] = useState({ company: '', email: '', url: '', introPoint: '' })
   const [formError, setFormError] = useState<string | null>(null)
   const [createPending, setCreatePending] = useState(false)
+  const [innovatorMeta, setInnovatorMeta] = useState<InnovatorMeta | null>(null)
 
   const fetchInnovators = useCallback(async () => {
     try {
@@ -69,10 +80,15 @@ export default function AdminInnovatorsPage() {
         const record = item as Record<string, unknown>
         const id = Number(record.id)
         if (!Number.isFinite(id)) return []
+        const urlValue = record.url == null ? null : normalizeString(record.url)
+        const introPointValue =
+          record.introPoint == null ? null : normalizeString(record.introPoint)
         return [
           {
             id,
             company: normalizeString(record.company),
+            url: urlValue,
+            introPoint: introPointValue,
             createdAt: normalizeString(record.createdAt),
             updatedAt: normalizeString(record.updatedAt),
           },
@@ -100,6 +116,28 @@ export default function AdminInnovatorsPage() {
     void fetchInnovators()
   }, [fetchInnovators])
 
+  useEffect(() => {
+    const fetchMeta = async () => {
+      try {
+        const response = await fetch('/api/health/db', { credentials: 'include' })
+        if (!response.ok) return
+        const data = (await response.json().catch(() => null)) as {
+          innovator?: { hasEmail?: unknown; emailRequired?: unknown }
+        } | null
+        const meta = data?.innovator
+        if (!meta) return
+        setInnovatorMeta({
+          hasEmail: meta.hasEmail === true,
+          emailRequired: meta.emailRequired === true,
+        })
+      } catch (error) {
+        console.error('Failed to fetch innovator metadata:', error)
+      }
+    }
+
+    void fetchMeta()
+  }, [])
+
   const buildInnovatorPayload = (): CreateOrUpdatePayload | null => {
     const trimmedCompany = formData.company.trim()
     if (!trimmedCompany) {
@@ -109,7 +147,23 @@ export default function AdminInnovatorsPage() {
     }
 
     setFormError(null)
-    return { company: trimmedCompany }
+    const payload: CreateOrUpdatePayload = { company: trimmedCompany }
+
+    const trimmedUrl = formData.url.trim()
+    if (trimmedUrl) {
+      payload.url = trimmedUrl
+    }
+
+    const trimmedIntroPoint = formData.introPoint.trim()
+    if (trimmedIntroPoint) {
+      payload.introPoint = trimmedIntroPoint
+    }
+    const shouldIncludeEmail = innovatorMeta?.emailRequired === true
+    const trimmedEmail = formData.email.trim()
+    if (shouldIncludeEmail && trimmedEmail) {
+      payload.email = trimmedEmail
+    }
+    return payload
   }
 
   const handleCreate = async () => {
@@ -205,20 +259,27 @@ export default function AdminInnovatorsPage() {
   }
 
   const resetForm = () => {
-    setFormData({ company: '' })
+    setFormData({ company: '', email: '', url: '', introPoint: '' })
     setFormError(null)
     setCreatePending(false)
   }
 
   const openEditDialog = (innovator: Innovator) => {
     setSelectedInnovator(innovator)
-    setFormData({ company: innovator.company })
+    setFormData({
+      company: innovator.company,
+      email: '',
+      url: innovator.url ?? '',
+      introPoint: innovator.introPoint ?? '',
+    })
     setIsEditDialogOpen(true)
   }
 
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('ja-JP')
   const safeInnovators = Array.isArray(innovators) ? innovators : []
   const itemCount = safeInnovators.length
+
+  const shouldShowEmailField = innovatorMeta?.emailRequired === true
 
   return (
     <div className="container mx-auto py-6">
@@ -261,6 +322,47 @@ export default function AdminInnovatorsPage() {
                   className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
                 />
               </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="url" className="text-right">
+                  URL（任意）
+                </Label>
+                <Input
+                  id="url"
+                  value={formData.url}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
+                  placeholder="https://example.com"
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="introPoint" className="text-right">
+                  紹介ポイント（任意）
+                </Label>
+                <Input
+                  id="introPoint"
+                  value={formData.introPoint}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, introPoint: e.target.value }))
+                  }
+                  placeholder="紹介ポイント"
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                />
+              </div>
+              {shouldShowEmailField && (
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="email" className="text-right">
+                    Email（任意）
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder="Email"
+                    className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                  />
+                </div>
+              )}
               {formError && (
                 <div className="col-span-4 text-sm text-red-600" role="alert">
                   {formError}

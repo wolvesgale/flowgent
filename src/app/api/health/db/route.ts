@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
-import { getInnovatorSchemaSnapshot } from '@/lib/innovator-columns'
+import {
+  getInnovatorColumnMetaCached,
+  getInnovatorSchemaSnapshot,
+} from '@/lib/innovator-columns'
 
 export const runtime = 'nodejs'
 
@@ -20,12 +23,18 @@ export async function GET() {
     `)
 
     const innovatorSnapshot = await getInnovatorSchemaSnapshot({ refresh: true })
+    const innovatorMeta = await getInnovatorColumnMetaCached()
     const innovatorColumns = Array.from(innovatorSnapshot.columns).sort((a, b) => a.localeCompare(b))
 
     return NextResponse.json({
       ok: true,
       evangelistsColumns: evangelistColumns.map((column) => column.column_name),
-      innovatorsColumns: innovatorColumns,
+      innovator: {
+        tableName: innovatorSnapshot.tableName,
+        columns: innovatorColumns,
+        hasEmail: innovatorMeta.hasEmail,
+        emailRequired: innovatorMeta.emailRequired,
+      },
     })
   } catch (e) {
     console.error('DB healthcheck failed:', e)
