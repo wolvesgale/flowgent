@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 
 type InnovatorRow = {
   id: number
-  name: string
+  company: string
   url?: string | null
   introPoint?: string | null
   createdAt: Date
@@ -91,68 +91,76 @@ function escapeIdentifier(identifier: string) {
   return `"${identifier.replace(/"/g, '""')}"`
 }
 
-async function insertInnovatorWithEmail(options: {
+async function insertInnovatorRaw(options: {
   company: string
-  email: string
-  meta: Awaited<ReturnType<typeof getInnovatorColumnMetaCached>>
   url: string | null
   introPoint: string | null
+  email?: string | null
+  meta?: Awaited<ReturnType<typeof getInnovatorColumnMetaCached>>
 }) {
   const snapshot = await getInnovatorSchemaSnapshot()
+  const meta = options.meta ?? (await getInnovatorColumnMetaCached())
 
-  const resolvedTable = escapeIdentifier(options.meta.tableName)
-  const resolvedCompanyColumnName =
-    resolveInnovatorColumn(snapshot.columns, 'name') ??
+  const table = escapeIdentifier(meta.tableName)
+  const companyColumnName =
     resolveInnovatorColumn(snapshot.columns, 'company') ??
-    'name'
-  const companyColumn = escapeIdentifier(resolvedCompanyColumnName)
-  const emailColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'email') ?? 'email')
+    resolveInnovatorColumn(snapshot.columns, 'name') ??
+    'company'
+  const companyColumn = escapeIdentifier(companyColumnName)
+
+  const emailColumnName = resolveInnovatorColumn(snapshot.columns, 'email')
   const idColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
-  const createdAtColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'createdAt') ?? 'createdAt')
-  const updatedAtColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'updatedAt') ?? 'updatedAt')
-  const urlColumn = resolveInnovatorColumn(snapshot.columns, 'url')
-  const introPointColumn = resolveInnovatorColumn(snapshot.columns, 'introPoint')
+  const createdAtColumn = escapeIdentifier(
+    resolveInnovatorColumn(snapshot.columns, 'createdAt') ?? 'createdAt',
+  )
+  const updatedAtColumn = escapeIdentifier(
+    resolveInnovatorColumn(snapshot.columns, 'updatedAt') ?? 'updatedAt',
+  )
+  const urlColumnName = resolveInnovatorColumn(snapshot.columns, 'url')
+  const introColumnName = resolveInnovatorColumn(snapshot.columns, 'introPoint')
 
-  const insertColumns: Prisma.Sql[] = [Prisma.raw(companyColumn), Prisma.raw(emailColumn)]
-  const insertValues: Prisma.Sql[] = [Prisma.sql`${options.company}`, Prisma.sql`${options.email}`]
+  const columns: Prisma.Sql[] = [Prisma.raw(companyColumn)]
+  const values: Prisma.Sql[] = [Prisma.sql`${options.company}`]
 
-  if (options.url !== null && urlColumn) {
-    insertColumns.push(Prisma.raw(escapeIdentifier(urlColumn)))
-    insertValues.push(Prisma.sql`${options.url}`)
+  if (options.email && emailColumnName) {
+    columns.push(Prisma.raw(escapeIdentifier(emailColumnName)))
+    values.push(Prisma.sql`${options.email}`)
   }
 
-  if (options.introPoint !== null && introPointColumn) {
-    insertColumns.push(Prisma.raw(escapeIdentifier(introPointColumn)))
-    insertValues.push(Prisma.sql`${options.introPoint}`)
+  if (options.url !== null && urlColumnName) {
+    columns.push(Prisma.raw(escapeIdentifier(urlColumnName)))
+    values.push(Prisma.sql`${options.url}`)
   }
 
-  const returningColumns: Prisma.Sql[] = [
+  if (options.introPoint !== null && introColumnName) {
+    columns.push(Prisma.raw(escapeIdentifier(introColumnName)))
+    values.push(Prisma.sql`${options.introPoint}`)
+  }
+
+  const returning: Prisma.Sql[] = [
     Prisma.sql`${Prisma.raw(idColumn)} AS "id"`,
-    Prisma.sql`${Prisma.raw(companyColumn)} AS "name"`,
-  ]
-
-  if (urlColumn) {
-    returningColumns.push(
-      Prisma.sql`${Prisma.raw(escapeIdentifier(urlColumn))} AS "url"`,
-    )
-  }
-
-  if (introPointColumn) {
-    returningColumns.push(
-      Prisma.sql`${Prisma.raw(escapeIdentifier(introPointColumn))} AS "introPoint"`,
-    )
-  }
-
-  returningColumns.push(
+    Prisma.sql`${Prisma.raw(companyColumn)} AS "company"`,
     Prisma.sql`${Prisma.raw(createdAtColumn)} AS "createdAt"`,
     Prisma.sql`${Prisma.raw(updatedAtColumn)} AS "updatedAt"`,
-  )
+  ]
+
+  if (urlColumnName) {
+    returning.push(
+      Prisma.sql`${Prisma.raw(escapeIdentifier(urlColumnName))} AS "url"`,
+    )
+  }
+
+  if (introColumnName) {
+    returning.push(
+      Prisma.sql`${Prisma.raw(escapeIdentifier(introColumnName))} AS "introPoint"`,
+    )
+  }
 
   const rows = await prisma.$queryRaw<InnovatorRow[]>(
     Prisma.sql`
-      INSERT INTO ${Prisma.raw(resolvedTable)} (${Prisma.join(insertColumns, ', ')})
-      VALUES (${Prisma.join(insertValues, ', ')})
-      RETURNING ${Prisma.join(returningColumns, ', ')}
+      INSERT INTO ${Prisma.raw(table)} (${Prisma.join(columns, ', ')})
+      VALUES (${Prisma.join(values, ', ')})
+      RETURNING ${Prisma.join(returning, ', ')}
     `,
   )
 
@@ -203,48 +211,25 @@ export async function POST(req: NextRequest) {
 
     const meta = await getInnovatorColumnMetaCached()
 
-    if (meta.emailRequired) {
-      const inserted = await insertInnovatorWithEmail({
-        company,
-        email: `innovator+${randomUUID()}@placeholder.invalid`,
-        meta,
-        url,
-        introPoint,
-      })
+    const email = meta.emailRequired
+      ? `innovator+${randomUUID()}@placeholder.invalid`
+      : null
 
-      return NextResponse.json({
-        id: inserted.id,
-        company: inserted.name,
-        url: inserted.url ?? null,
-        introPoint: inserted.introPoint ?? null,
-        createdAt: inserted.createdAt,
-        updatedAt: inserted.updatedAt,
-      })
-    }
-
-    const data: Prisma.InnovatorCreateInput = { name: company }
-    if (url !== null) data.url = url
-    if (introPoint !== null) data.introPoint = introPoint
-
-    const created = await prisma.innovator.create({
-      data,
-      select: {
-        id: true,
-        createdAt: true,
-        updatedAt: true,
-        name: true,
-        url: true,
-        introPoint: true,
-      },
+    const inserted = await insertInnovatorRaw({
+      company,
+      url,
+      introPoint,
+      email,
+      meta,
     })
 
     return NextResponse.json({
-      id: created.id,
-      company: created.name,
-      url: created.url ?? null,
-      introPoint: created.introPoint ?? null,
-      createdAt: created.createdAt,
-      updatedAt: created.updatedAt,
+      id: inserted.id,
+      company: inserted.company,
+      url: inserted.url ?? null,
+      introPoint: inserted.introPoint ?? null,
+      createdAt: inserted.createdAt,
+      updatedAt: inserted.updatedAt,
     })
   } catch (error) {
     if (error instanceof Error) {
