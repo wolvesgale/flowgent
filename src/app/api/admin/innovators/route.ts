@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') ?? '10')))
     const search = (url.searchParams.get('search') ?? '').trim()
 
-    const where = search
-      ? { company: { contains: search, mode: 'insensitive' as const } }
+    const where: Prisma.InnovatorWhereInput = search
+      ? { name: { contains: search, mode: 'insensitive' } }
       : {}
 
     const skip = (page - 1) * limit
@@ -51,16 +51,16 @@ export async function GET(req: NextRequest) {
           id: true,
           createdAt: true,
           updatedAt: true,
-          company: true,
+          name: true,
           url: true,
           introPoint: true,
         },
       }),
     ])
 
-    const items = rows.map(({ id, createdAt, updatedAt, company, url, introPoint }) => ({
+    const items = rows.map(({ id, createdAt, updatedAt, name, url, introPoint }) => ({
       id,
-      company,
+      company: name,
       url: url ?? null,
       introPoint: introPoint ?? null,
       createdAt,
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 
 type InnovatorRow = {
   id: number
-  company: string
+  name: string
   url?: string | null
   introPoint?: string | null
   createdAt: Date
@@ -102,9 +102,9 @@ async function insertInnovatorWithEmail(options: {
 
   const resolvedTable = escapeIdentifier(options.meta.tableName)
   const resolvedCompanyColumnName =
-    resolveInnovatorColumn(snapshot.columns, 'company') ??
     resolveInnovatorColumn(snapshot.columns, 'name') ??
-    'company'
+    resolveInnovatorColumn(snapshot.columns, 'company') ??
+    'name'
   const companyColumn = escapeIdentifier(resolvedCompanyColumnName)
   const emailColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'email') ?? 'email')
   const idColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
@@ -128,7 +128,7 @@ async function insertInnovatorWithEmail(options: {
 
   const returningColumns: Prisma.Sql[] = [
     Prisma.sql`${Prisma.raw(idColumn)} AS "id"`,
-    Prisma.sql`${Prisma.raw(companyColumn)} AS "company"`,
+    Prisma.sql`${Prisma.raw(companyColumn)} AS "name"`,
   ]
 
   if (urlColumn) {
@@ -163,17 +163,16 @@ async function insertInnovatorWithEmail(options: {
   return rows[0]
 }
 
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getSessionUserOrThrow()
     requireRole(user, ['ADMIN', 'CS'])
 
     const rawBody = (await req.json().catch(() => null)) as unknown
-
     if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
     }
-
     const body = rawBody as Record<string, unknown>
 
     const company =
@@ -186,71 +185,66 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'company is required' }, { status: 400 })
     }
 
-    const trimmedUrl =
+    const urlStr =
       typeof body.url === 'string'
         ? body.url.trim()
         : typeof body.url === 'number'
           ? String(body.url).trim()
           : ''
-    const url = trimmedUrl.length > 0 ? trimmedUrl : null
+    const url = urlStr ? urlStr : null
 
-    const trimmedIntroPoint =
+    const introStr =
       typeof body.introPoint === 'string'
         ? body.introPoint.trim()
         : typeof body.introPoint === 'number'
           ? String(body.introPoint).trim()
           : ''
-    const introPoint = trimmedIntroPoint.length > 0 ? trimmedIntroPoint : null
+    const introPoint = introStr ? introStr : null
 
-    const columnMeta = await getInnovatorColumnMetaCached()
+    const meta = await getInnovatorColumnMetaCached()
 
-    if (columnMeta.emailRequired) {
-      const placeholderEmail = `innovator+${randomUUID()}@placeholder.invalid`
-      const insertedInnovator = await insertInnovatorWithEmail({
+    if (meta.emailRequired) {
+      const inserted = await insertInnovatorWithEmail({
         company,
-        email: placeholderEmail,
-        meta: columnMeta,
+        email: `innovator+${randomUUID()}@placeholder.invalid`,
+        meta,
         url,
         introPoint,
       })
 
       return NextResponse.json({
-        id: insertedInnovator.id,
-        company: insertedInnovator.company,
-        url: insertedInnovator.url ?? null,
-        introPoint: insertedInnovator.introPoint ?? null,
-        createdAt: insertedInnovator.createdAt,
-        updatedAt: insertedInnovator.updatedAt,
+        id: inserted.id,
+        company: inserted.name,
+        url: inserted.url ?? null,
+        introPoint: inserted.introPoint ?? null,
+        createdAt: inserted.createdAt,
+        updatedAt: inserted.updatedAt,
       })
     }
 
-    const createData: Prisma.InnovatorCreateInput = { company }
-    if (url !== null) {
-      createData.url = url
-    }
-    if (introPoint !== null) {
-      createData.introPoint = introPoint
-    }
+    const data: Prisma.InnovatorCreateInput = { name: company }
+    if (url !== null) data.url = url
+    if (introPoint !== null) data.introPoint = introPoint
 
-    const createdInnovator = await prisma.innovator.create({
-      data: createData,
+    const created = await prisma.innovator.create({
+      data,
       select: {
         id: true,
         createdAt: true,
         updatedAt: true,
-        company: true,
+        name: true,
         url: true,
         introPoint: true,
       },
     })
 
     return NextResponse.json({
-      id: createdInnovator.id,
-      company: createdInnovator.company,
-      url: createdInnovator.url ?? null,
-      introPoint: createdInnovator.introPoint ?? null,
-      createdAt: createdInnovator.createdAt,
-      updatedAt: createdInnovator.updatedAt,
+      id: created.id,
+      company: created.name,
+      url: created.url ?? null,
+      introPoint: created.introPoint ?? null,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
     })
   } catch (error) {
     if (error instanceof Error) {
@@ -261,3 +255,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+

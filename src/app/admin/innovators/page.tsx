@@ -13,6 +13,8 @@ import { Search, Plus, Edit, Trash2 } from 'lucide-react'
 interface Innovator {
   id: number
   company: string
+  url: string | null
+  introPoint: string | null
   createdAt: string
   updatedAt: string
 }
@@ -27,6 +29,8 @@ type InnovatorResponse = {
 type CreateOrUpdatePayload = {
   company: string
   email?: string
+  url?: string
+  introPoint?: string
 }
 
 type InnovatorMeta = {
@@ -49,7 +53,7 @@ export default function AdminInnovatorsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedInnovator, setSelectedInnovator] = useState<Innovator | null>(null)
-  const [formData, setFormData] = useState({ company: '', email: '' })
+  const [formData, setFormData] = useState({ company: '', email: '', url: '', introPoint: '' })
   const [formError, setFormError] = useState<string | null>(null)
   const [createPending, setCreatePending] = useState(false)
   const [innovatorMeta, setInnovatorMeta] = useState<InnovatorMeta | null>(null)
@@ -76,10 +80,15 @@ export default function AdminInnovatorsPage() {
         const record = item as Record<string, unknown>
         const id = Number(record.id)
         if (!Number.isFinite(id)) return []
+        const urlValue = record.url == null ? null : normalizeString(record.url)
+        const introPointValue =
+          record.introPoint == null ? null : normalizeString(record.introPoint)
         return [
           {
             id,
             company: normalizeString(record.company),
+            url: urlValue,
+            introPoint: introPointValue,
             createdAt: normalizeString(record.createdAt),
             updatedAt: normalizeString(record.updatedAt),
           },
@@ -139,6 +148,16 @@ export default function AdminInnovatorsPage() {
 
     setFormError(null)
     const payload: CreateOrUpdatePayload = { company: trimmedCompany }
+
+    const trimmedUrl = formData.url.trim()
+    if (trimmedUrl) {
+      payload.url = trimmedUrl
+    }
+
+    const trimmedIntroPoint = formData.introPoint.trim()
+    if (trimmedIntroPoint) {
+      payload.introPoint = trimmedIntroPoint
+    }
     const shouldIncludeEmail = innovatorMeta?.emailRequired === true
     const trimmedEmail = formData.email.trim()
     if (shouldIncludeEmail && trimmedEmail) {
@@ -240,14 +259,19 @@ export default function AdminInnovatorsPage() {
   }
 
   const resetForm = () => {
-    setFormData({ company: '', email: '' })
+    setFormData({ company: '', email: '', url: '', introPoint: '' })
     setFormError(null)
     setCreatePending(false)
   }
 
   const openEditDialog = (innovator: Innovator) => {
     setSelectedInnovator(innovator)
-    setFormData({ company: innovator.company, email: '' })
+    setFormData({
+      company: innovator.company,
+      email: '',
+      url: innovator.url ?? '',
+      introPoint: innovator.introPoint ?? '',
+    })
     setIsEditDialogOpen(true)
   }
 
@@ -295,6 +319,32 @@ export default function AdminInnovatorsPage() {
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
                   placeholder="企業名"
                   required
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="url" className="text-right">
+                  URL（任意）
+                </Label>
+                <Input
+                  id="url"
+                  value={formData.url}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
+                  placeholder="https://example.com"
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="introPoint" className="text-right">
+                  紹介ポイント（任意）
+                </Label>
+                <Input
+                  id="introPoint"
+                  value={formData.introPoint}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, introPoint: e.target.value }))
+                  }
+                  placeholder="紹介ポイント"
                   className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
                 />
               </div>
