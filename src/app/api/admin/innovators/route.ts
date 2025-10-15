@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     const search = (url.searchParams.get('search') ?? '').trim()
 
     const where: Prisma.InnovatorWhereInput = search
-      ? { name: { contains: search, mode: 'insensitive' } }
+      ? { name: { contains: search, mode: 'insensitive' as const } }
       : {}
 
     const skip = (page - 1) * limit
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 
 type InnovatorRow = {
   id: number
-  company: string
+  name: string
   url?: string | null
   introPoint?: string | null
   createdAt: Date
@@ -93,18 +93,18 @@ async function insertInnovatorRaw(options: {
   introPoint: string | null
   email?: string | null
   meta?: Awaited<ReturnType<typeof getInnovatorColumnMetaCached>>
-}) {
+}): Promise<InnovatorRow> {
   const snapshot = await getInnovatorSchemaSnapshot()
   const meta = options.meta ?? (await getInnovatorColumnMetaCached())
 
   const esc = (identifier: string) => `"${identifier.replace(/"/g, '""')}"`
 
   const table = esc(meta.tableName)
-  const companyColumnName =
+  const nameColumnName =
     resolveInnovatorColumn(snapshot.columns, 'company') ??
     resolveInnovatorColumn(snapshot.columns, 'name') ??
     'company'
-  const companyColumn = esc(companyColumnName)
+  const nameColumn = esc(nameColumnName)
 
   const emailColumnName = resolveInnovatorColumn(snapshot.columns, 'email')
   const idColumn = esc(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
@@ -117,7 +117,7 @@ async function insertInnovatorRaw(options: {
   const urlColumnName = resolveInnovatorColumn(snapshot.columns, 'url')
   const introColumnName = resolveInnovatorColumn(snapshot.columns, 'introPoint')
 
-  const columns: Prisma.Sql[] = [Prisma.raw(companyColumn)]
+  const columns: Prisma.Sql[] = [Prisma.raw(nameColumn)]
   const values: Prisma.Sql[] = [Prisma.sql`${options.company}`]
 
   if (options.email && emailColumnName) {
@@ -137,7 +137,7 @@ async function insertInnovatorRaw(options: {
 
   const returning: Prisma.Sql[] = [
     Prisma.sql`${Prisma.raw(idColumn)} AS "id"`,
-    Prisma.sql`${Prisma.raw(companyColumn)} AS "company"`,
+    Prisma.sql`${Prisma.raw(nameColumn)} AS "name"`,
     Prisma.sql`${Prisma.raw(createdAtColumn)} AS "createdAt"`,
     Prisma.sql`${Prisma.raw(updatedAtColumn)} AS "updatedAt"`,
   ]
@@ -209,25 +209,51 @@ export async function POST(req: NextRequest) {
 
     const meta = await getInnovatorColumnMetaCached()
 
-    const email = meta.emailRequired
-      ? `innovator+${randomUUID()}@placeholder.invalid`
-      : null
+    if (meta.emailRequired) {
+      const email = `innovator+${randomUUID()}@placeholder.invalid`
+      const inserted = await insertInnovatorRaw({
+        company,
+        url,
+        introPoint,
+        email,
+        meta,
+      })
 
-    const inserted = await insertInnovatorRaw({
-      company,
-      url,
-      introPoint,
-      email,
-      meta,
+      return NextResponse.json({
+        id: inserted.id,
+        company: inserted.name,
+        url: inserted.url ?? null,
+        introPoint: inserted.introPoint ?? null,
+        createdAt: inserted.createdAt,
+        updatedAt: inserted.updatedAt,
+      })
+    }
+
+    const createData: Prisma.InnovatorCreateInput = {
+      name: company,
+      ...(url !== null ? { url } : {}),
+      ...(introPoint !== null ? { introPoint } : {}),
+    }
+
+    const created = await prisma.innovator.create({
+      data: createData,
+      select: {
+        id: true,
+        createdAt: true,
+        updatedAt: true,
+        name: true,
+        url: true,
+        introPoint: true,
+      },
     })
 
     return NextResponse.json({
-      id: inserted.id,
-      company: inserted.company,
-      url: inserted.url ?? null,
-      introPoint: inserted.introPoint ?? null,
-      createdAt: inserted.createdAt,
-      updatedAt: inserted.updatedAt,
+      id: created.id,
+      company: created.name,
+      url: created.url ?? null,
+      introPoint: created.introPoint ?? null,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
     })
   } catch (error) {
     if (error instanceof Error) {
