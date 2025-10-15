@@ -12,6 +12,8 @@ import {
   resolveInnovatorColumn,
 } from '@/lib/innovator-columns'
 
+const escapeIdentifier = (identifier: string) => `"${identifier.replace(/"/g, '""')}"`
+
 async function getSessionUserOrThrow(): Promise<SessionData> {
   const session = await getIronSession<SessionData>(await cookies(), {
     password: process.env.SESSION_PASSWORD!,
@@ -35,7 +37,7 @@ export async function GET(req: NextRequest) {
     const search = (url.searchParams.get('search') ?? '').trim()
 
     const where: Prisma.InnovatorWhereInput = search
-      ? { name: { contains: search, mode: 'insensitive' } }
+      ? { name: { contains: search, mode: 'insensitive' as const } }
       : {}
 
     const skip = (page - 1) * limit
@@ -80,7 +82,8 @@ export async function GET(req: NextRequest) {
 
 type InnovatorRow = {
   id: number
-  company: string
+  name?: string | null
+  company?: string | null
   url?: string | null
   introPoint?: string | null
   createdAt: Date
@@ -93,64 +96,93 @@ async function insertInnovatorRaw(options: {
   introPoint: string | null
   email?: string | null
   meta?: Awaited<ReturnType<typeof getInnovatorColumnMetaCached>>
-}) {
+}): Promise<InnovatorRow> {
   const snapshot = await getInnovatorSchemaSnapshot()
   const meta = options.meta ?? (await getInnovatorColumnMetaCached())
 
-  const esc = (identifier: string) => `"${identifier.replace(/"/g, '""')}"`
-
-  const table = esc(meta.tableName)
-  const companyColumnName =
-    resolveInnovatorColumn(snapshot.columns, 'company') ??
-    resolveInnovatorColumn(snapshot.columns, 'name') ??
-    'company'
-  const companyColumn = esc(companyColumnName)
+  const table = escapeIdentifier(meta.tableName)
+  const nameColumnName = resolveInnovatorColumn(snapshot.columns, 'name')
+  const companyColumnName = resolveInnovatorColumn(snapshot.columns, 'company')
+  const fallbackNameColumn = nameColumnName ?? companyColumnName ?? 'company'
+  const nameColumn = escapeIdentifier(fallbackNameColumn)
 
   const emailColumnName = resolveInnovatorColumn(snapshot.columns, 'email')
-  const idColumn = esc(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
-  const createdAtColumn = esc(
+  const idColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
+  const createdAtColumn = escapeIdentifier(
     resolveInnovatorColumn(snapshot.columns, 'createdAt') ?? 'createdAt',
   )
-  const updatedAtColumn = esc(
+  const updatedAtColumn = escapeIdentifier(
     resolveInnovatorColumn(snapshot.columns, 'updatedAt') ?? 'updatedAt',
   )
   const urlColumnName = resolveInnovatorColumn(snapshot.columns, 'url')
   const introColumnName = resolveInnovatorColumn(snapshot.columns, 'introPoint')
 
-  const columns: Prisma.Sql[] = [Prisma.raw(companyColumn)]
-  const values: Prisma.Sql[] = [Prisma.sql`${options.company}`]
+  const columns: Prisma.Sql[] = []
+  const values: Prisma.Sql[] = []
+
+  const pushColumn = (columnName: string | null | undefined, value: Prisma.Sql) => {
+    if (!columnName) return
+    columns.push(Prisma.raw(escapeIdentifier(columnName)))
+    values.push(value)
+  }
+
+  pushColumn(nameColumnName ?? null, Prisma.sql`${options.company}`)
+  if (companyColumnName && companyColumnName !== nameColumnName) {
+    pushColumn(companyColumnName, Prisma.sql`${options.company}`)
+  }
+
+  if (!columns.length) {
+    pushColumn('company', Prisma.sql`${options.company}`)
+  }
 
   if (options.email && emailColumnName) {
-    columns.push(Prisma.raw(esc(emailColumnName)))
+    columns.push(Prisma.raw(escapeIdentifier(emailColumnName)))
     values.push(Prisma.sql`${options.email}`)
   }
 
   if (options.url !== null && urlColumnName) {
-    columns.push(Prisma.raw(esc(urlColumnName)))
+    columns.push(Prisma.raw(escapeIdentifier(urlColumnName)))
     values.push(Prisma.sql`${options.url}`)
   }
 
   if (options.introPoint !== null && introColumnName) {
-    columns.push(Prisma.raw(esc(introColumnName)))
+    columns.push(Prisma.raw(escapeIdentifier(introColumnName)))
     values.push(Prisma.sql`${options.introPoint}`)
   }
 
   const returning: Prisma.Sql[] = [
     Prisma.sql`${Prisma.raw(idColumn)} AS "id"`,
-    Prisma.sql`${Prisma.raw(companyColumn)} AS "company"`,
     Prisma.sql`${Prisma.raw(createdAtColumn)} AS "createdAt"`,
     Prisma.sql`${Prisma.raw(updatedAtColumn)} AS "updatedAt"`,
   ]
 
+  if (nameColumnName) {
+    returning.push(
+      Prisma.sql`${Prisma.raw(escapeIdentifier(nameColumnName))} AS "name"`,
+    )
+  } else if (companyColumnName) {
+    returning.push(
+      Prisma.sql`${Prisma.raw(escapeIdentifier(companyColumnName))} AS "name"`,
+    )
+  } else {
+    returning.push(Prisma.sql`${Prisma.raw(nameColumn)} AS "name"`)
+  }
+
+  if (companyColumnName) {
+    returning.push(
+      Prisma.sql`${Prisma.raw(escapeIdentifier(companyColumnName))} AS "company"`,
+    )
+  }
+
   if (urlColumnName) {
     returning.push(
-      Prisma.sql`${Prisma.raw(esc(urlColumnName))} AS "url"`,
+      Prisma.sql`${Prisma.raw(escapeIdentifier(urlColumnName))} AS "url"`,
     )
   }
 
   if (introColumnName) {
     returning.push(
-      Prisma.sql`${Prisma.raw(esc(introColumnName))} AS "introPoint"`,
+      Prisma.sql`${Prisma.raw(escapeIdentifier(introColumnName))} AS "introPoint"`,
     )
   }
 
@@ -209,25 +241,79 @@ export async function POST(req: NextRequest) {
 
     const meta = await getInnovatorColumnMetaCached()
 
-    const email = meta.emailRequired
-      ? `innovator+${randomUUID()}@placeholder.invalid`
-      : null
+    if (meta.emailRequired) {
+      const email = `innovator+${randomUUID()}@placeholder.invalid`
+      const inserted = await insertInnovatorRaw({
+        company,
+        url,
+        introPoint,
+        email,
+        meta,
+      })
 
-    const inserted = await insertInnovatorRaw({
-      company,
-      url,
-      introPoint,
-      email,
-      meta,
+      return NextResponse.json({
+        id: inserted.id,
+        company: inserted.name ?? inserted.company ?? company,
+        url: inserted.url ?? null,
+        introPoint: inserted.introPoint ?? null,
+        createdAt: inserted.createdAt,
+        updatedAt: inserted.updatedAt,
+      })
+    }
+
+    const snapshot = await getInnovatorSchemaSnapshot()
+    const companyColumnName = resolveInnovatorColumn(snapshot.columns, 'company')
+    const companyColumnDetails = companyColumnName
+      ? snapshot.columnDetails.get(companyColumnName)
+      : undefined
+    const shouldSyncCompany = Boolean(
+      companyColumnName && companyColumnDetails && !companyColumnDetails.isNullable,
+    )
+
+    const created = await prisma.$transaction(async (tx) => {
+      let row = await tx.innovator.create({
+        data: {
+          name: company,
+          ...(url !== null ? { url } : {}),
+          ...(introPoint !== null ? { introPoint } : {}),
+        },
+        select: {
+          id: true,
+          createdAt: true,
+          updatedAt: true,
+          name: true,
+          url: true,
+          introPoint: true,
+        },
+      })
+
+      if (shouldSyncCompany) {
+        const tableName = snapshot.tableName ?? 'Innovator'
+        const idColumnName = resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id'
+        const updatedAtColumnName = resolveInnovatorColumn(snapshot.columns, 'updatedAt')
+        const updateSql = `UPDATE ${escapeIdentifier(tableName)} SET ${escapeIdentifier(
+          companyColumnName!,
+        )} = $1${
+          updatedAtColumnName
+            ? `, ${escapeIdentifier(updatedAtColumnName)} = NOW()`
+            : ''
+        } WHERE ${escapeIdentifier(idColumnName)} = $2`
+        await tx.$executeRawUnsafe(updateSql, row.name, row.id)
+        if (updatedAtColumnName) {
+          row = { ...row, updatedAt: new Date() }
+        }
+      }
+
+      return row
     })
 
     return NextResponse.json({
-      id: inserted.id,
-      company: inserted.company,
-      url: inserted.url ?? null,
-      introPoint: inserted.introPoint ?? null,
-      createdAt: inserted.createdAt,
-      updatedAt: inserted.updatedAt,
+      id: created.id,
+      company: created.name,
+      url: created.url ?? null,
+      introPoint: created.introPoint ?? null,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
     })
   } catch (error) {
     if (error instanceof Error) {
