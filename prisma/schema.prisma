@@ -35,8 +35,21 @@ model Innovator {
   introPoint String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  requiredIntroductionRules RequiredIntroductionRule[]
 
   @@map("Innovator") // 実テーブル名は単数形の Innovator
+}
+
+model RequiredIntroductionRule {
+  id          String   @id @default(cuid())
+  innovatorId Int
+  innovator   Innovator @relation(fields: [innovatorId], references: [id])
+  startDate   DateTime
+  endDate     DateTime
+  tiers       String?
+  strengths   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Evangelist {
