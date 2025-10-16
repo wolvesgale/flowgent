@@ -24,7 +24,18 @@ export async function GET() {
 
     const innovatorSnapshot = await getInnovatorSchemaSnapshot({ refresh: true })
     const innovatorMeta = await getInnovatorColumnMetaCached()
-    const innovatorColumns = Array.from(innovatorSnapshot.columns).sort((a, b) => a.localeCompare(b))
+    const innovatorColumns = Array.from(innovatorSnapshot.columns).sort((a, b) =>
+      a.localeCompare(b),
+    )
+    const innovatorColumnDetails = Array.from(
+      innovatorSnapshot.columnDetails.entries(),
+    )
+      .map(([column, details]) => ({
+        column,
+        isNullable: details.isNullable,
+        hasDefault: details.hasDefault,
+      }))
+      .sort((a, b) => a.column.localeCompare(b.column))
 
     return NextResponse.json({
       ok: true,
@@ -32,6 +43,7 @@ export async function GET() {
       innovator: {
         tableName: innovatorSnapshot.tableName,
         columns: innovatorColumns,
+        columnDetails: innovatorColumnDetails,
         hasEmail: innovatorMeta.hasEmail,
         emailRequired: innovatorMeta.emailRequired,
       },

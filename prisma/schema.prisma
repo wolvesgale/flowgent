@@ -29,6 +29,8 @@ enum Role {
 model Innovator {
   id         Int      @id @default(autoincrement())
   name       String
+  // DB 側に残っている NOT NULL な "company" 列へマッピングする影フィールド
+  company    String?  @map("company")
   url        String?
   introPoint String?
   createdAt  DateTime @default(now())
