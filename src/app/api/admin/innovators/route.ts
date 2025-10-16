@@ -103,8 +103,10 @@ async function insertInnovatorRaw(options: {
   const table = escapeIdentifier(meta.tableName)
   const nameColumnName = resolveInnovatorColumn(snapshot.columns, 'name')
   const companyColumnName = resolveInnovatorColumn(snapshot.columns, 'company')
-  const fallbackNameColumn = nameColumnName ?? companyColumnName ?? 'company'
-  const nameColumn = escapeIdentifier(fallbackNameColumn)
+  const resolvedCompanyColumnName =
+    companyColumnName ?? nameColumnName ?? 'company'
+  const companyColumn = escapeIdentifier(resolvedCompanyColumnName)
+  const nameColumn = nameColumnName ? escapeIdentifier(nameColumnName) : null
 
   const emailColumnName = resolveInnovatorColumn(snapshot.columns, 'email')
   const idColumn = escapeIdentifier(resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id')
@@ -117,37 +119,27 @@ async function insertInnovatorRaw(options: {
   const urlColumnName = resolveInnovatorColumn(snapshot.columns, 'url')
   const introColumnName = resolveInnovatorColumn(snapshot.columns, 'introPoint')
 
-  const columns: Prisma.Sql[] = []
-  const values: Prisma.Sql[] = []
+  const insertColumns: Prisma.Sql[] = [Prisma.raw(companyColumn)]
+  const insertValues: Prisma.Sql[] = [Prisma.sql`${options.company}`]
 
-  const pushColumn = (columnName: string | null | undefined, value: Prisma.Sql) => {
-    if (!columnName) return
-    columns.push(Prisma.raw(escapeIdentifier(columnName)))
-    values.push(value)
-  }
-
-  pushColumn(nameColumnName ?? null, Prisma.sql`${options.company}`)
-  if (companyColumnName && companyColumnName !== nameColumnName) {
-    pushColumn(companyColumnName, Prisma.sql`${options.company}`)
-  }
-
-  if (!columns.length) {
-    pushColumn('company', Prisma.sql`${options.company}`)
+  if (nameColumn && nameColumn !== companyColumn) {
+    insertColumns.push(Prisma.raw(nameColumn))
+    insertValues.push(Prisma.sql`${options.company}`)
   }
 
   if (options.email && emailColumnName) {
-    columns.push(Prisma.raw(escapeIdentifier(emailColumnName)))
-    values.push(Prisma.sql`${options.email}`)
+    insertColumns.push(Prisma.raw(escapeIdentifier(emailColumnName)))
+    insertValues.push(Prisma.sql`${options.email}`)
   }
 
   if (options.url !== null && urlColumnName) {
-    columns.push(Prisma.raw(escapeIdentifier(urlColumnName)))
-    values.push(Prisma.sql`${options.url}`)
+    insertColumns.push(Prisma.raw(escapeIdentifier(urlColumnName)))
+    insertValues.push(Prisma.sql`${options.url}`)
   }
 
   if (options.introPoint !== null && introColumnName) {
-    columns.push(Prisma.raw(escapeIdentifier(introColumnName)))
-    values.push(Prisma.sql`${options.introPoint}`)
+    insertColumns.push(Prisma.raw(escapeIdentifier(introColumnName)))
+    insertValues.push(Prisma.sql`${options.introPoint}`)
   }
 
   const returning: Prisma.Sql[] = [
@@ -156,22 +148,10 @@ async function insertInnovatorRaw(options: {
     Prisma.sql`${Prisma.raw(updatedAtColumn)} AS "updatedAt"`,
   ]
 
-  if (nameColumnName) {
-    returning.push(
-      Prisma.sql`${Prisma.raw(escapeIdentifier(nameColumnName))} AS "name"`,
-    )
-  } else if (companyColumnName) {
-    returning.push(
-      Prisma.sql`${Prisma.raw(escapeIdentifier(companyColumnName))} AS "name"`,
-    )
-  } else {
-    returning.push(Prisma.sql`${Prisma.raw(nameColumn)} AS "name"`)
-  }
+  returning.push(Prisma.sql`${Prisma.raw(companyColumn)} AS "company"`)
 
-  if (companyColumnName) {
-    returning.push(
-      Prisma.sql`${Prisma.raw(escapeIdentifier(companyColumnName))} AS "company"`,
-    )
+  if (nameColumn && nameColumn !== companyColumn) {
+    returning.push(Prisma.sql`${Prisma.raw(nameColumn)} AS "name"`)
   }
 
   if (urlColumnName) {
@@ -188,8 +168,8 @@ async function insertInnovatorRaw(options: {
 
   const rows = await prisma.$queryRaw<InnovatorRow[]>(
     Prisma.sql`
-      INSERT INTO ${Prisma.raw(table)} (${Prisma.join(columns, ', ')})
-      VALUES (${Prisma.join(values, ', ')})
+      INSERT INTO ${Prisma.raw(table)} (${Prisma.join(insertColumns, ', ')})
+      VALUES (${Prisma.join(insertValues, ', ')})
       RETURNING ${Prisma.join(returning, ', ')}
     `,
   )
@@ -261,55 +241,27 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const snapshot = await getInnovatorSchemaSnapshot()
-    const companyColumnName = resolveInnovatorColumn(snapshot.columns, 'company')
-    const companyColumnDetails = companyColumnName
-      ? snapshot.columnDetails.get(companyColumnName)
-      : undefined
-    const shouldSyncCompany = Boolean(
-      companyColumnName && companyColumnDetails && !companyColumnDetails.isNullable,
-    )
-
-    const created = await prisma.$transaction(async (tx) => {
-      let row = await tx.innovator.create({
-        data: {
-          name: company,
-          ...(url !== null ? { url } : {}),
-          ...(introPoint !== null ? { introPoint } : {}),
-        },
-        select: {
-          id: true,
-          createdAt: true,
-          updatedAt: true,
-          name: true,
-          url: true,
-          introPoint: true,
-        },
-      })
-
-      if (shouldSyncCompany) {
-        const tableName = snapshot.tableName ?? 'Innovator'
-        const idColumnName = resolveInnovatorColumn(snapshot.columns, 'id') ?? 'id'
-        const updatedAtColumnName = resolveInnovatorColumn(snapshot.columns, 'updatedAt')
-        const updateSql = `UPDATE ${escapeIdentifier(tableName)} SET ${escapeIdentifier(
-          companyColumnName!,
-        )} = $1${
-          updatedAtColumnName
-            ? `, ${escapeIdentifier(updatedAtColumnName)} = NOW()`
-            : ''
-        } WHERE ${escapeIdentifier(idColumnName)} = $2`
-        await tx.$executeRawUnsafe(updateSql, row.name, row.id)
-        if (updatedAtColumnName) {
-          row = { ...row, updatedAt: new Date() }
-        }
-      }
-
-      return row
+    const created = await prisma.innovator.create({
+      data: {
+        name: company,
+        company,
+        ...(url !== null ? { url } : {}),
+        ...(introPoint !== null ? { introPoint } : {}),
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        updatedAt: true,
+        name: true,
+        company: true,
+        url: true,
+        introPoint: true,
+      },
     })
 
     return NextResponse.json({
       id: created.id,
-      company: created.name,
+      company: created.company ?? created.name,
       url: created.url ?? null,
       introPoint: created.introPoint ?? null,
       createdAt: created.createdAt,
