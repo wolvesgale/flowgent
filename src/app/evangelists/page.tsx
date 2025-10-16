@@ -1,6 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type FormEvent,
+} from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Search, Plus, ArrowUpDown, X, Pencil } from 'lucide-react'
+import { Search, Plus, ArrowUpDown, X, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 const STRENGTH_LABELS = {
@@ -94,6 +100,11 @@ interface EvangelistListErrorResponse {
   message?: string
 }
 
+interface EvangelistCreateSuccessResponse {
+  ok: true
+  item: Evangelist
+}
+
 const isEvangelistListResponse = (
   value: unknown,
 ): value is EvangelistListSuccessResponse => {
@@ -113,6 +124,17 @@ const isEvangelistListResponse = (
     typeof record.page === 'number' &&
     typeof record.limit === 'number'
   )
+}
+
+const isEvangelistCreateSuccessResponse = (
+  value: unknown,
+): value is EvangelistCreateSuccessResponse => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return record.ok === true && typeof record.item === 'object' && record.item !== null
 }
 
 const extractErrorMessage = (value: unknown, fallback: string): string => {
@@ -141,6 +163,12 @@ type EditFormState = {
 
 const SELECT_CLEAR_VALUE = '__UNSET__'
 const CS_CLEAR_VALUE = '__UNASSIGNED__'
+const CREATE_FORM_INITIAL = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  assignedCsId: '',
+}
 
 export default function EvangelistsPage() {
   const [evangelists, setEvangelists] = useState<Evangelist[]>([])
@@ -157,6 +185,7 @@ export default function EvangelistsPage() {
   const itemsPerPage = 10
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [selectedEvangelist, setSelectedEvangelist] = useState<Evangelist | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editForm, setEditForm] = useState<EditFormState>({
     contactMethod: '',
     strength: '',
@@ -166,6 +195,14 @@ export default function EvangelistsPage() {
     nextActionDueOn: '',
     notes: '',
   })
+  const [createForm, setCreateForm] = useState({ ...CREATE_FORM_INITIAL })
+  const [createError, setCreateError] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [reloadToken, setReloadToken] = useState(0)
+
+  const debouncedQuery = useDebouncedValue(searchTerm, 300)
+  const activeRequestIdRef = useRef(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
   const activeRequestIdRef = useRef(0)
@@ -204,7 +241,7 @@ export default function EvangelistsPage() {
       sortOrder,
     })
 
-    const trimmedSearch = debouncedSearchTerm.trim()
+    const trimmedSearch = debouncedQuery.trim()
     if (trimmedSearch) {
       params.set('search', trimmedSearch)
     }
@@ -281,12 +318,13 @@ export default function EvangelistsPage() {
   }, [
     assignedCsFilter,
     currentPage,
-    debouncedSearchTerm,
+    debouncedQuery,
     itemsPerPage,
     sortBy,
     sortOrder,
     staleFilter,
     tierFilter,
+    reloadToken,
   ])
 
   useEffect(() => {
@@ -351,6 +389,120 @@ export default function EvangelistsPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('ja-JP')
+  }
+
+  const resetCreateDialog = useCallback(() => {
+    setCreateForm({ ...CREATE_FORM_INITIAL })
+    setCreateError('')
+    setCreating(false)
+  }, [])
+
+  const handleCreateOpenChange = (open: boolean) => {
+    setIsCreateOpen(open)
+    if (!open) {
+      resetCreateDialog()
+    }
+  }
+
+  const handleCreateSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (creating) return
+
+    const payload = {
+      firstName: createForm.firstName.trim(),
+      lastName: createForm.lastName.trim(),
+      ...(createForm.email.trim() ? { email: createForm.email.trim() } : {}),
+      ...(createForm.assignedCsId ? { assignedCsId: createForm.assignedCsId } : {}),
+    }
+
+    if (!payload.firstName || !payload.lastName) {
+      setCreateError('姓と名は必須です')
+      return
+    }
+
+    setCreating(true)
+    setCreateError('')
+
+    try {
+      const response = await fetch('/api/evangelists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      })
+
+      const text = await response.text()
+      let parsed: unknown = null
+      if (text) {
+        try {
+          parsed = JSON.parse(text)
+        } catch (error) {
+          console.error('Failed to parse evangelist create response JSON', error)
+        }
+      }
+
+      const fallbackMessage =
+        (text && text.length > 0 ? text : '') ||
+        response.statusText ||
+        `HTTP ${response.status}`
+
+      if (!response.ok) {
+        throw new Error(extractErrorMessage(parsed, fallbackMessage))
+      }
+
+      if (!isEvangelistCreateSuccessResponse(parsed)) {
+        throw new Error(extractErrorMessage(parsed, fallbackMessage))
+      }
+
+      const { item: created } = parsed
+      setEvangelists((prev) => [created, ...prev.filter((item) => item.id !== created.id)])
+      setIsCreateOpen(false)
+      resetCreateDialog()
+      setCurrentPage(1)
+      setReloadToken((prev) => prev + 1)
+      toast.success('エバンジェリストを追加しました')
+    } catch (error) {
+      console.error('Failed to create evangelist:', error)
+      setCreateError(
+        error instanceof Error ? error.message : 'エバンジェリストの追加に失敗しました',
+      )
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleDelete = async (evangelistId: string) => {
+    const confirmed = window.confirm('このエバンジェリストを削除します。よろしいですか？')
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(`/api/evangelists/${evangelistId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+
+      if (!response.ok && response.status !== 204) {
+        let message = response.statusText || `HTTP ${response.status}`
+        try {
+          const parsed = await response.json()
+          if (parsed && typeof parsed.error === 'string') {
+            message = parsed.error
+          }
+        } catch {
+          // ignore JSON parse errors
+        }
+        throw new Error(message)
+      }
+
+      setEvangelists((prev) => prev.filter((item) => item.id !== evangelistId))
+      setReloadToken((prev) => prev + 1)
+      toast.success('削除しました')
+    } catch (error) {
+      console.error('Failed to delete evangelist:', error)
+      toast.error(
+        error instanceof Error ? `削除に失敗しました：${error.message}` : '削除に失敗しました',
+      )
+    }
   }
 
   const clearFilters = () => {
@@ -419,6 +571,9 @@ export default function EvangelistsPage() {
     setIsEditOpen(true)
   }
 
+  const isCreateValid =
+    createForm.firstName.trim().length > 0 && createForm.lastName.trim().length > 0
+
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
@@ -426,12 +581,17 @@ export default function EvangelistsPage() {
           <h1 className="text-3xl font-bold">エバンジェリスト管理</h1>
           <p className="text-muted-foreground">エバンジェリストの一覧と管理</p>
         </div>
-        <Link href="/evangelists/import">
-          <Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => handleCreateOpenChange(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            CSVインポート
+            新規追加
           </Button>
-        </Link>
+          <Link href="/evangelists/import">
+            <Button variant="outline">
+              CSVインポート
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <Card>
@@ -622,6 +782,14 @@ export default function EvangelistsPage() {
                               詳細
                             </Button>
                           </Link>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDelete(evangelist.id)}
+                          >
+                            <Trash2 className="mr-1 h-3.5 w-3.5" />
+                            削除
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -661,6 +829,96 @@ export default function EvangelistsPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={isCreateOpen} onOpenChange={handleCreateOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>エバンジェリストを新規追加</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="create-lastName">姓</Label>
+                <Input
+                  id="create-lastName"
+                  value={createForm.lastName}
+                  onChange={(e) =>
+                    setCreateForm((prev) => ({ ...prev, lastName: e.target.value }))
+                  }
+                  placeholder="山田"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-firstName">名</Label>
+                <Input
+                  id="create-firstName"
+                  value={createForm.firstName}
+                  onChange={(e) =>
+                    setCreateForm((prev) => ({ ...prev, firstName: e.target.value }))
+                  }
+                  placeholder="太郎"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="create-email">メールアドレス</Label>
+              <Input
+                id="create-email"
+                type="email"
+                value={createForm.email}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, email: e.target.value }))
+                }
+                placeholder="example@example.com"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>担当CS</Label>
+              <Select
+                value={createForm.assignedCsId || CS_CLEAR_VALUE}
+                onValueChange={(value) =>
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    assignedCsId: value === CS_CLEAR_VALUE ? '' : value,
+                  }))
+                }
+              >
+                <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
+                  <SelectValue placeholder="未割り当て" />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
+                  <SelectItem value={CS_CLEAR_VALUE}>未割り当て</SelectItem>
+                  {users.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name}（{user.role === 'ADMIN' ? '管理者' : 'CS'}）
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {createError && <p className="text-sm text-destructive">{createError}</p>}
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleCreateOpenChange(false)}
+                disabled={creating}
+              >
+                キャンセル
+              </Button>
+              <Button type="submit" disabled={!isCreateValid || creating}>
+                {creating ? '追加中...' : '追加する'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={isEditOpen}
