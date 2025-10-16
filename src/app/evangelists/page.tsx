@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -167,6 +167,10 @@ export default function EvangelistsPage() {
     notes: '',
   })
 
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
+  const activeRequestIdRef = useRef(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   const fetchUsers = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/users?limit=100', {
@@ -181,64 +185,109 @@ export default function EvangelistsPage() {
     }
   }, [])
 
-  const fetchEvangelists = useCallback(async () => {
-    try {
-      setLoading(true)
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: itemsPerPage.toString(),
-        search: searchTerm,
-        sortBy,
-        sortOrder,
-        ...(tierFilter !== 'ALL' && { tier: tierFilter }),
-        ...(assignedCsFilter && { assignedCsId: assignedCsFilter }),
-        ...(staleFilter && { stale: staleFilter }),
-      })
-
-      const response = await fetch(`/api/evangelists?${params}`, {
-        credentials: 'include',
-      })
-      const text = await response.text()
-      let parsed: unknown = null
-      if (text) {
-        try {
-          parsed = JSON.parse(text)
-        } catch (error) {
-          console.error('Failed to parse evangelists response JSON', error)
-        }
-      }
-
-      const fallbackMessage =
-        (text && text.length > 0 ? text : '') ||
-        response.statusText ||
-        `HTTP ${response.status}`
-
-      if (!response.ok || !isEvangelistListResponse(parsed)) {
-        const message = extractErrorMessage(parsed, fallbackMessage)
-        throw new Error(message)
-      }
-
-      const data: EvangelistListSuccessResponse = parsed
-
-      setEvangelists(data.items)
-      setTotalPages(Math.max(1, Math.ceil(data.total / itemsPerPage)))
-    } catch (error) {
-      console.error('Failed to fetch evangelists:', error)
-      toast.error('エバンジェリストの取得に失敗しました')
-      setEvangelists([])
-      setTotalPages(1)
-    } finally {
-      setLoading(false)
-    }
-  }, [currentPage, searchTerm, sortBy, sortOrder, tierFilter, assignedCsFilter, staleFilter])
-
   useEffect(() => {
     void fetchUsers()
   }, [fetchUsers])
 
   useEffect(() => {
-    void fetchEvangelists()
-  }, [fetchEvangelists])
+    const controller = new AbortController()
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = controller
+    const requestId = ++activeRequestIdRef.current
+
+    setLoading(true)
+
+    const params = new URLSearchParams({
+      page: currentPage.toString(),
+      limit: itemsPerPage.toString(),
+      sortBy,
+      sortOrder,
+    })
+
+    const trimmedSearch = debouncedSearchTerm.trim()
+    if (trimmedSearch) {
+      params.set('search', trimmedSearch)
+    }
+    if (tierFilter !== 'ALL') {
+      params.set('tier', tierFilter)
+    }
+    if (assignedCsFilter) {
+      params.set('assignedCsId', assignedCsFilter)
+    }
+    if (staleFilter) {
+      params.set('stale', staleFilter)
+    }
+
+    const run = async () => {
+      try {
+        const response = await fetch(`/api/evangelists?${params.toString()}`, {
+          credentials: 'include',
+          signal: controller.signal,
+        })
+        const text = await response.text()
+        let parsed: unknown = null
+        if (text) {
+          try {
+            parsed = JSON.parse(text)
+          } catch (error) {
+            console.error('Failed to parse evangelists response JSON', error)
+          }
+        }
+
+        const fallbackMessage =
+          (text && text.length > 0 ? text : '') ||
+          response.statusText ||
+          `HTTP ${response.status}`
+
+        if (!response.ok || !isEvangelistListResponse(parsed)) {
+          const message = extractErrorMessage(parsed, fallbackMessage)
+          throw new Error(message)
+        }
+
+        const data: EvangelistListSuccessResponse = parsed
+
+        if (requestId === activeRequestIdRef.current) {
+          setEvangelists(data.items)
+          setTotalPages(Math.max(1, Math.ceil(data.total / itemsPerPage)))
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+        if ((error as { name?: string })?.name === 'AbortError') {
+          return
+        }
+
+        console.error('Failed to fetch evangelists:', error)
+
+        if (requestId === activeRequestIdRef.current) {
+          toast.error('エバンジェリストの取得に失敗しました')
+          setEvangelists([])
+          setTotalPages(1)
+        }
+      } finally {
+        if (requestId === activeRequestIdRef.current) {
+          setLoading(false)
+          abortControllerRef.current = null
+        }
+      }
+    }
+
+    void run()
+
+    return () => {
+      controller.abort()
+    }
+  }, [
+    assignedCsFilter,
+    currentPage,
+    debouncedSearchTerm,
+    itemsPerPage,
+    sortBy,
+    sortOrder,
+    staleFilter,
+    tierFilter,
+  ])
 
   useEffect(() => {
     if (!selectedEvangelist) return
@@ -401,7 +450,10 @@ export default function EvangelistsPage() {
                 <Input
                   placeholder="名前、メールアドレスで検索..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setCurrentPage(1)
+                    setSearchTerm(e.target.value)
+                  }}
                   className="pl-10"
                 />
               </div>
@@ -767,4 +819,15 @@ export default function EvangelistsPage() {
       </Dialog>
     </div>
   )
+}
+
+function useDebouncedValue<T>(value: T, delay: number) {
+  const [debounced, setDebounced] = useState(value)
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timeout)
+  }, [value, delay])
+
+  return debounced
 }

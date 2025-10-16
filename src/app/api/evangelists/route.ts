@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
@@ -36,7 +36,8 @@ export async function GET(request: NextRequest) {
       100,
       Math.max(1, Number.parseInt(searchParams.get('limit') || '10')),
     )
-    const search = searchParams.get('search') || ''
+    const rawSearch = searchParams.get('search') || ''
+    const search = rawSearch.trim()
     const tier = searchParams.get('tier') || 'ALL'
     const requestedSortBy = searchParams.get('sortBy') || 'createdAt'
     const sortOrder = searchParams.get('sortOrder') === 'asc' ? 'asc' : 'desc'
@@ -52,13 +53,56 @@ export async function GET(request: NextRequest) {
     const filters: Prisma.EvangelistWhereInput[] = []
 
     if (search) {
-      filters.push({
-        OR: [
-          { firstName: { contains: search, mode: 'insensitive' } },
-          { lastName: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-        ],
+      const searchConditions: Prisma.EvangelistWhereInput[] = []
+      let displayNameIdFilter: Prisma.EvangelistWhereInput | null = null
+
+      if (columns.has('firstName')) {
+        searchConditions.push({
+          firstName: { contains: search, mode: 'insensitive' },
+        })
+      }
+
+      if (columns.has('lastName')) {
+        searchConditions.push({
+          lastName: { contains: search, mode: 'insensitive' },
+        })
+      }
+
+      if (columns.has('email')) {
+        searchConditions.push({
+          email: { contains: search, mode: 'insensitive' },
+        })
+      }
+
+      const displayNameColumn = Array.from(columns).find((column) => {
+        const lowered = column.toLowerCase()
+        return lowered === 'displayname' || lowered === 'display_name'
       })
+
+      if (displayNameColumn) {
+        const quoteIdentifier = (name: string) => `"${name.replace(/"/g, '""')}"`
+        const matches = await prisma.$queryRaw<{ id: string }[]>`
+          SELECT "id"
+          FROM "evangelists"
+          WHERE ${Prisma.raw(quoteIdentifier(displayNameColumn))} ILIKE ${
+            `%${search}%`
+          }
+        `
+
+        if (matches.length > 0) {
+          displayNameIdFilter = {
+            id: { in: matches.map((match) => match.id) },
+          }
+        }
+      }
+
+      if (displayNameIdFilter) {
+        searchConditions.push(displayNameIdFilter)
+      }
+
+      if (searchConditions.length > 0) {
+        filters.push({ OR: searchConditions })
+      }
     }
 
     if (status && status !== 'ALL') {

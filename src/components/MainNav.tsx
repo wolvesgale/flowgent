@@ -1,7 +1,7 @@
 import { getSession } from '@/lib/session';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { FileSpreadsheet, Sparkles, Users, UserCheck } from 'lucide-react';
+import { ClipboardList, FileSpreadsheet, Sparkles, Users, UserCheck } from 'lucide-react';
 
 export default async function MainNav() {
   const session = await getSession();
@@ -45,12 +45,20 @@ export default async function MainNav() {
               </Link>
 
               {userRole === 'ADMIN' && (
-                <Link href="/admin/users">
-                  <Button variant="ghost" size="sm" className="text-white hover:bg-purple-600/60">
-                    <Users className="mr-2 h-4 w-4" />
-                    ユーザー管理
-                  </Button>
-                </Link>
+                <>
+                  <Link href="/admin/introductions/required">
+                    <Button variant="ghost" size="sm" className="text-white hover:bg-purple-600/60">
+                      <ClipboardList className="mr-2 h-4 w-4" />
+                      紹介必須ルール
+                    </Button>
+                  </Link>
+                  <Link href="/admin/users">
+                    <Button variant="ghost" size="sm" className="text-white hover:bg-purple-600/60">
+                      <Users className="mr-2 h-4 w-4" />
+                      ユーザー管理
+                    </Button>
+                  </Link>
+                </>
               )}
             </>
           )}
