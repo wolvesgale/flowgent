@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
+import type { SessionData } from '@/lib/session'
 import {
   buildEvangelistSelect,
+  filterEvangelistData,
   getEvangelistColumnSet,
   normalizeEvangelistResult,
 } from '@/lib/evangelist-columns'
@@ -19,6 +21,16 @@ const SORTABLE_FIELDS: Record<string, true> = {
   lastName: true,
   email: true,
   tier: true,
+}
+
+async function getSessionUserOrThrow(): Promise<SessionData> {
+  const session = await getSession()
+  if (!session.isLoggedIn || !session.userId) throw new Error('Unauthorized')
+  return session
+}
+
+function requireRole(user: SessionData, roles: Array<'ADMIN' | 'CS'>) {
+  if (!roles.includes(user.role ?? '')) throw new Error('Forbidden')
 }
 
 export async function GET(request: NextRequest) {
@@ -203,6 +215,77 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { ok: false, error: 'Internal server error', code: err?.code },
       { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getSessionUserOrThrow()
+    requireRole(session, ['ADMIN', 'CS'])
+
+    const payload = (await request.json().catch(() => null)) as
+      | Record<string, unknown>
+      | null
+    if (!payload || typeof payload !== 'object') {
+      return NextResponse.json({ ok: false, error: 'Invalid payload' }, { status: 400 })
+    }
+
+    const firstName = typeof payload.firstName === 'string' ? payload.firstName.trim() : ''
+    const lastName = typeof payload.lastName === 'string' ? payload.lastName.trim() : ''
+    if (!firstName || !lastName) {
+      return NextResponse.json(
+        { ok: false, error: 'firstName and lastName are required' },
+        { status: 400 },
+      )
+    }
+
+    const emailRaw = typeof payload.email === 'string' ? payload.email.trim() : ''
+    const email = emailRaw.length > 0 ? emailRaw : null
+
+    const assignedCsIdRaw =
+      typeof payload.assignedCsId === 'string' ? payload.assignedCsId.trim() : ''
+    const assignedCsId = assignedCsIdRaw.length > 0 ? assignedCsIdRaw : null
+
+    const columns = await getEvangelistColumnSet()
+    const data = filterEvangelistData(
+      {
+        firstName,
+        lastName,
+        displayName: `${lastName} ${firstName}`.trim(),
+        email,
+        assignedCsId: assignedCsId ?? undefined,
+      },
+      columns,
+    )
+
+    const created = await prisma.evangelist.create({
+      data,
+      select: buildEvangelistSelect(columns, {
+        includeAssignedCs: true,
+        includeCount: true,
+      }),
+    })
+
+    return NextResponse.json(
+      { ok: true, item: normalizeEvangelistResult(created) },
+      { status: 201 },
+    )
+  } catch (error) {
+    const err = error as { code?: string; message?: string }
+    if (err?.message === 'Unauthorized') {
+      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    if (err?.message === 'Forbidden') {
+      return NextResponse.json({ ok: false, error: 'Forbidden' }, { status: 403 })
+    }
+    if (err?.code === 'P2002') {
+      return NextResponse.json({ ok: false, error: 'Email already exists' }, { status: 409 })
+    }
+    console.error('[evangelists:create]', err?.code ?? 'UNKNOWN', err)
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error', code: err?.code },
+      { status: 500 },
     )
   }
 }
