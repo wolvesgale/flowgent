@@ -116,7 +116,10 @@ const isEvangelistListResponse = (
 const isEvangelistCreateSuccessResponse = (
   value: unknown,
 ): value is EvangelistCreateSuccessResponse => {
-  if (!value || typeof value !== 'object') return false
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
   const record = value as Record<string, unknown>
   return record.ok === true && typeof record.item === 'object' && record.item !== null
 }
@@ -172,10 +175,9 @@ export default function EvangelistsPage() {
     firstName: '',
     lastName: '',
     email: '',
-    assignedCsId: '',
+    assignedCsId: CS_CLEAR_VALUE,
   })
 
-  // ✅ ここは1回だけ宣言（重複禁止）
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
   const activeRequestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -214,10 +216,18 @@ export default function EvangelistsPage() {
     })
 
     const trimmedSearch = debouncedSearchTerm.trim()
-    if (trimmedSearch) params.set('search', trimmedSearch)
-    if (tierFilter !== 'ALL') params.set('tier', tierFilter)
-    if (assignedCsFilter) params.set('assignedCsId', assignedCsFilter)
-    if (staleFilter) params.set('stale', staleFilter)
+    if (trimmedSearch) {
+      params.set('search', trimmedSearch)
+    }
+    if (tierFilter !== 'ALL') {
+      params.set('tier', tierFilter)
+    }
+    if (assignedCsFilter) {
+      params.set('assignedCsId', assignedCsFilter)
+    }
+    if (staleFilter) {
+      params.set('stale', staleFilter)
+    }
 
     const run = async () => {
       try {
@@ -252,8 +262,12 @@ export default function EvangelistsPage() {
           setTotalPages(Math.max(1, Math.ceil(data.total / itemsPerPage)))
         }
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        if ((error as { name?: string })?.name === 'AbortError') return
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+        if ((error as { name?: string })?.name === 'AbortError') {
+          return
+        }
 
         console.error('Failed to fetch evangelists:', error)
 
@@ -356,7 +370,12 @@ export default function EvangelistsPage() {
   }
 
   const openCreateDialog = () => {
-    setCreateForm({ firstName: '', lastName: '', email: '', assignedCsId: '' })
+    setCreateForm({
+      firstName: '',
+      lastName: '',
+      email: '',
+      assignedCsId: CS_CLEAR_VALUE,
+    })
     setIsCreateOpen(true)
   }
 
@@ -378,7 +397,10 @@ export default function EvangelistsPage() {
           firstName: first,
           lastName: last,
           email: createForm.email.trim() || null,
-          assignedCsId: createForm.assignedCsId || null,
+          assignedCsId:
+            createForm.assignedCsId === CS_CLEAR_VALUE
+              ? null
+              : createForm.assignedCsId,
         }),
       })
 
@@ -399,7 +421,12 @@ export default function EvangelistsPage() {
 
       const created = parsed.item as Evangelist
       setEvangelists((prev) => [created, ...prev.filter((item) => item.id !== created.id)])
-      setCreateForm({ firstName: '', lastName: '', email: '', assignedCsId: '' })
+      setCreateForm({
+        firstName: '',
+        lastName: '',
+        email: '',
+        assignedCsId: CS_CLEAR_VALUE,
+      })
       setIsCreateOpen(false)
       toast.success('エバンジェリストを作成しました')
     } catch (error) {
@@ -754,11 +781,13 @@ export default function EvangelistsPage() {
         </CardContent>
       </Card>
 
-      {/* 新規追加モーダル */}
       <Dialog open={isCreateOpen} onOpenChange={(open) => setIsCreateOpen(open)}>
-        <DialogContent>
+        <DialogContent aria-describedby="create-desc">
           <DialogHeader>
             <DialogTitle>エバンジェリストを追加</DialogTitle>
+            <p id="create-desc" className="sr-only">
+              姓・名は必須、メールと担当CSは任意
+            </p>
           </DialogHeader>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -807,7 +836,7 @@ export default function EvangelistsPage() {
                   <SelectValue placeholder="未割り当て" />
                 </SelectTrigger>
                 <SelectContent className="bg-white text-slate-900 border-slate-300">
-                  <SelectItem value="">未割り当て</SelectItem>
+                  <SelectItem value={CS_CLEAR_VALUE}>未割り当て</SelectItem>
                   {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.name}（{user.role === 'ADMIN' ? '管理者' : 'CS'}）
@@ -827,7 +856,6 @@ export default function EvangelistsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 編集モーダル */}
       <Dialog
         open={isEditOpen}
         onOpenChange={(open) => {
@@ -835,9 +863,12 @@ export default function EvangelistsPage() {
           if (!open) setSelectedEvangelist(null)
         }}
       >
-        <DialogContent>
+        <DialogContent aria-describedby="edit-desc">
           <DialogHeader>
             <DialogTitle>エヴァンジェリスト情報を編集</DialogTitle>
+            <p id="edit-desc" className="sr-only">
+              連絡手段・強み・管理フェーズ等を変更できます
+            </p>
           </DialogHeader>
           {selectedEvangelist && (
             <div className="space-y-4">
