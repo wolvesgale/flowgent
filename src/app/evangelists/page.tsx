@@ -102,16 +102,9 @@ interface EvangelistCreateSuccessResponse {
 const isEvangelistListResponse = (
   value: unknown,
 ): value is EvangelistListSuccessResponse => {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
+  if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
-
-  if (record.ok !== true) {
-    return false
-  }
-
+  if (record.ok !== true) return false
   return (
     Array.isArray(record.items) &&
     typeof record.total === 'number' &&
@@ -123,10 +116,7 @@ const isEvangelistListResponse = (
 const isEvangelistCreateSuccessResponse = (
   value: unknown,
 ): value is EvangelistCreateSuccessResponse => {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
+  if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
   return record.ok === true && typeof record.item === 'object' && record.item !== null
 }
@@ -134,14 +124,9 @@ const isEvangelistCreateSuccessResponse = (
 const extractErrorMessage = (value: unknown, fallback: string): string => {
   if (value && typeof value === 'object') {
     const record = value as EvangelistListErrorResponse
-    if (typeof record.error === 'string' && record.error) {
-      return record.error
-    }
-    if (typeof record.message === 'string' && record.message) {
-      return record.message
-    }
+    if (typeof record.error === 'string' && record.error) return record.error
+    if (typeof record.message === 'string' && record.message) return record.message
   }
-
   return fallback
 }
 
@@ -190,10 +175,7 @@ export default function EvangelistsPage() {
     assignedCsId: '',
   })
 
-  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
-  const activeRequestIdRef = useRef(0)
-  const abortControllerRef = useRef<AbortController | null>(null)
-
+  // ✅ ここは1回だけ宣言（重複禁止）
   const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
   const activeRequestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -232,18 +214,10 @@ export default function EvangelistsPage() {
     })
 
     const trimmedSearch = debouncedSearchTerm.trim()
-    if (trimmedSearch) {
-      params.set('search', trimmedSearch)
-    }
-    if (tierFilter !== 'ALL') {
-      params.set('tier', tierFilter)
-    }
-    if (assignedCsFilter) {
-      params.set('assignedCsId', assignedCsFilter)
-    }
-    if (staleFilter) {
-      params.set('stale', staleFilter)
-    }
+    if (trimmedSearch) params.set('search', trimmedSearch)
+    if (tierFilter !== 'ALL') params.set('tier', tierFilter)
+    if (assignedCsFilter) params.set('assignedCsId', assignedCsFilter)
+    if (staleFilter) params.set('stale', staleFilter)
 
     const run = async () => {
       try {
@@ -278,12 +252,8 @@ export default function EvangelistsPage() {
           setTotalPages(Math.max(1, Math.ceil(data.total / itemsPerPage)))
         }
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return
-        }
-        if ((error as { name?: string })?.name === 'AbortError') {
-          return
-        }
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        if ((error as { name?: string })?.name === 'AbortError') return
 
         console.error('Failed to fetch evangelists:', error)
 
@@ -578,7 +548,7 @@ export default function EvangelistsPage() {
                 </Button>
               )}
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <select
                 value={tierFilter}
@@ -784,6 +754,7 @@ export default function EvangelistsPage() {
         </CardContent>
       </Card>
 
+      {/* 新規追加モーダル */}
       <Dialog open={isCreateOpen} onOpenChange={(open) => setIsCreateOpen(open)}>
         <DialogContent>
           <DialogHeader>
@@ -856,13 +827,12 @@ export default function EvangelistsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* 編集モーダル */}
       <Dialog
         open={isEditOpen}
         onOpenChange={(open) => {
           setIsEditOpen(open)
-          if (!open) {
-            setSelectedEvangelist(null)
-          }
+          if (!open) setSelectedEvangelist(null)
         }}
       >
         <DialogContent>
@@ -914,7 +884,7 @@ export default function EvangelistsPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
+                    <SelectTrigger className="bg白 text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue placeholder="未設定" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
