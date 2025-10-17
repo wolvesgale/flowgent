@@ -194,6 +194,10 @@ export default function EvangelistsPage() {
   const activeRequestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
 
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
+  const activeRequestIdRef = useRef(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   const fetchUsers = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/users?limit=100', {
