@@ -21,6 +21,18 @@ export type MeetingRecord = {
   updatedAt: string
 }
 
+type SavedEvangelistPayload = {
+  id: string
+  nextAction: string | null
+  nextActionDueOn: string | null
+  [key: string]: unknown
+}
+
+export type MeetingSaveResult = {
+  meeting: MeetingRecord
+  evangelist: SavedEvangelistPayload
+}
+
 export type RequiredIntroduction = {
   id: string
   startDate: string
@@ -39,12 +51,13 @@ const defaultMeetingState = {
   isFirst: false,
   contactMethod: "",
   summary: "",
-  nextActions: "",
+  nextAction: "",
+  nextActionDueOn: "",
 }
 
 type MeetingFormProps = {
   evangelistId: string
-  onSaved?: (meeting: MeetingRecord) => void
+  onSaved?: (result: MeetingSaveResult) => void
 }
 
 export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
@@ -93,10 +106,11 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
       event.preventDefault()
       if (!evangelistId) return
       const payload = {
-        isFirst: meeting.isFirst,
+        isInitial: meeting.isFirst,
         contactMethod: meeting.contactMethod.trim() || undefined,
         summary: meeting.summary.trim() || undefined,
-        nextActions: meeting.nextActions.trim() || undefined,
+        nextAction: meeting.nextAction.trim() || undefined,
+        nextActionDueOn: meeting.nextActionDueOn.trim() || undefined,
       }
 
       try {
@@ -108,18 +122,28 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
           body: JSON.stringify(payload),
         })
 
-        if (!response.ok) {
-          throw new Error("面談記録の保存に失敗しました")
+        const contentType = response.headers.get("content-type") || ""
+        const rawBody = await response.text()
+        const parsed = contentType.includes("application/json") && rawBody ? JSON.parse(rawBody) : null
+
+        if (response.status === 401) {
+          window.location.href = "/login"
+          return
         }
 
-        const data = (await response.json().catch(() => null)) as MeetingRecord | null
-        if (!data) {
-          throw new Error("面談記録の保存に失敗しました")
+        if (!response.ok || !parsed?.ok) {
+          const message = parsed?.error || "面談記録の保存に失敗しました"
+          throw new Error(message)
+        }
+
+        const { meeting: createdMeeting, evangelist } = parsed as {
+          meeting: MeetingRecord
+          evangelist: SavedEvangelistPayload
         }
 
         toast.success("面談記録を保存しました")
         setMeeting(defaultMeetingState)
-        onSaved?.(data)
+        onSaved?.({ meeting: createdMeeting, evangelist })
       } catch (error) {
         console.error("Failed to save meeting", error)
         toast.error(error instanceof Error ? error.message : "面談記録の保存に失敗しました")
@@ -230,10 +254,21 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
           <Label htmlFor="meeting-next-actions">次回アクション</Label>
           <Textarea
             id="meeting-next-actions"
-            value={meeting.nextActions}
-            onChange={(event) => setMeeting((prev) => ({ ...prev, nextActions: event.target.value }))}
+            value={meeting.nextAction}
+            onChange={(event) => setMeeting((prev) => ({ ...prev, nextAction: event.target.value }))}
             placeholder="次回までに行うアクションを記載"
             rows={3}
+            className="bg-white text-slate-900 placeholder:text-slate-400"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="meeting-next-action-due-on">次回アクション期日</Label>
+          <Input
+            id="meeting-next-action-due-on"
+            type="date"
+            value={meeting.nextActionDueOn}
+            onChange={(event) => setMeeting((prev) => ({ ...prev, nextActionDueOn: event.target.value }))}
             className="bg-white text-slate-900 placeholder:text-slate-400"
           />
         </div>

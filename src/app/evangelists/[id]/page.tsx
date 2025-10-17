@@ -32,7 +32,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
-import { MeetingForm, type MeetingRecord } from '@/components/evangelists/meeting-form'
+import {
+  MeetingForm,
+  type MeetingRecord,
+  type MeetingSaveResult,
+} from '@/components/evangelists/meeting-form'
 
 interface Evangelist {
   id: string
@@ -112,18 +116,6 @@ const PHASE_OPTIONS = [
 const SELECT_CLEAR_VALUE = '__UNSET__'
 const CS_CLEAR_VALUE = '__UNASSIGNED__'
 
-interface Meeting {
-  id: string
-  evangelistId: string
-  date: string
-  isFirst: boolean
-  summary?: string | null
-  nextActions?: string | null
-  contactMethod?: string | null
-  createdAt: string
-  updatedAt?: string
-}
-
 const TIER_COLORS = {
   TIER1: 'bg-blue-100 text-blue-800',
   TIER2: 'bg-gray-100 text-gray-800'
@@ -140,7 +132,7 @@ export default function EvangelistDetailPage() {
   const params = useParams()
   const router = useRouter()
   const [evangelist, setEvangelist] = useState<Evangelist | null>(null)
-  const [meetings, setMeetings] = useState<Meeting[]>([])
+  const [meetings, setMeetings] = useState<MeetingRecord[]>([])
   const [isMeetingSheetOpen, setIsMeetingSheetOpen] = useState(false)
   const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -211,7 +203,7 @@ export default function EvangelistDetailPage() {
         credentials: 'include',
       })
       if (meetingsResponse.ok) {
-        const meetingsData = await meetingsResponse.json()
+        const meetingsData = (await meetingsResponse.json()) as MeetingRecord[]
         setMeetings(meetingsData)
       }
     } catch (err) {
@@ -285,8 +277,26 @@ export default function EvangelistDetailPage() {
     }
   }
 
-  const handleMeetingSaved = useCallback((record: MeetingRecord) => {
-    setMeetings(prev => [record, ...prev])
+  const handleMeetingSaved = useCallback((result: MeetingSaveResult) => {
+    const { meeting, evangelist: updatedEvangelist } = result
+
+    setMeetings(prev => [meeting, ...prev])
+
+    setEvangelist(prev => {
+      const merged = { ...(prev ?? {}), ...(updatedEvangelist as Partial<Evangelist>) } as Evangelist
+      if (prev && !Object.prototype.hasOwnProperty.call(updatedEvangelist, 'assignedCs')) {
+        merged.assignedCs = prev.assignedCs ?? null
+      }
+      return merged
+    })
+
+    setEditForm(prev => ({
+      ...prev,
+      nextAction: (updatedEvangelist.nextAction ?? '') as string,
+      nextActionDueOn: updatedEvangelist.nextActionDueOn
+        ? String(updatedEvangelist.nextActionDueOn).slice(0, 10)
+        : '',
+    }))
   }, [])
 
   if (isLoading) {
