@@ -207,7 +207,7 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
   }, [hasRequiredIntroductions, requiredIntroError, requiredIntroLoading, requiredIntroductions])
 
   return (
-    <form className="flex h-full flex-col gap-6" onSubmit={onSubmit}>
+    <form className="mx-auto flex h-full w-full max-w-xl flex-col gap-6" onSubmit={onSubmit}>
       <div className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
         <div className="rounded-lg border border-amber-300 bg-amber-100/60 p-4">
           <h3 className="text-sm font-semibold text-amber-900">紹介必須イノベータ</h3>

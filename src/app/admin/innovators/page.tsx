@@ -315,68 +315,70 @@ export default function AdminInnovatorsPage() {
                 企業名を入力してください。
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="company" className="text-right">
-                  企業名
-                </Label>
-                <Input
-                  id="company"
-                  value={formData.company}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-                  placeholder="企業名"
-                  required
-                  className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="url" className="text-right">
-                  URL（任意）
-                </Label>
-                <Input
-                  id="url"
-                  value={formData.url}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
-                  placeholder="https://example.com"
-                  className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="introPoint" className="text-right">
-                  紹介ポイント（任意）
-                </Label>
-                <Input
-                  id="introPoint"
-                  value={formData.introPoint}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, introPoint: e.target.value }))
-                  }
-                  placeholder="紹介ポイント"
-                  className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-                />
-              </div>
-              {shouldShowEmailField && (
+            <div className="mx-auto w-full max-w-xl">
+              <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="email" className="text-right">
-                    Email（任意）
+                  <Label htmlFor="company" className="text-right">
+                    企業名
                   </Label>
                   <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-                    placeholder="Email"
+                    id="company"
+                    value={formData.company}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
+                    placeholder="企業名"
+                    required
                     className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                   />
                 </div>
-              )}
-              {formError && (
-                <div className="col-span-4 text-sm text-red-600" role="alert">
-                  {formError}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="url" className="text-right">
+                    URL（任意）
+                  </Label>
+                  <Input
+                    id="url"
+                    value={formData.url}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
+                    placeholder="https://example.com"
+                    className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+                  />
                 </div>
-              )}
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="introPoint" className="text-right">
+                    紹介ポイント（任意）
+                  </Label>
+                  <Input
+                    id="introPoint"
+                    value={formData.introPoint}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, introPoint: e.target.value }))
+                    }
+                    placeholder="紹介ポイント"
+                    className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
+                {shouldShowEmailField && (
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="email" className="text-right">
+                      Email（任意）
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+                      placeholder="Email"
+                      className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+                    />
+                  </div>
+                )}
+                {formError && (
+                  <div className="col-span-4 text-sm text-red-600" role="alert">
+                    {formError}
+                  </div>
+                )}
+              </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-center">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -410,22 +412,24 @@ export default function AdminInnovatorsPage() {
             </DialogDescription>
           </DialogHeader>
           {selectedInnovator && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="edit-company" className="text-right">
-                  企業名
-                </Label>
-                <Input
-                  id="edit-company"
-                  value={formData.company}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
-                  placeholder="企業名"
-                  className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-                />
+            <div className="mx-auto w-full max-w-xl">
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="edit-company" className="text-right">
+                    企業名
+                  </Label>
+                  <Input
+                    id="edit-company"
+                    value={formData.company}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
+                    placeholder="企業名"
+                    className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+                  />
+                </div>
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Button
               variant="outline"
               onClick={() => setIsEditDialogOpen(false)}

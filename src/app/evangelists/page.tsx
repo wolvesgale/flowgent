@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Search, Plus, ArrowUpDown, X, Pencil, Trash2, UserPlus } from 'lucide-react'
+import { Search, ArrowUpDown, X, Pencil, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 
 const STRENGTH_LABELS = {
@@ -574,23 +574,15 @@ export default function EvangelistsPage() {
           <h1 className="text-3xl font-bold text-slate-900">エバンジェリスト管理</h1>
           <p className="text-slate-500">エバンジェリストの一覧と管理</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-2">
-            <Button
-              onClick={openCreateDialog}
-              variant="default"
-              className="bg-brand text-white shadow-xs hover:bg-brand-600"
-            >
-              <UserPlus className="mr-2 h-4 w-4" />
-              新規追加
-            </Button>
-            <Link href="/evangelists/import">
-              <Button className="border border-slate-300 bg-white text-slate-700 shadow-xs hover:bg-slate-50">
-                <Plus className="mr-2 h-4 w-4" />
-                CSVインポート
-              </Button>
-            </Link>
-          </div>
+        <div className="flex items-center justify-start sm:justify-end">
+          <Button
+            onClick={openCreateDialog}
+            variant="default"
+            className="bg-brand text-white shadow-xs hover:bg-brand-600"
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            新規追加
+          </Button>
         </div>
       </div>
 
@@ -859,7 +851,7 @@ export default function EvangelistsPage() {
             </p>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="mx-auto grid w-full max-w-xl grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>姓（必須）</Label>
               <Input
@@ -919,7 +911,7 @@ export default function EvangelistsPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Button
               variant="ghost"
               onClick={() => setIsCreateOpen(false)}
@@ -957,14 +949,14 @@ export default function EvangelistsPage() {
             </p>
           </DialogHeader>
           {selectedEvangelist && (
-            <div className="space-y-4">
+            <div className="mx-auto flex w-full max-w-2xl flex-col space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground">
                   {selectedEvangelist.firstName} {selectedEvangelist.lastName}
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>連絡手段</Label>
                   <Select
@@ -1069,7 +1061,7 @@ export default function EvangelistsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>NA期日</Label>
                   <Input
@@ -1091,7 +1083,7 @@ export default function EvangelistsPage() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-center">
             <Button
               variant="ghost"
               onClick={() => setIsEditOpen(false)}

@@ -19,6 +19,8 @@ model User {
 
   // Relations
   assignedEvangelists Evangelist[]
+  assignedTodos       Todo[]        @relation("TodoAssignee")
+  createdTodos        Todo[]        @relation("TodoCreatedBy")
 }
 
 enum Role {
@@ -137,4 +139,20 @@ model Meeting {
   contactMethod String?    // 面談で確認
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+}
+
+model Todo {
+  id          String   @id @default(cuid())
+  title       String
+  notes       String?
+  dueOn       DateTime?
+  status      String   @default("OPEN")
+  assigneeId  String
+  assignee    User     @relation("TodoAssignee", fields: [assigneeId], references: [id])
+  createdById String
+  createdBy   User     @relation("TodoCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([assigneeId, status, dueOn])
 }

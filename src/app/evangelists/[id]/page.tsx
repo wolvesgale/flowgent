@@ -707,7 +707,7 @@ export default function EvangelistDetailPage() {
               </SheetTrigger>
             </div>
 
-            <SheetContent side="right" className="flex w-full flex-col gap-6 sm:max-w-[560px]">
+            <SheetContent side="right" className="flex w-full flex-col items-center gap-6 sm:max-w-[560px]">
               <SheetHeader>
                 <SheetTitle>面談記録</SheetTitle>
                 <SheetDescription>面談内容や次回アクションを記録します。</SheetDescription>

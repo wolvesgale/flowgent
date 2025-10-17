@@ -1,7 +1,7 @@
 import { getSession } from '@/lib/session';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ClipboardList, FileSpreadsheet, Sparkles, Users, UserCheck } from 'lucide-react';
+import { CheckSquare, ClipboardList, Sparkles, Users, UserCheck } from 'lucide-react';
 
 export default async function MainNav() {
   const session = await getSession();
@@ -32,14 +32,14 @@ export default async function MainNav() {
             </Button>
           </Link>
 
-          <Link href="/evangelists/import">
+          <Link href="/todos">
             <Button
               variant="ghost"
               size="sm"
               className="border border-white/20 bg-white/10 text-white shadow-xs hover:bg-white/20"
             >
-              <FileSpreadsheet className="mr-2 h-4 w-4" />
-              CSVインポート
+              <CheckSquare className="mr-2 h-4 w-4" />
+              ToDo
             </Button>
           </Link>
 
