@@ -319,7 +319,7 @@ export default function AdminInnovatorsPage() {
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
                   placeholder="企業名"
                   required
-                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -331,7 +331,7 @@ export default function AdminInnovatorsPage() {
                   value={formData.url}
                   onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
                   placeholder="https://example.com"
-                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -345,7 +345,7 @@ export default function AdminInnovatorsPage() {
                     setFormData((prev) => ({ ...prev, introPoint: e.target.value }))
                   }
                   placeholder="紹介ポイント"
-                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
                 />
               </div>
               {shouldShowEmailField && (
@@ -359,7 +359,7 @@ export default function AdminInnovatorsPage() {
                     value={formData.email}
                     onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
                     placeholder="Email"
-                    className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                    className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
                   />
                 </div>
               )}
@@ -404,7 +404,7 @@ export default function AdminInnovatorsPage() {
                   value={formData.company}
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
                   placeholder="企業名"
-                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
                 />
               </div>
             </div>
@@ -432,7 +432,7 @@ export default function AdminInnovatorsPage() {
                   placeholder="企業名で検索..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-white text-slate-900 placeholder:text-slate-500 border border-slate-300"
+                  className="pl-10 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
                 />
               </div>
               <Button
@@ -460,7 +460,8 @@ export default function AdminInnovatorsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>企業名</TableHead>
-                    <TableHead>登録日</TableHead>
+                    <TableHead>URL</TableHead>
+                    <TableHead>一言紹介</TableHead>
                     <TableHead>更新日</TableHead>
                     <TableHead>アクション</TableHead>
                   </TableRow>
@@ -469,7 +470,21 @@ export default function AdminInnovatorsPage() {
                   {safeInnovators.map((innovator) => (
                     <TableRow key={innovator.id}>
                       <TableCell className="font-medium">{innovator.company ?? '—'}</TableCell>
-                      <TableCell>{innovator.createdAt ? formatDate(innovator.createdAt) : '—'}</TableCell>
+                      <TableCell>
+                        {innovator.url ? (
+                          <a
+                            href={innovator.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline"
+                          >
+                            {innovator.url}
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
+                      <TableCell>{innovator.introPoint ? innovator.introPoint : '—'}</TableCell>
                       <TableCell>{innovator.updatedAt ? formatDate(innovator.updatedAt) : '—'}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
