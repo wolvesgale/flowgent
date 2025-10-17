@@ -102,16 +102,9 @@ interface EvangelistCreateSuccessResponse {
 const isEvangelistListResponse = (
   value: unknown,
 ): value is EvangelistListSuccessResponse => {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-
+  if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
-
-  if (record.ok !== true) {
-    return false
-  }
-
+  if (record.ok !== true) return false
   return (
     Array.isArray(record.items) &&
     typeof record.total === 'number' &&
@@ -134,14 +127,9 @@ const isEvangelistCreateSuccessResponse = (
 const extractErrorMessage = (value: unknown, fallback: string): string => {
   if (value && typeof value === 'object') {
     const record = value as EvangelistListErrorResponse
-    if (typeof record.error === 'string' && record.error) {
-      return record.error
-    }
-    if (typeof record.message === 'string' && record.message) {
-      return record.message
-    }
+    if (typeof record.error === 'string' && record.error) return record.error
+    if (typeof record.message === 'string' && record.message) return record.message
   }
-
   return fallback
 }
 
@@ -587,7 +575,7 @@ export default function EvangelistsPage() {
                 </Button>
               )}
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <select
                 value={tierFilter}
@@ -872,9 +860,7 @@ export default function EvangelistsPage() {
         open={isEditOpen}
         onOpenChange={(open) => {
           setIsEditOpen(open)
-          if (!open) {
-            setSelectedEvangelist(null)
-          }
+          if (!open) setSelectedEvangelist(null)
         }}
       >
         <DialogContent aria-describedby="edit-desc">
@@ -929,7 +915,7 @@ export default function EvangelistsPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
+                    <SelectTrigger className="bg白 text-slate-900 border-slate-300 placeholder:text-slate-400">
                       <SelectValue placeholder="未設定" />
                     </SelectTrigger>
                     <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
