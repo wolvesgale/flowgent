@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Search, Plus, ArrowUpDown, X, Pencil } from 'lucide-react'
+import { Search, Plus, ArrowUpDown, X, Pencil, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 
 const STRENGTH_LABELS = {
@@ -94,6 +94,11 @@ interface EvangelistListErrorResponse {
   message?: string
 }
 
+interface EvangelistCreateSuccessResponse {
+  ok: true
+  item: Evangelist
+}
+
 const isEvangelistListResponse = (
   value: unknown,
 ): value is EvangelistListSuccessResponse => {
@@ -113,6 +118,17 @@ const isEvangelistListResponse = (
     typeof record.page === 'number' &&
     typeof record.limit === 'number'
   )
+}
+
+const isEvangelistCreateSuccessResponse = (
+  value: unknown,
+): value is EvangelistCreateSuccessResponse => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return record.ok === true && typeof record.item === 'object' && record.item !== null
 }
 
 const extractErrorMessage = (value: unknown, fallback: string): string => {
@@ -157,6 +173,7 @@ export default function EvangelistsPage() {
   const itemsPerPage = 10
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [selectedEvangelist, setSelectedEvangelist] = useState<Evangelist | null>(null)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [editForm, setEditForm] = useState<EditFormState>({
     contactMethod: '',
     strength: '',
@@ -166,6 +183,16 @@ export default function EvangelistsPage() {
     nextActionDueOn: '',
     notes: '',
   })
+  const [createForm, setCreateForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    assignedCsId: CS_CLEAR_VALUE,
+  })
+
+  const debouncedSearchTerm = useDebouncedValue(searchTerm, 300)
+  const activeRequestIdRef = useRef(0)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -181,64 +208,115 @@ export default function EvangelistsPage() {
     }
   }, [])
 
-  const fetchEvangelists = useCallback(async () => {
-    try {
-      setLoading(true)
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: itemsPerPage.toString(),
-        search: searchTerm,
-        sortBy,
-        sortOrder,
-        ...(tierFilter !== 'ALL' && { tier: tierFilter }),
-        ...(assignedCsFilter && { assignedCsId: assignedCsFilter }),
-        ...(staleFilter && { stale: staleFilter }),
-      })
-
-      const response = await fetch(`/api/evangelists?${params}`, {
-        credentials: 'include',
-      })
-      const text = await response.text()
-      let parsed: unknown = null
-      if (text) {
-        try {
-          parsed = JSON.parse(text)
-        } catch (error) {
-          console.error('Failed to parse evangelists response JSON', error)
-        }
-      }
-
-      const fallbackMessage =
-        (text && text.length > 0 ? text : '') ||
-        response.statusText ||
-        `HTTP ${response.status}`
-
-      if (!response.ok || !isEvangelistListResponse(parsed)) {
-        const message = extractErrorMessage(parsed, fallbackMessage)
-        throw new Error(message)
-      }
-
-      const data: EvangelistListSuccessResponse = parsed
-
-      setEvangelists(data.items)
-      setTotalPages(Math.max(1, Math.ceil(data.total / itemsPerPage)))
-    } catch (error) {
-      console.error('Failed to fetch evangelists:', error)
-      toast.error('エバンジェリストの取得に失敗しました')
-      setEvangelists([])
-      setTotalPages(1)
-    } finally {
-      setLoading(false)
-    }
-  }, [currentPage, searchTerm, sortBy, sortOrder, tierFilter, assignedCsFilter, staleFilter])
-
   useEffect(() => {
     void fetchUsers()
   }, [fetchUsers])
 
   useEffect(() => {
-    void fetchEvangelists()
-  }, [fetchEvangelists])
+    const controller = new AbortController()
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = controller
+    const requestId = ++activeRequestIdRef.current
+
+    setLoading(true)
+
+    const params = new URLSearchParams({
+      page: currentPage.toString(),
+      limit: itemsPerPage.toString(),
+      sortBy,
+      sortOrder,
+    })
+
+    const trimmedSearch = debouncedSearchTerm.trim()
+    if (trimmedSearch) {
+      params.set('search', trimmedSearch)
+    }
+    if (tierFilter !== 'ALL') {
+      params.set('tier', tierFilter)
+    }
+    if (assignedCsFilter) {
+      params.set('assignedCsId', assignedCsFilter)
+    }
+    if (staleFilter) {
+      params.set('stale', staleFilter)
+    }
+
+    const run = async () => {
+      try {
+        const response = await fetch(`/api/evangelists?${params.toString()}`, {
+          credentials: 'include',
+          signal: controller.signal,
+        })
+        const contentType = response.headers.get('content-type') || ''
+        const raw = await response.text()
+        let parsed: unknown = null
+        if (contentType.includes('application/json') && raw) {
+          try {
+            parsed = JSON.parse(raw)
+          } catch (error) {
+            console.error('Failed to parse evangelists response JSON', error)
+          }
+        }
+
+        if (response.status === 401) {
+          window.location.href = '/login'
+          return
+        }
+
+        const fallbackMessage =
+          (raw && raw.length > 0 ? raw : '') ||
+          response.statusText ||
+          `HTTP ${response.status}`
+
+        if (!response.ok || !isEvangelistListResponse(parsed)) {
+          const message = extractErrorMessage(parsed, fallbackMessage)
+          throw new Error(message)
+        }
+
+        const data: EvangelistListSuccessResponse = parsed
+
+        if (requestId === activeRequestIdRef.current) {
+          setEvangelists(data.items)
+          setTotalPages(Math.max(1, Math.ceil(data.total / itemsPerPage)))
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+        if ((error as { name?: string })?.name === 'AbortError') {
+          return
+        }
+
+        console.error('Failed to fetch evangelists:', error)
+
+        if (requestId === activeRequestIdRef.current) {
+          toast.error('エバンジェリストの取得に失敗しました')
+          setEvangelists([])
+          setTotalPages(1)
+        }
+      } finally {
+        if (requestId === activeRequestIdRef.current) {
+          setLoading(false)
+          abortControllerRef.current = null
+        }
+      }
+    }
+
+    void run()
+
+    return () => {
+      controller.abort()
+    }
+  }, [
+    assignedCsFilter,
+    currentPage,
+    debouncedSearchTerm,
+    itemsPerPage,
+    sortBy,
+    sortOrder,
+    staleFilter,
+    tierFilter,
+  ])
 
   useEffect(() => {
     if (!selectedEvangelist) return
@@ -277,11 +355,28 @@ export default function EvangelistsPage() {
         body: JSON.stringify({ assignedCsId: normalizedAssignee || null }),
       })
 
-      if (!response.ok) {
-        throw new Error('担当CSの更新に失敗しました')
+      const contentType = response.headers.get('content-type') || ''
+      const raw = await response.text()
+      let parsed: unknown = null
+      if (contentType.includes('application/json') && raw) {
+        try {
+          parsed = JSON.parse(raw)
+        } catch (error) {
+          console.error('Failed to parse evangelist assign response JSON', error)
+        }
       }
 
-      const updated: Evangelist = await response.json()
+      if (response.status === 401) {
+        window.location.href = '/login'
+        return
+      }
+
+      if (!response.ok || !parsed || typeof parsed !== 'object') {
+        const message = extractErrorMessage(parsed, raw || '担当CSの更新に失敗しました')
+        throw new Error(message)
+      }
+
+      const updated = parsed as Evangelist
       setEvangelists((prev) =>
         prev.map((evangelist) =>
           evangelist.id === evangelistId
@@ -302,6 +397,125 @@ export default function EvangelistsPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('ja-JP')
+  }
+
+  const openEditDialog = (evangelist: Evangelist) => {
+    setSelectedEvangelist(evangelist)
+    setIsEditOpen(true)
+  }
+
+  const openCreateDialog = () => {
+    setCreateForm({
+      firstName: '',
+      lastName: '',
+      email: '',
+      assignedCsId: CS_CLEAR_VALUE,
+    })
+    setIsCreateOpen(true)
+  }
+
+  const handleCreateSubmit = async () => {
+    const first = createForm.firstName.trim()
+    const last = createForm.lastName.trim()
+
+    if (!first || !last) {
+      toast.error('姓と名は必須です')
+      return
+    }
+
+    try {
+      const res = await fetch('/api/evangelists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          firstName: first,
+          lastName: last,
+          email: createForm.email.trim() || null,
+          assignedCsId:
+            createForm.assignedCsId === CS_CLEAR_VALUE
+              ? null
+              : createForm.assignedCsId,
+        }),
+      })
+
+      const contentType = res.headers.get('content-type') || ''
+      const raw = await res.text()
+      let parsed: unknown = null
+      if (contentType.includes('application/json') && raw) {
+        try {
+          parsed = JSON.parse(raw)
+        } catch (error) {
+          console.error('Failed to parse evangelist create response JSON', error)
+        }
+      }
+
+      if (res.status === 401) {
+        window.location.href = '/login'
+        return
+      }
+
+      if (!res.ok || !isEvangelistCreateSuccessResponse(parsed)) {
+        const message = extractErrorMessage(parsed, raw || '作成に失敗しました')
+        throw new Error(message)
+      }
+
+      const created = parsed.item as Evangelist
+      setEvangelists((prev) => [created, ...prev.filter((item) => item.id !== created.id)])
+      setCreateForm({
+        firstName: '',
+        lastName: '',
+        email: '',
+        assignedCsId: CS_CLEAR_VALUE,
+      })
+      setIsCreateOpen(false)
+      toast.success('エバンジェリストを作成しました')
+    } catch (error) {
+      console.error(error)
+      const message =
+        error instanceof Error ? error.message || '作成に失敗しました' : '作成に失敗しました'
+      toast.error(message)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('このエバンジェリストを削除します。よろしいですか？')) return
+
+    try {
+      const res = await fetch(`/api/evangelists/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+
+      const contentType = res.headers.get('content-type') || ''
+      const raw = await res.text()
+      let parsed: unknown = null
+      if (contentType.includes('application/json') && raw) {
+        try {
+          parsed = JSON.parse(raw)
+        } catch (error) {
+          console.error('Failed to parse evangelist delete response JSON', error)
+        }
+      }
+
+      if (res.status === 401) {
+        window.location.href = '/login'
+        return
+      }
+
+      if (!res.ok) {
+        const message = extractErrorMessage(parsed, raw || '削除に失敗しました')
+        throw new Error(message)
+      }
+
+      setEvangelists((prev) => prev.filter((e) => e.id !== id))
+      toast.success('削除しました')
+    } catch (error) {
+      console.error(error)
+      const message =
+        error instanceof Error ? `削除に失敗しました：${error.message}` : '削除に失敗しました'
+      toast.error(message)
+    }
   }
 
   const clearFilters = () => {
@@ -365,11 +579,6 @@ export default function EvangelistsPage() {
     }
   }
 
-  const openEditDialog = (evangelist: Evangelist) => {
-    setSelectedEvangelist(evangelist)
-    setIsEditOpen(true)
-  }
-
   return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
@@ -377,12 +586,20 @@ export default function EvangelistsPage() {
           <h1 className="text-3xl font-bold">エバンジェリスト管理</h1>
           <p className="text-muted-foreground">エバンジェリストの一覧と管理</p>
         </div>
-        <Link href="/evangelists/import">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            CSVインポート
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-2">
+            <Button onClick={openCreateDialog} variant="default">
+              <UserPlus className="mr-2 h-4 w-4" />
+              新規追加
+            </Button>
+            <Link href="/evangelists/import">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                CSVインポート
+              </Button>
+            </Link>
+          </div>
+        </div>
       </div>
 
       <Card>
@@ -401,7 +618,10 @@ export default function EvangelistsPage() {
                 <Input
                   placeholder="名前、メールアドレスで検索..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    setCurrentPage(1)
+                    setSearchTerm(e.target.value)
+                  }}
                   className="pl-10"
                 />
               </div>
@@ -570,6 +790,14 @@ export default function EvangelistsPage() {
                               詳細
                             </Button>
                           </Link>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDelete(evangelist.id)}
+                          >
+                            <Trash2 className="mr-1 h-3.5 w-3.5" />
+                            削除
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -610,6 +838,81 @@ export default function EvangelistsPage() {
         </CardContent>
       </Card>
 
+      <Dialog open={isCreateOpen} onOpenChange={(open) => setIsCreateOpen(open)}>
+        <DialogContent aria-describedby="create-desc">
+          <DialogHeader>
+            <DialogTitle>エバンジェリストを追加</DialogTitle>
+            <p id="create-desc" className="sr-only">
+              姓・名は必須、メールと担当CSは任意
+            </p>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>姓（必須）</Label>
+              <Input
+                value={createForm.lastName}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, lastName: e.target.value }))
+                }
+                placeholder="山田"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>名（必須）</Label>
+              <Input
+                value={createForm.firstName}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, firstName: e.target.value }))
+                }
+                placeholder="太郎"
+                required
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>メールアドレス（任意）</Label>
+              <Input
+                type="email"
+                value={createForm.email}
+                onChange={(e) =>
+                  setCreateForm((prev) => ({ ...prev, email: e.target.value }))
+                }
+                placeholder="taro@example.com"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>担当CS（任意）</Label>
+              <Select
+                value={createForm.assignedCsId}
+                onValueChange={(value) =>
+                  setCreateForm((prev) => ({ ...prev, assignedCsId: value }))
+                }
+              >
+                <SelectTrigger className="bg-white text-slate-900 border-slate-300">
+                  <SelectValue placeholder="未割り当て" />
+                </SelectTrigger>
+                <SelectContent className="bg-white text-slate-900 border-slate-300">
+                  <SelectItem value={CS_CLEAR_VALUE}>未割り当て</SelectItem>
+                  {users.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name}（{user.role === 'ADMIN' ? '管理者' : 'CS'}）
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleCreateSubmit}>作成</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={isEditOpen}
         onOpenChange={(open) => {
@@ -619,9 +922,12 @@ export default function EvangelistsPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent aria-describedby="edit-desc">
           <DialogHeader>
             <DialogTitle>エヴァンジェリスト情報を編集</DialogTitle>
+            <p id="edit-desc" className="sr-only">
+              連絡手段・強み・管理フェーズ等を変更できます
+            </p>
           </DialogHeader>
           {selectedEvangelist && (
             <div className="space-y-4">
@@ -767,4 +1073,15 @@ export default function EvangelistsPage() {
       </Dialog>
     </div>
   )
+}
+
+function useDebouncedValue<T>(value: T, delay: number) {
+  const [debounced, setDebounced] = useState(value)
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timeout)
+  }, [value, delay])
+
+  return debounced
 }
