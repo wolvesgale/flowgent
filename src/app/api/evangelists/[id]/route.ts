@@ -207,6 +207,10 @@ export async function DELETE(_request: Request, context: unknown) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (session.role !== 'ADMIN' && session.role !== 'CS') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { id } = (context as { params: { id: string } }).params
 
     // EVAが存在するかチェック
@@ -227,12 +231,14 @@ export async function DELETE(_request: Request, context: unknown) {
     // EVAを削除
     await prisma.evangelist.delete({
       where: { id },
-      select: { id: true },
     })
 
-    return NextResponse.json({ message: 'Evangelist deleted successfully' })
+    return new NextResponse(null, { status: 204 })
   } catch (error) {
     const err = error as { code?: string; message?: string }
+    if (err?.code === 'P2025') {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
     console.error('[evangelists:detail:delete]', err?.code ?? 'UNKNOWN', err)
     return NextResponse.json(
       { error: 'Internal server error', code: err?.code },
