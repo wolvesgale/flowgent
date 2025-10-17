@@ -568,20 +568,24 @@ export default function EvangelistsPage() {
   }
 
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">エバンジェリスト管理</h1>
-          <p className="text-muted-foreground">エバンジェリストの一覧と管理</p>
+          <h1 className="text-3xl font-bold text-slate-900">エバンジェリスト管理</h1>
+          <p className="text-slate-500">エバンジェリストの一覧と管理</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex gap-2">
-            <Button onClick={openCreateDialog} variant="default">
+            <Button
+              onClick={openCreateDialog}
+              variant="default"
+              className="bg-brand text-white shadow-xs hover:bg-brand-600"
+            >
               <UserPlus className="mr-2 h-4 w-4" />
               新規追加
             </Button>
             <Link href="/evangelists/import">
-              <Button>
+              <Button className="border border-slate-300 bg-white text-slate-700 shadow-xs hover:bg-slate-50">
                 <Plus className="mr-2 h-4 w-4" />
                 CSVインポート
               </Button>
@@ -590,19 +594,19 @@ export default function EvangelistsPage() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>エバンジェリスト一覧</CardTitle>
-          <CardDescription>
+      <Card className="rounded-xl border border-[var(--fg-border)] bg-[var(--fg-card)] shadow-lg">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-[20px] font-semibold text-slate-800">エバンジェリスト一覧</CardTitle>
+          <CardDescription className="text-sm text-slate-500">
             登録されているエバンジェリストの一覧です
           </CardDescription>
         </CardHeader>
         <CardContent>
           {/* 検索・フィルタ */}
-          <div className="space-y-4 mb-6">
+          <div className="mb-6 space-y-4">
             <div className="flex gap-4">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                 <Input
                   placeholder="名前、メールアドレスで検索..."
                   value={searchTerm}
@@ -610,22 +614,26 @@ export default function EvangelistsPage() {
                     setCurrentPage(1)
                     setSearchTerm(e.target.value)
                   }}
-                  className="pl-10"
+                  className="border border-slate-300 bg-white pl-10 text-slate-900 placeholder:text-slate-400"
                 />
               </div>
               {hasActiveFilters && (
-                <Button variant="outline" onClick={clearFilters} className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={clearFilters}
+                  className="flex items-center gap-2 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                >
                   <X className="h-4 w-4" />
                   フィルタクリア
                 </Button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <select
                 value={tierFilter}
                 onChange={(e) => setTierFilter(e.target.value as 'ALL' | 'TIER1' | 'TIER2')}
-                className="px-3 py-2 border border-input bg-background rounded-md"
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-900"
               >
                 <option value="ALL">全てのTier</option>
                 <option value="TIER1">TIER1</option>
@@ -635,7 +643,7 @@ export default function EvangelistsPage() {
               <select
                 value={assignedCsFilter}
                 onChange={(e) => setAssignedCsFilter(e.target.value)}
-                className="px-3 py-2 border border-input bg-background rounded-md"
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-900"
               >
                 <option value="">全ての担当CS</option>
                 {users.map((user) => (
@@ -648,7 +656,7 @@ export default function EvangelistsPage() {
               <select
                 value={staleFilter}
                 onChange={(e) => setStaleFilter(e.target.value)}
-                className="px-3 py-2 border border-input bg-background rounded-md"
+                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-900"
               >
                 <option value="">フォロー期間</option>
                 <option value="7">7日以上未フォロー</option>
@@ -660,59 +668,59 @@ export default function EvangelistsPage() {
 
           {/* テーブル */}
           {loading ? (
-            <div className="text-center py-8">読み込み中...</div>
+            <div className="py-8 text-center text-slate-600">読み込み中...</div>
           ) : (
             <>
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-slate-50">
                   <TableRow>
-                    <TableHead>
+                    <TableHead className="text-slate-700">
                       <Button
                         variant="ghost"
                         onClick={() => handleSort('name')}
-                        className="h-auto p-0 font-semibold"
+                        className="h-auto p-0 font-semibold text-slate-700 hover:text-slate-900"
                       >
                         名前
                         <ArrowUpDown className="ml-2 h-4 w-4" />
                       </Button>
                     </TableHead>
-                    <TableHead>メールアドレス</TableHead>
-                    <TableHead>強み</TableHead>
-                    <TableHead>連絡手段</TableHead>
-                    <TableHead>管理フェーズ</TableHead>
-                    <TableHead>リスト提供</TableHead>
-                    <TableHead>ネクストアクション</TableHead>
-                    <TableHead>NA期日</TableHead>
-                    <TableHead>担当CS</TableHead>
-                    <TableHead>
+                    <TableHead className="text-slate-700">メールアドレス</TableHead>
+                    <TableHead className="text-slate-700">強み</TableHead>
+                    <TableHead className="text-slate-700">連絡手段</TableHead>
+                    <TableHead className="text-slate-700">管理フェーズ</TableHead>
+                    <TableHead className="text-slate-700">リスト提供</TableHead>
+                    <TableHead className="text-slate-700">ネクストアクション</TableHead>
+                    <TableHead className="text-slate-700">NA期日</TableHead>
+                    <TableHead className="text-slate-700">担当CS</TableHead>
+                    <TableHead className="text-slate-700">
                       <Button
                         variant="ghost"
                         onClick={() => handleSort('createdAt')}
-                        className="h-auto p-0 font-semibold"
+                        className="h-auto p-0 font-semibold text-slate-700 hover:text-slate-900"
                       >
                         登録日
                         <ArrowUpDown className="ml-2 h-4 w-4" />
                       </Button>
                     </TableHead>
-                    <TableHead>アクション</TableHead>
+                    <TableHead className="text-slate-700">アクション</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {evangelists.map((evangelist) => (
-                    <TableRow key={evangelist.id}>
-                      <TableCell className="font-medium">
+                    <TableRow key={evangelist.id} className="even:bg-slate-50/50">
+                      <TableCell className="font-medium text-slate-800">
                         {evangelist.firstName} {evangelist.lastName}
                       </TableCell>
-                      <TableCell>{evangelist.email}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-slate-700">{evangelist.email ?? '—'}</TableCell>
+                      <TableCell className="text-slate-700">
                         {evangelist.strength ? STRENGTH_LABELS[evangelist.strength] : '—'}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-slate-700">
                         {evangelist.contactMethod ? CONTACT_LABELS[evangelist.contactMethod] : '—'}
                       </TableCell>
                       <TableCell>
                         {evangelist.managementPhase ? (
-                          <Badge variant="outline" className="border-purple-300 bg-purple-50 text-purple-700">
+                          <Badge variant="outline" className="border-brand/40 bg-purple-50 text-brand">
                             {MANAGEMENT_PHASE_LABELS[evangelist.managementPhase]}
                           </Badge>
                         ) : (
@@ -737,7 +745,7 @@ export default function EvangelistsPage() {
                           <span className="text-slate-400">—</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-slate-700">
                         {evangelist.nextActionDueOn ? (
                           <span>{formatDate(evangelist.nextActionDueOn)}</span>
                         ) : (
@@ -766,15 +774,24 @@ export default function EvangelistsPage() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>{formatDate(evangelist.createdAt)}</TableCell>
+                      <TableCell className="text-slate-700">{formatDate(evangelist.createdAt)}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEditDialog(evangelist)}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditDialog(evangelist)}
+                            className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                          >
                             <Pencil className="mr-1 h-3.5 w-3.5" />
                             編集
                           </Button>
                           <Link href={`/evangelists/${evangelist.id}`}>
-                            <Button variant="outline" size="sm">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                            >
                               詳細
                             </Button>
                           </Link>
@@ -795,11 +812,12 @@ export default function EvangelistsPage() {
 
               {/* ページネーション */}
               {totalPages > 1 && (
-                <div className="flex justify-center items-center gap-2 mt-6">
+                <div className="mt-6 flex items-center justify-center gap-2">
                   <Button
                     variant="outline"
                     onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
+                    className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   >
                     前へ
                   </Button>
@@ -810,6 +828,7 @@ export default function EvangelistsPage() {
                     variant="outline"
                     onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                     disabled={currentPage === totalPages}
+                    className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   >
                     次へ
                   </Button>
@@ -817,7 +836,7 @@ export default function EvangelistsPage() {
               )}
 
               {evangelists.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="py-8 text-center text-slate-500">
                   エバンジェリストが見つかりませんでした
                 </div>
               )}
@@ -827,9 +846,14 @@ export default function EvangelistsPage() {
       </Card>
 
       <Dialog open={isCreateOpen} onOpenChange={(open) => setIsCreateOpen(open)}>
-        <DialogContent aria-describedby="create-desc">
+        <DialogContent
+          aria-describedby="create-desc"
+          className="max-h-[80vh] overflow-y-auto rounded-xl sm:max-w-2xl"
+        >
           <DialogHeader>
-            <DialogTitle>エバンジェリストを追加</DialogTitle>
+            <DialogTitle className="text-[20px] font-semibold text-slate-800">
+              エバンジェリストを追加
+            </DialogTitle>
             <p id="create-desc" className="sr-only">
               姓・名は必須、メールと担当CSは任意
             </p>
@@ -844,6 +868,7 @@ export default function EvangelistsPage() {
                   setCreateForm((prev) => ({ ...prev, lastName: e.target.value }))
                 }
                 placeholder="山田"
+                className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                 required
               />
             </div>
@@ -855,6 +880,7 @@ export default function EvangelistsPage() {
                   setCreateForm((prev) => ({ ...prev, firstName: e.target.value }))
                 }
                 placeholder="太郎"
+                className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                 required
               />
             </div>
@@ -867,6 +893,7 @@ export default function EvangelistsPage() {
                   setCreateForm((prev) => ({ ...prev, email: e.target.value }))
                 }
                 placeholder="taro@example.com"
+                className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
               />
             </div>
             <div className="space-y-2 sm:col-span-2">
@@ -877,10 +904,10 @@ export default function EvangelistsPage() {
                   setCreateForm((prev) => ({ ...prev, assignedCsId: value }))
                 }
               >
-                <SelectTrigger className="bg-white text-slate-900 border-slate-300">
+                <SelectTrigger className="border border-slate-300 bg-white text-slate-900">
                   <SelectValue placeholder="未割り当て" />
                 </SelectTrigger>
-                <SelectContent className="bg-white text-slate-900 border-slate-300">
+                <SelectContent className="border border-slate-300 bg-white text-slate-900">
                   <SelectItem value={CS_CLEAR_VALUE}>未割り当て</SelectItem>
                   {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
@@ -893,10 +920,19 @@ export default function EvangelistsPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>
+            <Button
+              variant="ghost"
+              onClick={() => setIsCreateOpen(false)}
+              className="text-slate-600 hover:bg-slate-100"
+            >
               キャンセル
             </Button>
-            <Button onClick={handleCreateSubmit}>作成</Button>
+            <Button
+              onClick={handleCreateSubmit}
+              className="bg-brand text-white hover:bg-brand-600"
+            >
+              作成
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -908,9 +944,14 @@ export default function EvangelistsPage() {
           if (!open) setSelectedEvangelist(null)
         }}
       >
-        <DialogContent aria-describedby="edit-desc">
+        <DialogContent
+          aria-describedby="edit-desc"
+          className="max-h-[80vh] overflow-y-auto rounded-xl sm:max-w-2xl"
+        >
           <DialogHeader>
-            <DialogTitle>エヴァンジェリスト情報を編集</DialogTitle>
+            <DialogTitle className="text-[20px] font-semibold text-slate-800">
+              エヴァンジェリスト情報を編集
+            </DialogTitle>
             <p id="edit-desc" className="sr-only">
               連絡手段・強み・管理フェーズ等を変更できます
             </p>
@@ -1023,6 +1064,7 @@ export default function EvangelistsPage() {
                 <Textarea
                   value={editForm.nextAction}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, nextAction: e.target.value }))}
+                  className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                   rows={3}
                 />
               </div>
@@ -1034,6 +1076,7 @@ export default function EvangelistsPage() {
                     type="date"
                     value={editForm.nextActionDueOn}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, nextActionDueOn: e.target.value }))}
+                    className="border border-slate-300 bg-white text-slate-900"
                   />
                 </div>
                 <div className="space-y-2">
@@ -1041,6 +1084,7 @@ export default function EvangelistsPage() {
                   <Textarea
                     value={editForm.notes}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
+                    className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                     rows={3}
                   />
                 </div>
@@ -1048,10 +1092,18 @@ export default function EvangelistsPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsEditOpen(false)}>
+            <Button
+              variant="ghost"
+              onClick={() => setIsEditOpen(false)}
+              className="text-slate-600 hover:bg-slate-100"
+            >
               キャンセル
             </Button>
-            <Button onClick={handleEditSubmit} disabled={!selectedEvangelist}>
+            <Button
+              onClick={handleEditSubmit}
+              disabled={!selectedEvangelist}
+              className="bg-brand text-white hover:bg-brand-600 disabled:opacity-50"
+            >
               保存
             </Button>
           </DialogFooter>

@@ -282,11 +282,11 @@ export default function AdminInnovatorsPage() {
   const shouldShowEmailField = innovatorMeta?.emailRequired === true
 
   return (
-    <div className="container mx-auto py-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">イノベータ管理</h1>
-          <p className="text-muted-foreground">イノベータの一覧と管理（管理者専用）</p>
+          <h1 className="text-3xl font-bold text-slate-900">イノベータ管理</h1>
+          <p className="text-slate-500">イノベータの一覧と管理（管理者専用）</p>
         </div>
         <Dialog
           open={isCreateDialogOpen}
@@ -298,15 +298,22 @@ export default function AdminInnovatorsPage() {
           }}
         >
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>
+            <Button
+              onClick={resetForm}
+              className="bg-brand text-white shadow-xs hover:bg-brand-600"
+            >
               <Plus className="mr-2 h-4 w-4" />
               新規作成
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="max-h-[80vh] overflow-y-auto rounded-xl sm:max-w-[460px]">
             <DialogHeader>
-              <DialogTitle>新しいイノベータを追加</DialogTitle>
-              <DialogDescription>企業名を入力してください。</DialogDescription>
+              <DialogTitle className="text-[20px] font-semibold text-slate-800">
+                新しいイノベータを追加
+              </DialogTitle>
+              <DialogDescription className="text-sm text-slate-500">
+                企業名を入力してください。
+              </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
@@ -319,7 +326,7 @@ export default function AdminInnovatorsPage() {
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
                   placeholder="企業名"
                   required
-                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
+                  className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -331,7 +338,7 @@ export default function AdminInnovatorsPage() {
                   value={formData.url}
                   onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
                   placeholder="https://example.com"
-                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
+                  className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -345,7 +352,7 @@ export default function AdminInnovatorsPage() {
                     setFormData((prev) => ({ ...prev, introPoint: e.target.value }))
                   }
                   placeholder="紹介ポイント"
-                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
+                  className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                 />
               </div>
               {shouldShowEmailField && (
@@ -359,7 +366,7 @@ export default function AdminInnovatorsPage() {
                     value={formData.email}
                     onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
                     placeholder="Email"
-                    className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
+                    className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                   />
                 </div>
               )}
@@ -376,10 +383,15 @@ export default function AdminInnovatorsPage() {
                   setIsCreateDialogOpen(false)
                   resetForm()
                 }}
+                className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
               >
                 キャンセル
               </Button>
-              <Button onClick={handleCreate} disabled={createPending}>
+              <Button
+                onClick={handleCreate}
+                disabled={createPending}
+                className="bg-brand text-white hover:bg-brand-600 disabled:opacity-50"
+              >
                 {createPending ? '登録中...' : '登録'}
               </Button>
             </DialogFooter>
@@ -388,10 +400,14 @@ export default function AdminInnovatorsPage() {
       </div>
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="max-h-[70vh] overflow-y-auto rounded-xl sm:max-w-[420px]">
           <DialogHeader>
-            <DialogTitle>イノベータ情報を編集</DialogTitle>
-            <DialogDescription>企業名を更新します。</DialogDescription>
+            <DialogTitle className="text-[20px] font-semibold text-slate-800">
+              イノベータ情報を編集
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-500">
+              企業名を更新します。
+            </DialogDescription>
           </DialogHeader>
           {selectedInnovator && (
             <div className="grid gap-4 py-4">
@@ -404,35 +420,44 @@ export default function AdminInnovatorsPage() {
                   value={formData.company}
                   onChange={(e) => setFormData((prev) => ({ ...prev, company: e.target.value }))}
                   placeholder="企業名"
-                  className="col-span-3 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
+                  className="col-span-3 border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                 />
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditDialogOpen(false)}
+              className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            >
               キャンセル
             </Button>
-            <Button onClick={handleEdit}>更新</Button>
+            <Button
+              onClick={handleEdit}
+              className="bg-brand text-white hover:bg-brand-600"
+            >
+              更新
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>イノベーター一覧</CardTitle>
-          <CardDescription>登録されているイノベータの一覧です</CardDescription>
+      <Card className="rounded-xl border border-[var(--fg-border)] bg-[var(--fg-card)] shadow-lg">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-[20px] font-semibold text-slate-800">イノベーター一覧</CardTitle>
+          <CardDescription className="text-sm text-slate-500">登録されているイノベータの一覧です</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-6 space-y-4">
             <div className="flex flex-col gap-4 md:flex-row">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
                 <Input
                   placeholder="企業名で検索..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-white text-slate-900 placeholder:text-slate-400 border border-slate-300"
+                  className="border border-slate-300 bg-white pl-10 text-slate-900 placeholder:text-slate-400"
                 />
               </div>
               <Button
@@ -441,42 +466,43 @@ export default function AdminInnovatorsPage() {
                   setSearchTerm('')
                   setCurrentPage(1)
                 }}
+                className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
               >
                 フィルタクリア
               </Button>
             </div>
 
-            <div className="rounded-md border border-purple-200 bg-purple-50/80 px-3 py-2 text-purple-700">
-              <p className="text-sm font-semibold">登録件数</p>
+            <div className="rounded-lg border border-[var(--fg-border)] bg-white px-4 py-3 text-slate-700 shadow-xs">
+              <p className="text-sm font-semibold text-slate-800">登録件数</p>
               <p className="text-sm">{itemCount} 件</p>
             </div>
           </div>
 
           {loading ? (
-            <div className="py-8 text-center">読み込み中...</div>
+            <div className="py-8 text-center text-slate-600">読み込み中...</div>
           ) : (
             <>
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-slate-50">
                   <TableRow>
-                    <TableHead>企業名</TableHead>
-                    <TableHead>URL</TableHead>
-                    <TableHead>一言紹介</TableHead>
-                    <TableHead>更新日</TableHead>
-                    <TableHead>アクション</TableHead>
+                    <TableHead className="text-slate-700">企業名</TableHead>
+                    <TableHead className="text-slate-700">URL</TableHead>
+                    <TableHead className="text-slate-700">一言紹介</TableHead>
+                    <TableHead className="text-slate-700">更新日</TableHead>
+                    <TableHead className="text-slate-700">アクション</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {safeInnovators.map((innovator) => (
-                    <TableRow key={innovator.id}>
-                      <TableCell className="font-medium">{innovator.company ?? '—'}</TableCell>
-                      <TableCell>
+                    <TableRow key={innovator.id} className="even:bg-slate-50/50">
+                      <TableCell className="font-medium text-slate-800">{innovator.company ?? '—'}</TableCell>
+                      <TableCell className="text-slate-700">
                         {innovator.url ? (
                           <a
                             href={innovator.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="underline"
+                            className="underline text-brand"
                           >
                             {innovator.url}
                           </a>
@@ -484,12 +510,17 @@ export default function AdminInnovatorsPage() {
                           '—'
                         )}
                       </TableCell>
-                      <TableCell>{innovator.introPoint ? innovator.introPoint : '—'}</TableCell>
-                      <TableCell>{innovator.updatedAt ? formatDate(innovator.updatedAt) : '—'}</TableCell>
+                      <TableCell className="text-slate-700">{innovator.introPoint ? innovator.introPoint : '—'}</TableCell>
+                      <TableCell className="text-slate-700">{innovator.updatedAt ? formatDate(innovator.updatedAt) : '—'}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEditDialog(innovator)}>
-                            <Edit className="mr-1 h-4 w-4" />編集
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditDialog(innovator)}
+                            className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                          >
+                            <Edit className="mr-1 h-4 w-4 text-slate-500" />編集
                           </Button>
                           <Button variant="destructive" size="sm" onClick={() => handleDelete(innovator.id)}>
                             <Trash2 className="mr-1 h-4 w-4" />削除
@@ -507,6 +538,7 @@ export default function AdminInnovatorsPage() {
                     variant="outline"
                     onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
+                    className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   >
                     前へ
                   </Button>
@@ -517,6 +549,7 @@ export default function AdminInnovatorsPage() {
                     variant="outline"
                     onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                     disabled={currentPage === totalPages}
+                    className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                   >
                     次へ
                   </Button>
@@ -524,7 +557,7 @@ export default function AdminInnovatorsPage() {
               )}
 
               {itemCount === 0 && (
-                <div className="py-8 text-center text-muted-foreground">イノベータが見つかりませんでした</div>
+                <div className="py-8 text-center text-slate-500">イノベータが見つかりませんでした</div>
               )}
             </>
           )}

@@ -208,7 +208,7 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
 
   return (
     <form className="flex h-full flex-col gap-6" onSubmit={onSubmit}>
-      <div className="space-y-4 overflow-y-auto pr-1">
+      <div className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
         <div className="rounded-lg border border-amber-300 bg-amber-100/60 p-4">
           <h3 className="text-sm font-semibold text-amber-900">紹介必須イノベータ</h3>
           {requiredIntroContent}
@@ -234,7 +234,7 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
             value={meeting.contactMethod}
             onChange={(event) => setMeeting((prev) => ({ ...prev, contactMethod: event.target.value }))}
             placeholder="電話、メール、対面など"
-            className="bg-white text-slate-900 placeholder:text-slate-400"
+            className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
           />
         </div>
 
@@ -246,7 +246,7 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
             onChange={(event) => setMeeting((prev) => ({ ...prev, summary: event.target.value }))}
             placeholder="面談の内容をまとめてください"
             rows={4}
-            className="bg-white text-slate-900 placeholder:text-slate-400"
+            className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
           />
         </div>
 
@@ -258,7 +258,7 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
             onChange={(event) => setMeeting((prev) => ({ ...prev, nextAction: event.target.value }))}
             placeholder="次回までに行うアクションを記載"
             rows={3}
-            className="bg-white text-slate-900 placeholder:text-slate-400"
+            className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
           />
         </div>
 
@@ -269,16 +269,26 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
             type="date"
             value={meeting.nextActionDueOn}
             onChange={(event) => setMeeting((prev) => ({ ...prev, nextActionDueOn: event.target.value }))}
-            className="bg-white text-slate-900 placeholder:text-slate-400"
+            className="border border-slate-300 bg-white text-slate-900"
           />
         </div>
       </div>
 
       <div className="mt-auto flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
-        <Button type="button" variant="outline" onClick={handleReset} disabled={isSaving}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleReset}
+          disabled={isSaving}
+          className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
           リセット
         </Button>
-        <Button type="submit" disabled={isSaving}>
+        <Button
+          type="submit"
+          disabled={isSaving}
+          className="bg-brand text-white hover:bg-brand-600 disabled:opacity-50"
+        >
           {isSaving ? "保存中..." : "保存"}
         </Button>
       </div>
