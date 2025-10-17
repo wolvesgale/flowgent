@@ -235,18 +235,24 @@ export default function EvangelistsPage() {
           credentials: 'include',
           signal: controller.signal,
         })
-        const text = await response.text()
+        const contentType = response.headers.get('content-type') || ''
+        const raw = await response.text()
         let parsed: unknown = null
-        if (text) {
+        if (contentType.includes('application/json') && raw) {
           try {
-            parsed = JSON.parse(text)
+            parsed = JSON.parse(raw)
           } catch (error) {
             console.error('Failed to parse evangelists response JSON', error)
           }
         }
 
+        if (response.status === 401) {
+          window.location.href = '/login'
+          return
+        }
+
         const fallbackMessage =
-          (text && text.length > 0 ? text : '') ||
+          (raw && raw.length > 0 ? raw : '') ||
           response.statusText ||
           `HTTP ${response.status}`
 
@@ -337,11 +343,28 @@ export default function EvangelistsPage() {
         body: JSON.stringify({ assignedCsId: normalizedAssignee || null }),
       })
 
-      if (!response.ok) {
-        throw new Error('担当CSの更新に失敗しました')
+      const contentType = response.headers.get('content-type') || ''
+      const raw = await response.text()
+      let parsed: unknown = null
+      if (contentType.includes('application/json') && raw) {
+        try {
+          parsed = JSON.parse(raw)
+        } catch (error) {
+          console.error('Failed to parse evangelist assign response JSON', error)
+        }
       }
 
-      const updated: Evangelist = await response.json()
+      if (response.status === 401) {
+        window.location.href = '/login'
+        return
+      }
+
+      if (!response.ok || !parsed || typeof parsed !== 'object') {
+        const message = extractErrorMessage(parsed, raw || '担当CSの更新に失敗しました')
+        throw new Error(message)
+      }
+
+      const updated = parsed as Evangelist
       setEvangelists((prev) =>
         prev.map((evangelist) =>
           evangelist.id === evangelistId
@@ -404,18 +427,24 @@ export default function EvangelistsPage() {
         }),
       })
 
-      const text = await res.text()
+      const contentType = res.headers.get('content-type') || ''
+      const raw = await res.text()
       let parsed: unknown = null
-      if (text) {
+      if (contentType.includes('application/json') && raw) {
         try {
-          parsed = JSON.parse(text)
+          parsed = JSON.parse(raw)
         } catch (error) {
           console.error('Failed to parse evangelist create response JSON', error)
         }
       }
 
+      if (res.status === 401) {
+        window.location.href = '/login'
+        return
+      }
+
       if (!res.ok || !isEvangelistCreateSuccessResponse(parsed)) {
-        const message = extractErrorMessage(parsed, text || '作成に失敗しました')
+        const message = extractErrorMessage(parsed, raw || '作成に失敗しました')
         throw new Error(message)
       }
 
@@ -446,9 +475,25 @@ export default function EvangelistsPage() {
         credentials: 'include',
       })
 
+      const contentType = res.headers.get('content-type') || ''
+      const raw = await res.text()
+      let parsed: unknown = null
+      if (contentType.includes('application/json') && raw) {
+        try {
+          parsed = JSON.parse(raw)
+        } catch (error) {
+          console.error('Failed to parse evangelist delete response JSON', error)
+        }
+      }
+
+      if (res.status === 401) {
+        window.location.href = '/login'
+        return
+      }
+
       if (!res.ok) {
-        const msg = await res.text()
-        throw new Error(msg || '削除に失敗しました')
+        const message = extractErrorMessage(parsed, raw || '削除に失敗しました')
+        throw new Error(message)
       }
 
       setEvangelists((prev) => prev.filter((e) => e.id !== id))

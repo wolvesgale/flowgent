@@ -201,6 +201,8 @@ export async function PUT(request: Request, context: unknown) {
 
 // DELETE /api/evangelists/[id] - EVA削除
 export async function DELETE(_request: Request, context: unknown) {
+  const { id } = (context as { params: { id: string } }).params
+
   try {
     const session = await getSession()
 
@@ -211,8 +213,6 @@ export async function DELETE(_request: Request, context: unknown) {
     if (session.role !== 'ADMIN' && session.role !== 'CS') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-
-    const { id } = (context as { params: { id: string } }).params
 
     // EVAが存在するかチェック
     const existingEvangelist = await prisma.evangelist.findUnique({
@@ -241,14 +241,16 @@ export async function DELETE(_request: Request, context: unknown) {
         return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 })
       }
       if (error.code === 'P2022') {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'Schema mismatch (P2022). Check model mapping.',
-            code: error.code,
-          },
-          { status: 500 },
-        )
+        try {
+          await prisma.$executeRaw`DELETE FROM "evangelists" WHERE "id" = ${id}`
+          return NextResponse.json({ ok: true, fallback: 'raw' })
+        } catch (fallbackError) {
+          console.error('[evangelists:detail:delete:fallback]', fallbackError)
+          return NextResponse.json(
+            { ok: false, error: 'DELETE_FAILED', code: 'P2022_FALLBACK_FAILED' },
+            { status: 500 },
+          )
+        }
       }
     }
     console.error('[evangelists:detail:delete]', error)
