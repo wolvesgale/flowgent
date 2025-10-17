@@ -9,6 +9,7 @@ import {
   normalizeEvangelistResult,
 } from '@/lib/evangelist-columns'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -207,6 +208,10 @@ export async function DELETE(_request: Request, context: unknown) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    if (session.role !== 'ADMIN' && session.role !== 'CS') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { id } = (context as { params: { id: string } }).params
 
     // EVAが存在するかチェック
@@ -227,16 +232,29 @@ export async function DELETE(_request: Request, context: unknown) {
     // EVAを削除
     await prisma.evangelist.delete({
       where: { id },
-      select: { id: true },
     })
 
-    return NextResponse.json({ message: 'Evangelist deleted successfully' })
+    return NextResponse.json({ ok: true })
   } catch (error) {
-    const err = error as { code?: string; message?: string }
-    console.error('[evangelists:detail:delete]', err?.code ?? 'UNKNOWN', err)
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') {
+        return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 })
+      }
+      if (error.code === 'P2022') {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'Schema mismatch (P2022). Check model mapping.',
+            code: error.code,
+          },
+          { status: 500 },
+        )
+      }
+    }
+    console.error('[evangelists:detail:delete]', error)
     return NextResponse.json(
-      { error: 'Internal server error', code: err?.code },
-      { status: 500 }
+      { ok: false, error: 'Internal server error' },
+      { status: 500 },
     )
   }
 }
