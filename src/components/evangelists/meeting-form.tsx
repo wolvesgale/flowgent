@@ -207,90 +207,91 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
   }, [hasRequiredIntroductions, requiredIntroError, requiredIntroLoading, requiredIntroductions])
 
   return (
-    <form className="mx-auto flex h-full w-full max-w-xl flex-col gap-6" onSubmit={onSubmit}>
-      <div className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
-        <div className="rounded-lg border border-amber-300 bg-amber-100/60 p-4">
-          <h3 className="text-sm font-semibold text-amber-900">紹介必須イノベータ</h3>
-          {requiredIntroContent}
-        </div>
+    <form className="mx-auto flex h-full w-full max-w-2xl flex-col" onSubmit={onSubmit}>
+      <div className="flex h-full flex-col">
+        <div className="flex-1 space-y-4 overflow-y-auto pr-1 max-h-[calc(100vh-220px)]">
+          <div className="rounded-lg border border-amber-300 bg-amber-100/60 p-4">
+            <h3 className="text-sm font-semibold text-amber-900">紹介必須イノベータ</h3>
+            {requiredIntroContent}
+          </div>
 
-        <div className="flex items-center gap-2">
-          <input
-            id="meeting-is-first"
-            type="checkbox"
-            className="h-4 w-4 rounded border border-slate-300"
-            checked={meeting.isFirst}
-            onChange={(event) => setMeeting((prev) => ({ ...prev, isFirst: event.target.checked }))}
-          />
-          <Label htmlFor="meeting-is-first" className="text-sm">
-            初回面談
-          </Label>
-        </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="meeting-is-first"
+              type="checkbox"
+              className="h-4 w-4 rounded border border-slate-300"
+              checked={meeting.isFirst}
+              onChange={(event) => setMeeting((prev) => ({ ...prev, isFirst: event.target.checked }))}
+            />
+            <Label htmlFor="meeting-is-first" className="text-sm">
+              初回面談
+            </Label>
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="meeting-contact-method">連絡方法</Label>
-          <Input
-            id="meeting-contact-method"
-            value={meeting.contactMethod}
-            onChange={(event) => setMeeting((prev) => ({ ...prev, contactMethod: event.target.value }))}
-            placeholder="電話、メール、対面など"
-            className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-          />
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="meeting-contact-method">連絡方法</Label>
+            <Input
+              id="meeting-contact-method"
+              value={meeting.contactMethod}
+              onChange={(event) => setMeeting((prev) => ({ ...prev, contactMethod: event.target.value }))}
+              placeholder="電話、メール、対面など"
+              className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+            />
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="meeting-summary">面談サマリー</Label>
-          <Textarea
-            id="meeting-summary"
-            value={meeting.summary}
-            onChange={(event) => setMeeting((prev) => ({ ...prev, summary: event.target.value }))}
-            placeholder="面談の内容をまとめてください"
-            rows={4}
-            className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-          />
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="meeting-summary">面談サマリー</Label>
+            <Textarea
+              id="meeting-summary"
+              value={meeting.summary}
+              onChange={(event) => setMeeting((prev) => ({ ...prev, summary: event.target.value }))}
+              placeholder="面談の内容をまとめてください"
+              rows={4}
+              className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+            />
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="meeting-next-actions">次回アクション</Label>
-          <Textarea
-            id="meeting-next-actions"
-            value={meeting.nextAction}
-            onChange={(event) => setMeeting((prev) => ({ ...prev, nextAction: event.target.value }))}
-            placeholder="次回までに行うアクションを記載"
-            rows={3}
-            className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-          />
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="meeting-next-actions">次回アクション</Label>
+            <Textarea
+              id="meeting-next-actions"
+              value={meeting.nextAction}
+              onChange={(event) => setMeeting((prev) => ({ ...prev, nextAction: event.target.value }))}
+              placeholder="次回までに行うアクションを記載"
+              rows={3}
+              className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+            />
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="meeting-next-action-due-on">次回アクション期日</Label>
-          <Input
-            id="meeting-next-action-due-on"
-            type="date"
-            value={meeting.nextActionDueOn}
-            onChange={(event) => setMeeting((prev) => ({ ...prev, nextActionDueOn: event.target.value }))}
-            className="border border-slate-300 bg-white text-slate-900"
-          />
+          <div className="space-y-2">
+            <Label htmlFor="meeting-next-action-due-on">次回アクション期日</Label>
+            <Input
+              id="meeting-next-action-due-on"
+              type="date"
+              value={meeting.nextActionDueOn}
+              onChange={(event) => setMeeting((prev) => ({ ...prev, nextActionDueOn: event.target.value }))}
+              className="border border-slate-300 bg-white text-slate-900"
+            />
+          </div>
         </div>
-      </div>
-
-      <div className="mt-auto flex flex-col gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleReset}
-          disabled={isSaving}
-          className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        >
-          リセット
-        </Button>
-        <Button
-          type="submit"
-          disabled={isSaving}
-          className="bg-brand text-white hover:bg-brand-600 disabled:opacity-50"
-        >
-          {isSaving ? "保存中..." : "保存"}
-        </Button>
+        <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t border-slate-200 bg-white/80 px-1 py-3 backdrop-blur sm:px-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleReset}
+            disabled={isSaving}
+            className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            リセット
+          </Button>
+          <Button
+            type="submit"
+            disabled={isSaving}
+            className="bg-brand text-white hover:bg-brand-600 disabled:opacity-50"
+          >
+            {isSaving ? "保存中..." : "保存"}
+          </Button>
+        </div>
       </div>
     </form>
   )

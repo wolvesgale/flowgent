@@ -701,7 +701,7 @@ export default function EvangelistsPage() {
                   {evangelists.map((evangelist) => (
                     <TableRow key={evangelist.id} className="even:bg-slate-50/50">
                       <TableCell className="font-medium text-slate-800">
-                        {evangelist.firstName} {evangelist.lastName}
+                        {[evangelist.lastName, evangelist.firstName].filter(Boolean).join(' ') || '—'}
                       </TableCell>
                       <TableCell className="text-slate-700">{evangelist.email ?? '—'}</TableCell>
                       <TableCell className="text-slate-700">

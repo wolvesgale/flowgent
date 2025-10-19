@@ -324,6 +324,10 @@ export default function TodosPage() {
         return
       }
       toast.success('ToDoを作成しました')
+      const created = (data as { ok: true; item: TodoItem }).item
+      if (created) {
+        setTodos((prev) => [created, ...prev.filter((todo) => todo.id !== created.id)])
+      }
       setCreateOpen(false)
       setCreateForm({ title: '', notes: '', dueOn: '', assigneeId: SELF_ASSIGNEE })
       void loadTodos()

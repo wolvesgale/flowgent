@@ -301,7 +301,7 @@ export default function EvangelistDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
@@ -311,7 +311,7 @@ export default function EvangelistDetailPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -321,7 +321,7 @@ export default function EvangelistDetailPage() {
 
   if (!evangelist) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <Alert>
           <AlertDescription>EVAが見つかりませんでした</AlertDescription>
         </Alert>
@@ -330,9 +330,9 @@ export default function EvangelistDetailPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
       {/* ヘッダー */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -343,12 +343,12 @@ export default function EvangelistDetailPage() {
             <ArrowLeft className="h-4 w-4" />
             戻る
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold">
-              {evangelist.firstName} {evangelist.lastName}
-            </h1>
-            <p className="text-muted-foreground">{evangelist.email}</p>
-          </div>
+            <div>
+              <h1 className="text-2xl font-bold">
+                {[evangelist.lastName, evangelist.firstName].filter(Boolean).join(' ')}
+              </h1>
+              <p className="text-muted-foreground">{evangelist.email}</p>
+            </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge className={TIER_COLORS[evangelist.tier]}>
@@ -442,7 +442,9 @@ export default function EvangelistDetailPage() {
                       />
                     </div>
                   ) : (
-                    <p className="text-sm">{evangelist.firstName} {evangelist.lastName}</p>
+                    <p className="text-sm">
+                      {[evangelist.lastName, evangelist.firstName].filter(Boolean).join(' ')}
+                    </p>
                   )}
                 </div>
 
@@ -707,12 +709,12 @@ export default function EvangelistDetailPage() {
               </SheetTrigger>
             </div>
 
-            <SheetContent side="right" className="flex w-full flex-col items-center gap-6 sm:max-w-[560px]">
+            <SheetContent side="right" className="flex h-full w-full flex-col gap-6 overflow-hidden sm:max-w-[560px]">
               <SheetHeader>
                 <SheetTitle>面談記録</SheetTitle>
                 <SheetDescription>面談内容や次回アクションを記録します。</SheetDescription>
               </SheetHeader>
-              <div className="flex-1 overflow-y-auto pb-4">
+              <div className="flex-1 w-full overflow-y-auto pb-4">
                 {evangelist ? (
                   <MeetingForm
                     evangelistId={evangelist.id}

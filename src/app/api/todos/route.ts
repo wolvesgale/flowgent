@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSession } from '@/lib/session'
 import type { SessionData } from '@/lib/session'
+import type { Prisma } from '@prisma/client'
 
 const SELF = 'me'
 const ALL = 'all'
@@ -64,7 +65,11 @@ export async function GET(request: NextRequest) {
     const requestedStatus = (url.searchParams.get('status') || 'OPEN').toUpperCase()
     const requestedAssignee = url.searchParams.get('assigneeId')
 
-    const where: Record<string, unknown> = {}
+    const where: Prisma.TodoWhereInput = {}
+    const selfConditions: Prisma.TodoWhereInput[] = [
+      { assigneeId: userId },
+      { createdById: userId },
+    ]
 
     let appliedAssignee: string | typeof ALL | typeof SELF = SELF
 
@@ -73,14 +78,14 @@ export async function GET(request: NextRequest) {
         appliedAssignee = ALL
       } else if (requestedAssignee === SELF) {
         appliedAssignee = userId
-        where.assigneeId = userId
+        where.OR = selfConditions
       } else {
         appliedAssignee = requestedAssignee
         where.assigneeId = requestedAssignee
       }
     } else {
       appliedAssignee = userId
-      where.assigneeId = userId
+      where.OR = selfConditions
     }
 
     let appliedStatus: 'OPEN' | 'DONE' | 'ALL' = 'ALL'
