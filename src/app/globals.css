@@ -3,58 +3,78 @@
 @tailwind utilities;
 
 :root {
-  --brand-purple: #7B61FF;
-  --fg-on-purple: #ffffff;
-  --card-bg: #ffffff;
-  --card-fg: #1f2937;
+  /* brand */
+  --fg-primary: #6e56cf;
+  --fg-primary-600: #5b46c3;
+  --fg-accent: #7c3aed;
+  --fg-bg: #f8fafc;
+  --fg-card: #ffffff;
+  --fg-border: #e5e7eb;
+  --fg-muted: #64748b;
 }
 
-html, body {
-  background: var(--brand-purple);
-  color: var(--fg-on-purple);
-  min-height: 100vh;
+html,
+body {
+  min-height: 100%;
+  background: var(--fg-bg);
+  color: #0f172a;
+  font-family: ui-sans-serif, system-ui, "Inter", "Noto Sans JP", "Hiragino Sans", "Helvetica Neue", Arial,
+    "Segoe UI Emoji";
 }
 
 .flowgent-card {
-  background: var(--card-bg);
-  color: var(--card-fg);
+  background: var(--fg-card);
+  color: #0f172a;
   border-radius: 12px;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.07);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
 }
 
 .flowgent-header {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--fg-primary);
+  color: #ffffff;
 }
 
-/* Input styles */
-input, textarea, select {
-  background: rgba(255, 255, 255, 0.9) !important;
-  border: 1px solid #d1d5db !important;
-  color: var(--card-fg) !important;
+input,
+textarea,
+select {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border: 1px solid var(--fg-border) !important;
+  color: #0f172a !important;
 }
 
-input:focus, textarea:focus, select:focus {
-  border-color: var(--brand-purple) !important;
-  box-shadow: 0 0 0 3px rgba(123, 97, 255, 0.1) !important;
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--fg-primary) !important;
+  box-shadow: 0 0 0 3px rgba(110, 86, 207, 0.15) !important;
 }
 
-/* Button styles */
-button[type="submit"], .btn-primary {
-  background: var(--brand-purple) !important;
-  color: var(--fg-on-purple) !important;
+button[type="submit"],
+.btn-primary {
+  background: var(--fg-primary) !important;
+  color: #ffffff !important;
 }
 
-button[type="submit"]:hover, .btn-primary:hover {
-  background: #6b46c1 !important;
+button[type="submit"]:hover,
+.btn-primary:hover {
+  background: var(--fg-primary-600) !important;
 }
 
 [data-radix-popper-content-wrapper] .select-content,
 div[role="listbox"] {
-  background: #fff !important;
+  background: #ffffff !important;
   color: #0f172a !important;
   opacity: 1 !important;
 }
-[data-radix-select-content],[role="listbox"]{background:#fff !important;color:#0f172a !important}
-[data-radix-select-trigger],.radix-select-trigger{background:#fff !important;color:#0f172a !important}
+
+[data-radix-select-content],
+[role="listbox"] {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+[data-radix-select-trigger],
+.radix-select-trigger {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
