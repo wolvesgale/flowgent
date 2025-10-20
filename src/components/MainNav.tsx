@@ -1,7 +1,7 @@
 import { getSession } from '@/lib/session';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { CheckSquare, ClipboardList, Sparkles, Users, UserCheck } from 'lucide-react';
+import { CheckSquare, ClipboardList, Sparkles, Upload, Users, UserCheck } from 'lucide-react';
 
 export default async function MainNav() {
   const session = await getSession();
@@ -58,6 +58,16 @@ export default async function MainNav() {
 
               {userRole === 'ADMIN' && (
                 <>
+                  <Link href="/admin/evangelists/bulk-assign">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="border border-white/20 bg-white/10 text-white shadow-xs hover:bg-white/20"
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      CSV一括反映
+                    </Button>
+                  </Link>
                   <Link href="/admin/introductions/required">
                     <Button
                       variant="ghost"
