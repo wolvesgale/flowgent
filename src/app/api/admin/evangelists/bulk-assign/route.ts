@@ -249,6 +249,9 @@ export async function POST(req: NextRequest) {
         await prisma.evangelist.update({
           where: email ? { email } : { id: evangelist!.id },
           data: changed,
+          // Return only the identifier to avoid Prisma requesting all columns
+          // from mismatched schemas (e.g., supportPriority) during UPDATE.
+          select: { id: true },
         });
         summary.updated++;
       }
