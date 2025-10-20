@@ -28,6 +28,11 @@ export default function BulkAssignClient() {
       const form = new FormData();
       form.append('file', file);
 
+      if (!dryRun && !window.confirm('本当に反映しますか？（この操作は元に戻せません）')) {
+        setLoading(false);
+        return;
+      }
+
       const response = await fetch(`/api/admin/evangelists/bulk-assign?dryRun=${dryRun}`, {
         method: 'POST',
         body: form,
@@ -104,7 +109,14 @@ export default function BulkAssignClient() {
 
         {result && (
           <pre className="max-h-96 overflow-auto rounded-md bg-slate-50 p-3 text-xs text-slate-700">
-            {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+            {typeof result === 'string'
+              ? result
+              : (() => {
+                  const payload = result as Record<string, unknown>;
+                  const mode = typeof payload.mode === 'string' ? payload.mode : undefined;
+                  const prefix = mode ? `# MODE: ${mode}\n` : '';
+                  return prefix + JSON.stringify(result, null, 2);
+                })()}
           </pre>
         )}
       </CardContent>

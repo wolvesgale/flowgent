@@ -42,6 +42,14 @@ function normalizeHeader(row: Record<string, unknown>): Row {
   };
 }
 
+function getBool(value: string | null, fallback = false) {
+  if (value == null) return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 't', 'yes', 'y', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'f', 'no', 'n', 'off', ''].includes(normalized)) return false;
+  return fallback;
+}
+
 function normalizeTier(input?: string | number | null) {
   if (input == null) return null;
   const value = String(input).trim().toUpperCase();
@@ -108,8 +116,8 @@ export async function POST(req: NextRequest) {
   if (authRes) return authRes;
 
   try {
-
-    const dryRun = (req.nextUrl.searchParams.get('dryRun') ?? 'false') === 'true';
+    const dryRun = getBool(req.nextUrl.searchParams.get('dryRun'), false);
+    const mode = dryRun ? 'DRY_RUN' : 'EXECUTE';
     const rows = await readBodyAsRows(req);
 
     const users = await prisma.user.findMany({
@@ -131,10 +139,13 @@ export async function POST(req: NextRequest) {
     }
 
     const summary = {
+      mode,
       received: rows.length,
       matched: 0,
       updated: 0,
       skipped: 0,
+      wouldChangeAssignedCs: 0,
+      wouldChangeTier: 0,
       notFound: [] as Array<{ key: string; reason: string }>,
       csNotFound: [] as Array<{ name: string }>,
       invalidTier: [] as Array<{ value: string }>,
@@ -143,6 +154,12 @@ export async function POST(req: NextRequest) {
         key: string;
         changed: Partial<{ assignedCsId: string; tier: string }>;
         dryRun: boolean;
+      }>,
+      whySkipped: [] as Array<{
+        key: string;
+        reason: string;
+        current?: { assignedCsId: string | null; tier: string | null };
+        incoming?: { assignedCsName: string | null; resolvedCsId: string | null; tier: string | null };
       }>,
     };
 
@@ -162,8 +179,8 @@ export async function POST(req: NextRequest) {
       let evangelist: { id: string; assignedCsId: string | null; tier: string | null } | null = null;
 
       if (email) {
-        evangelist = await prisma.evangelist.findUnique({
-          where: { email },
+        evangelist = await prisma.evangelist.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } },
           select: { id: true, assignedCsId: true, tier: true },
         });
 
@@ -228,14 +245,31 @@ export async function POST(req: NextRequest) {
 
       if (resolvedAssignedCsId && resolvedAssignedCsId !== evangelist!.assignedCsId) {
         changed.assignedCsId = resolvedAssignedCsId;
+        summary.wouldChangeAssignedCs++;
       }
 
       if (normalizedTier && normalizedTier !== evangelist!.tier) {
         changed.tier = normalizedTier;
+        summary.wouldChangeTier++;
       }
 
       if (Object.keys(changed).length === 0) {
         summary.skipped++;
+        summary.whySkipped.push({
+          key: email ? `email:${email}` : `name:${lastName}${firstName}`,
+          reason:
+            (!resolvedAssignedCsId && row.assignedCsName)
+              ? 'CS解決不可（assignedCsName未解決）'
+              : normalizedTier == null && hasTierValue
+                ? 'Tier不正値'
+                : '差分なし（現状と同じ）',
+          current: { assignedCsId: evangelist!.assignedCsId, tier: evangelist!.tier },
+          incoming: {
+            assignedCsName: row.assignedCsName || null,
+            resolvedCsId: resolvedAssignedCsId || null,
+            tier: normalizedTier,
+          },
+        });
         continue;
       }
 
@@ -249,15 +283,24 @@ export async function POST(req: NextRequest) {
         await prisma.evangelist.update({
           where: email ? { email } : { id: evangelist!.id },
           data: changed,
-          // Return only the identifier to avoid Prisma requesting all columns
-          // from mismatched schemas (e.g., supportPriority) during UPDATE.
           select: { id: true },
         });
         summary.updated++;
       }
     }
 
-    return NextResponse.json(summary);
+    return NextResponse.json({
+      ...summary,
+      summary: {
+        toUpdate: summary.details.length,
+        notFound: summary.notFound.length,
+        csNotFound: summary.csNotFound.length,
+        invalidTier: summary.invalidTier.length,
+        multiMatched: summary.multiMatched.length,
+        wouldChangeAssignedCs: summary.wouldChangeAssignedCs,
+        wouldChangeTier: summary.wouldChangeTier,
+      },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected error';
     const status = message === 'Unauthorized' ? 401 : message === 'Forbidden' ? 403 : 400;
