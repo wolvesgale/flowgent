@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
@@ -15,59 +15,11 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { CalendarClock, CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react'
 
+import { useTodos, type TodoItem } from '@/lib/useTodos'
+
 const MS_PER_DAY = 86_400_000
 const JST_OFFSET = 9 * 60 * 60 * 1000
 const SELF_ASSIGNEE = '__SELF__'
-
-type UserSummary = {
-  id: string
-  name: string
-  role: 'ADMIN' | 'CS'
-}
-
-type CurrentUser = {
-  id: string
-  role: 'ADMIN' | 'CS'
-}
-
-type TodoItem = {
-  id: string
-  title: string
-  notes: string | null
-  dueOn: string | null
-  status: 'OPEN' | 'DONE'
-  assigneeId: string
-  assignee: UserSummary | null
-  createdById: string
-  createdBy: UserSummary | null
-  createdAt: string
-  updatedAt: string
-}
-
-type TodoListResponse = {
-  ok: true
-  items: TodoItem[]
-  currentUser: CurrentUser
-  filters: {
-    assigneeId: string
-    status: 'OPEN' | 'DONE' | 'ALL'
-  }
-  assignees?: UserSummary[]
-}
-
-type TodoErrorResponse = {
-  ok?: false
-  error?: string
-}
-
-type EvangelistSummary = {
-  id: string
-  firstName?: string | null
-  lastName?: string | null
-  displayName?: string | null
-  nextAction?: string | null
-  nextActionDueOn?: string | null
-}
 
 const dateFormatter = new Intl.DateTimeFormat('ja-JP', {
   timeZone: 'Asia/Tokyo',
@@ -106,23 +58,39 @@ async function requestJson(url: string, options?: RequestInit) {
   const contentType = response.headers.get('content-type') || ''
   const raw = await response.text()
   if (response.status === 401) {
-    window.location.href = '/login'
-    return null
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login'
+    }
+    throw new Error('Unauthorized')
   }
   const data = contentType.includes('application/json') && raw ? JSON.parse(raw) : null
   return { response, data } as const
 }
 
+type UserSummary = {
+  id: string
+  name: string
+  role: 'ADMIN' | 'CS'
+}
+
+type EvangelistSummary = {
+  id: string
+  firstName?: string | null
+  lastName?: string | null
+  displayName?: string | null
+  nextAction?: string | null
+  nextActionDueOn?: string | null
+}
+
 export default function TodosPage() {
-  const [todos, setTodos] = useState<TodoItem[]>([])
-  const [loadingTodos, setLoadingTodos] = useState(true)
-  const [tomorrowItems, setTomorrowItems] = useState<EvangelistSummary[]>([])
-  const [tomorrowLoading, setTomorrowLoading] = useState(true)
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [currentUser, setCurrentUser] = useState<UserSummary | null>(null)
+  const [loadingUser, setLoadingUser] = useState(true)
   const [assignees, setAssignees] = useState<UserSummary[]>([])
   const [assigneeFilter, setAssigneeFilter] = useState<'me' | 'all' | string>('me')
   const [statusFilter, setStatusFilter] = useState<'OPEN' | 'DONE' | 'ALL'>('OPEN')
   const [selectedTomorrowCs, setSelectedTomorrowCs] = useState<'me' | 'all' | string>('me')
+  const [tomorrowItems, setTomorrowItems] = useState<EvangelistSummary[]>([])
+  const [tomorrowLoading, setTomorrowLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState({
     title: '',
@@ -130,152 +98,177 @@ export default function TodosPage() {
     dueOn: '',
     assigneeId: SELF_ASSIGNEE,
   })
-  const initialLoadRef = useRef(false)
 
-  const loadTodos = useCallback(
-    async (override?: { assigneeId?: string; status?: string }) => {
+  const isAdmin = currentUser?.role === 'ADMIN'
+
+  const computedScope = isAdmin
+    ? assigneeFilter === 'all'
+      ? 'all'
+      : 'mine'
+    : 'mine'
+
+  const computedAssigneeId = isAdmin
+    ? assigneeFilter === 'all' || assigneeFilter === 'me'
+      ? null
+      : assigneeFilter
+    : null
+
+  const {
+    items: todos,
+    isLoading: todosLoading,
+    error: todosError,
+    mutate: mutateTodos,
+  } = useTodos({
+    scope: computedAssigneeId ? 'all' : (computedScope as 'mine' | 'dueSoon' | 'all'),
+    status: statusFilter,
+    take: 100,
+    assigneeId: computedAssigneeId ?? undefined,
+  })
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
       try {
-        const targetStatus = (override?.status ?? statusFilter).toUpperCase()
-        let targetAssignee = override?.assigneeId ?? assigneeFilter
-
-        if (!currentUser || currentUser.role !== 'ADMIN') {
-          targetAssignee = 'me'
+        setLoadingUser(true)
+        const { response, data } = await requestJson('/api/auth/me')
+        if (!response.ok || !data?.user) {
+          throw new Error(data?.error || 'failed')
         }
-
-        setLoadingTodos(true)
-        const params = new URLSearchParams()
-        if (targetAssignee) params.set('assigneeId', targetAssignee)
-        if (targetStatus) params.set('status', targetStatus)
-
-        const result = await requestJson(`/api/todos?${params.toString()}`)
-        if (!result) return
-        const { response, data } = result
-        if (!response.ok || !data?.ok) {
-          const message = (data as TodoErrorResponse | null)?.error || 'ToDoの取得に失敗しました'
-          toast.error(message)
-          setTodos([])
-          return
-        }
-
-        const payload = data as TodoListResponse
-        setTodos(payload.items)
-        setCurrentUser(payload.currentUser)
-        if (Array.isArray(payload.assignees)) {
-          setAssignees(payload.assignees)
-        }
-
-        const responseAssignee = payload.filters.assigneeId
-        if (responseAssignee && responseAssignee !== assigneeFilter) {
-          setAssigneeFilter(responseAssignee as 'me' | 'all' | string)
-        }
-
-        const responseStatus = payload.filters.status
-        if (responseStatus && responseStatus !== statusFilter) {
-          setStatusFilter(responseStatus)
+        if (!cancelled) {
+          setCurrentUser(data.user as UserSummary)
         }
       } catch (error) {
-        console.error('[todos:load]', error)
-        toast.error('ToDoの取得に失敗しました')
-      } finally {
-        setLoadingTodos(false)
-      }
-    },
-    [assigneeFilter, statusFilter, currentUser],
-  )
-
-  const loadTomorrow = useCallback(async () => {
-    if (!currentUser) return
-    try {
-      setTomorrowLoading(true)
-      const params = new URLSearchParams({ limit: '100' })
-      let target: string | null = null
-      if (currentUser.role === 'ADMIN') {
-        if (selectedTomorrowCs === 'all') {
-          target = null
-        } else if (selectedTomorrowCs === 'me') {
-          target = currentUser.id
-        } else {
-          target = selectedTomorrowCs
+        console.error('[todos:user]', error)
+        if (!cancelled) {
+          toast.error('ユーザー情報の取得に失敗しました')
         }
-      } else {
-        target = currentUser.id
+      } finally {
+        if (!cancelled) {
+          setLoadingUser(false)
+        }
       }
-      if (target) params.set('assignedCsId', target)
-      const result = await requestJson(`/api/evangelists?${params.toString()}`)
-      if (!result) return
-      const { response, data } = result
-      if (!response.ok || !data?.ok) {
-        const message = (data as TodoErrorResponse | null)?.error || 'ネクストアクションの取得に失敗しました'
-        toast.error(message)
-        setTomorrowItems([])
-        return
+    }
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    let cancelled = false
+    const run = async () => {
+      try {
+        const params = new URLSearchParams({ role: 'CS', limit: '200' })
+        const { response, data } = await requestJson(`/api/admin/users?${params.toString()}`)
+        if (!response.ok || !Array.isArray(data?.users)) {
+          throw new Error(data?.error || 'failed')
+        }
+        if (!cancelled) {
+          setAssignees(data.users as UserSummary[])
+        }
+      } catch (error) {
+        console.error('[todos:assignees]', error)
+        if (!cancelled) {
+          toast.error('担当者リストの取得に失敗しました')
+        }
       }
-      const rawItems = Array.isArray(data.items) ? (data.items as EvangelistSummary[]) : []
-      const filtered = rawItems.filter((item) => isDueTomorrow(item.nextActionDueOn))
-      setTomorrowItems(
-        filtered.map((item) => {
-          const fallbackName = [item.lastName, item.firstName].filter(Boolean).join(' ').trim()
-          return {
-            ...item,
-            displayName: item.displayName || fallbackName || '氏名未設定',
-          }
-        }),
-      )
-    } catch (error) {
-      console.error('[todos:tomorrow]', error)
-      toast.error('ネクストアクションの取得に失敗しました')
-      setTomorrowItems([])
-    } finally {
-      setTomorrowLoading(false)
     }
-  }, [currentUser, selectedTomorrowCs])
-
-  useEffect(() => {
-    if (!initialLoadRef.current) {
-      initialLoadRef.current = true
-      void loadTodos()
+    void run()
+    return () => {
+      cancelled = true
     }
-  }, [loadTodos])
+  }, [isAdmin])
 
   useEffect(() => {
-    if (!currentUser) return
-    void loadTodos()
-  }, [currentUser, assigneeFilter, statusFilter, loadTodos])
-
-  useEffect(() => {
-    if (currentUser?.role === 'ADMIN' && assigneeFilter === 'me') {
+    if (isAdmin && assigneeFilter === 'me') {
       setAssigneeFilter('all')
     }
-  }, [currentUser, assigneeFilter])
+  }, [isAdmin, assigneeFilter])
+
+  useEffect(() => {
+    if (isAdmin && selectedTomorrowCs === 'me') {
+      setSelectedTomorrowCs('all')
+    }
+  }, [isAdmin, selectedTomorrowCs])
 
   useEffect(() => {
     if (!currentUser) return
-    if (currentUser.role === 'ADMIN' && selectedTomorrowCs === 'me') {
-      setSelectedTomorrowCs('all')
-      return
+    let cancelled = false
+    const load = async () => {
+      try {
+        setTomorrowLoading(true)
+        const params = new URLSearchParams({ limit: '100' })
+        if (isAdmin) {
+          if (selectedTomorrowCs !== 'all') {
+            const target = selectedTomorrowCs === 'me' ? currentUser.id : selectedTomorrowCs
+            if (target) params.set('assignedCsId', target)
+          }
+        }
+        const { response, data } = await requestJson(`/api/evangelists?${params.toString()}`)
+        if (!response.ok || !Array.isArray(data?.items)) {
+          throw new Error(data?.error || 'failed')
+        }
+        if (cancelled) return
+        const filtered = (data.items as EvangelistSummary[]).filter((item) =>
+          isDueTomorrow(item.nextActionDueOn),
+        )
+        setTomorrowItems(
+          filtered.map((item) => {
+            const fallbackName = [item.lastName, item.firstName].filter(Boolean).join(' ').trim()
+            return {
+              ...item,
+              displayName: item.displayName || fallbackName || '氏名未設定',
+            }
+          }),
+        )
+      } catch (error) {
+        console.error('[todos:tomorrow]', error)
+        if (!cancelled) {
+          toast.error('ネクストアクションの取得に失敗しました')
+          setTomorrowItems([])
+        }
+      } finally {
+        if (!cancelled) {
+          setTomorrowLoading(false)
+        }
+      }
     }
-    void loadTomorrow()
-  }, [currentUser, selectedTomorrowCs, loadTomorrow])
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [currentUser, isAdmin, selectedTomorrowCs])
 
-  const csAssignees = useMemo(
-    () => assignees.filter((user) => user.role === 'CS'),
-    [assignees],
-  )
+  useEffect(() => {
+    if (!todosError) return
+    console.error('[todos:list]', todosError)
+    toast.error('ToDoの取得に失敗しました')
+  }, [todosError])
+
+  const csAssignees = useMemo(() => assignees.filter((user) => user.role === 'CS'), [assignees])
+
+  const userNameMap = useMemo(() => {
+    const entries = new Map<string, string>()
+    if (currentUser) {
+      entries.set(currentUser.id, currentUser.name)
+    }
+    for (const user of assignees) {
+      entries.set(user.id, user.name)
+    }
+    return entries
+  }, [assignees, currentUser])
 
   const handleCompleteAction = useCallback(
     async (evangelistId: string) => {
       try {
-        const result = await requestJson(`/api/evangelists/${evangelistId}`, {
+        const { response, data } = await requestJson(`/api/evangelists/${evangelistId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ nextAction: null, nextActionDueOn: null }),
         })
-        if (!result) return
-        const { response, data } = result
         if (!response.ok || data?.error) {
-          const message = (data as TodoErrorResponse | null)?.error || '更新に失敗しました'
-          toast.error(message)
-          return
+          throw new Error(data?.error || 'failed')
         }
         toast.success('ネクストアクションを完了しました')
         setTomorrowItems((prev) => prev.filter((item) => item.id !== evangelistId))
@@ -294,103 +287,185 @@ export default function TodosPage() {
       toast.error('タイトルを入力してください')
       return
     }
+
     const notes = createForm.notes.trim()
     const dueOn = createForm.dueOn.trim()
+    const assigneeForCreate = isAdmin
+      ? createForm.assigneeId === SELF_ASSIGNEE || !createForm.assigneeId
+        ? currentUser.id
+        : createForm.assigneeId
+      : currentUser.id
 
-    let assigneeId: string = currentUser.id
-    if (currentUser.role === 'ADMIN') {
-      assigneeId = createForm.assigneeId === SELF_ASSIGNEE ? currentUser.id : createForm.assigneeId
-      if (!assigneeId) {
-        assigneeId = currentUser.id
-      }
+    const optimisticId = `optimistic-${Date.now()}`
+    const nowIso = new Date().toISOString()
+    const optimistic: TodoItem = {
+      id: optimisticId,
+      title,
+      notes: notes || null,
+      dueOn: dueOn ? new Date(dueOn).toISOString() : null,
+      status: 'OPEN',
+      assigneeId: assigneeForCreate,
+      createdById: currentUser.id,
+      createdAt: nowIso,
+      updatedAt: nowIso,
     }
+
+    mutateTodos(
+      (prev) => {
+        const base = prev ?? { items: [] as TodoItem[], nextCursor: null }
+        return { ...base, items: [optimistic, ...base.items] }
+      },
+      { revalidate: false },
+    )
 
     try {
-      const result = await requestJson('/api/todos', {
+      const body: Record<string, unknown> = {
+        title,
+        notes: notes || null,
+        dueOn: dueOn || null,
+      }
+      if (isAdmin) {
+        body.assigneeId = assigneeForCreate
+      }
+      const response = await fetch('/api/todos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          notes: notes || null,
-          dueOn: dueOn || null,
-          assigneeId,
-        }),
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
       })
-      if (!result) return
-      const { response, data } = result
-      if (!response.ok || !data?.ok) {
-        const message = (data as TodoErrorResponse | null)?.error || 'ToDoの作成に失敗しました'
-        toast.error(message)
-        return
+      const text = await response.text()
+      const data = text ? JSON.parse(text) : null
+      if (!response.ok) {
+        throw new Error(data?.error || 'ToDoの作成に失敗しました')
       }
+      const created = data as TodoItem
+      mutateTodos(
+        (prev) => {
+          const base = prev ?? { items: [] as TodoItem[], nextCursor: null }
+          const filtered = base.items.filter((item) => item.id !== optimisticId)
+          return { ...base, items: [created, ...filtered] }
+        },
+        { revalidate: false },
+      )
       toast.success('ToDoを作成しました')
-      const created = (data as { ok: true; item: TodoItem }).item
-      if (created) {
-        setTodos((prev) => [created, ...prev.filter((todo) => todo.id !== created.id)])
-      }
       setCreateOpen(false)
       setCreateForm({ title: '', notes: '', dueOn: '', assigneeId: SELF_ASSIGNEE })
-      void loadTodos()
+      void mutateTodos()
     } catch (error) {
       console.error('[todos:create]', error)
+      mutateTodos(
+        (prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            items: prev.items.filter((item) => item.id !== optimisticId),
+          }
+        },
+        { revalidate: false },
+      )
       toast.error('ToDoの作成に失敗しました')
     }
-  }, [createForm, currentUser, loadTodos])
+  }, [createForm, currentUser, isAdmin, mutateTodos])
 
   const handleToggleStatus = useCallback(
     async (todo: TodoItem, nextStatus: 'OPEN' | 'DONE') => {
+      const previousStatus = todo.status
+      const optimisticUpdatedAt = new Date().toISOString()
+      mutateTodos(
+        (prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            items: prev.items.map((item) =>
+              item.id === todo.id
+                ? { ...item, status: nextStatus, updatedAt: optimisticUpdatedAt }
+                : item,
+            ),
+          }
+        },
+        { revalidate: false },
+      )
+
       try {
-        const result = await requestJson(`/api/todos/${todo.id}`, {
+        const response = await fetch(`/api/todos/${todo.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ status: nextStatus }),
         })
-        if (!result) return
-        const { response, data } = result
+        const text = await response.text()
+        const data = text ? JSON.parse(text) : null
         if (!response.ok || !data?.ok) {
-          const message = (data as TodoErrorResponse | null)?.error || '更新に失敗しました'
-          toast.error(message)
-          return
+          throw new Error(data?.error || '更新に失敗しました')
         }
         toast.success(nextStatus === 'DONE' ? '完了にしました' : '未完了に戻しました')
-        void loadTodos()
+        void mutateTodos()
       } catch (error) {
         console.error('[todos:update]', error)
+        mutateTodos(
+          (prev) => {
+            if (!prev) return prev
+            return {
+              ...prev,
+              items: prev.items.map((item) =>
+                item.id === todo.id
+                  ? { ...item, status: previousStatus, updatedAt: todo.updatedAt }
+                  : item,
+              ),
+            }
+          },
+          { revalidate: false },
+        )
         toast.error('更新に失敗しました')
       }
     },
-    [loadTodos],
+    [mutateTodos],
   )
 
   const handleDeleteTodo = useCallback(
     async (id: string) => {
       if (!window.confirm('このToDoを削除します。よろしいですか？')) return
+      const snapshot = [...todos]
+      mutateTodos(
+        (prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            items: prev.items.filter((item) => item.id !== id),
+          }
+        },
+        { revalidate: false },
+      )
+
       try {
-        const result = await requestJson(`/api/todos/${id}`, { method: 'DELETE' })
-        if (!result) return
-        const { response, data } = result
+        const response = await fetch(`/api/todos/${id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        })
+        const text = await response.text()
+        const data = text ? JSON.parse(text) : null
         if (!response.ok || data?.error) {
-          const message = (data as TodoErrorResponse | null)?.error || '削除に失敗しました'
-          toast.error(message)
-          return
+          throw new Error(data?.error || '削除に失敗しました')
         }
         toast.success('削除しました')
-        setTodos((prev) => prev.filter((todo) => todo.id !== id))
+        void mutateTodos()
       } catch (error) {
         console.error('[todos:delete]', error)
+        mutateTodos(
+          () => ({ items: snapshot, nextCursor: null }),
+          { revalidate: true },
+        )
         toast.error('削除に失敗しました')
       }
     },
-    [],
+    [mutateTodos, todos],
   )
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-slate-900">CS ToDo</h1>
-        <p className="text-slate-500">
-          明日期限のネクストアクションと、担当者ごとのToDoを確認・管理できます。
-        </p>
+        <p className="text-slate-500">明日期限のネクストアクションと、担当者ごとのToDoを確認・管理できます。</p>
       </div>
 
       <Card className="rounded-xl border border-[var(--fg-border)] bg-[var(--fg-card)] shadow-lg">
@@ -403,7 +478,7 @@ export default function TodosPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {currentUser?.role === 'ADMIN' && (
+          {isAdmin && (
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Label className="text-sm text-slate-600">対象CS</Label>
               <Select value={selectedTomorrowCs} onValueChange={(value) => setSelectedTomorrowCs(value)}>
@@ -423,7 +498,7 @@ export default function TodosPage() {
             </div>
           )}
 
-          {tomorrowLoading ? (
+          {tomorrowLoading || loadingUser ? (
             <div className="flex items-center justify-center gap-2 py-10 text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" /> 読み込み中...
             </div>
@@ -448,11 +523,7 @@ export default function TodosPage() {
                       </Link>
                     </TableCell>
                     <TableCell className="max-w-md text-slate-700">
-                      {item.nextAction ? (
-                        <span>{item.nextAction}</span>
-                      ) : (
-                        <span className="text-slate-500">—</span>
-                      )}
+                      {item.nextAction ? <span>{item.nextAction}</span> : <span className="text-slate-500">—</span>}
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="bg-brand/10 text-brand">
@@ -486,7 +557,7 @@ export default function TodosPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              {currentUser?.role === 'ADMIN' && (
+              {isAdmin && (
                 <Select value={assigneeFilter} onValueChange={(value) => setAssigneeFilter(value)}>
                   <SelectTrigger className="w-full border border-slate-300 bg-white text-slate-900 sm:w-56">
                     <SelectValue placeholder="担当者" />
@@ -515,20 +586,17 @@ export default function TodosPage() {
               </Select>
             </div>
 
-            <Button
-              onClick={() => setCreateOpen(true)}
-              className="bg-brand text-white shadow-xs hover:bg-brand-600"
-            >
+            <Button onClick={() => setCreateOpen(true)} className="bg-brand text-white shadow-xs hover:bg-brand-600">
               <Plus className="mr-2 h-4 w-4" /> 新規ToDo
             </Button>
           </div>
 
-          {loadingTodos ? (
+          {todosLoading || loadingUser ? (
             <div className="flex items-center justify-center gap-2 py-10 text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" /> 読み込み中...
             </div>
           ) : todos.length === 0 ? (
-            <div className="py-10 text-center text-slate-500">対象のToDoはありません</div>
+            <div className="py-10 text-center text-slate-500">ToDoはありません</div>
           ) : (
             <Table>
               <TableHeader>
@@ -537,7 +605,7 @@ export default function TodosPage() {
                   <TableHead>期日</TableHead>
                   <TableHead>メモ</TableHead>
                   <TableHead>担当</TableHead>
-                  <TableHead className="w-36 text-right">操作</TableHead>
+                  <TableHead className="w-40 text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -548,7 +616,7 @@ export default function TodosPage() {
                     <TableCell className="max-w-md text-slate-700">
                       {todo.notes ? todo.notes : <span className="text-slate-500">—</span>}
                     </TableCell>
-                    <TableCell>{todo.assignee?.name ?? '—'}</TableCell>
+                    <TableCell>{userNameMap.get(todo.assigneeId) ?? '—'}</TableCell>
                     <TableCell className="flex justify-end gap-2 text-right">
                       {todo.status === 'OPEN' ? (
                         <Button
@@ -568,11 +636,7 @@ export default function TodosPage() {
                           再開
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => void handleDeleteTodo(todo.id)}
-                      >
+                      <Button size="sm" variant="destructive" onClick={() => void handleDeleteTodo(todo.id)}>
                         <Trash2 className="mr-1 h-4 w-4" /> 削除
                       </Button>
                     </TableCell>
@@ -626,7 +690,7 @@ export default function TodosPage() {
               />
             </div>
 
-            {currentUser?.role === 'ADMIN' && (
+            {isAdmin && (
               <div className="space-y-2">
                 <Label>担当CS</Label>
                 <Select

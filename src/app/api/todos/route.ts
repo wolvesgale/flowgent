@@ -1,22 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { getIronSession } from 'iron-session'
 
 import { prisma } from '@/lib/prisma'
-import { getSession } from '@/lib/session'
-import type { SessionData } from '@/lib/session'
+import { sessionOptions, type SessionData } from '@/lib/session'
 import type { Prisma } from '@prisma/client'
 
-const SELF = 'me'
-const ALL = 'all'
-const VALID_STATUSES = new Set(['OPEN', 'DONE'])
-
-function normalizeDueOn(input: unknown): Date | null {
-  if (typeof input !== 'string') return null
-  const value = input.trim()
-  if (!value) return null
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return new Date(`${value}T00:00:00.000Z`)
+function ensureSession(session: SessionData | undefined | null) {
+  if (!session || !session.isLoggedIn || !session.userId) {
+    return null
   }
-  const parsed = new Date(value)
+  return session
+}
+
+function parseScope(raw: string | null): 'mine' | 'dueSoon' | 'all' {
+  if (!raw) return 'mine'
+  const value = raw.toLowerCase()
+  if (value === 'duesoon') return 'dueSoon'
+  if (value === 'all') return 'all'
+  return 'mine'
+}
+
+function parseStatus(raw: string | null): 'OPEN' | 'DONE' | 'ALL' {
+  if (!raw) return 'OPEN'
+  const value = raw.toUpperCase()
+  if (value === 'DONE' || value === 'ALL') return value
+  return 'OPEN'
+}
+
+function parseTake(raw: string | null) {
+  const parsed = Number(raw ?? '50')
+  if (Number.isNaN(parsed) || parsed <= 0) return 50
+  return Math.min(parsed, 200)
+}
+
+function normalizeDueOn(input: string | null | undefined): Date | null {
+  if (!input) return null
+  const trimmed = input.trim()
+  if (!trimmed) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return new Date(`${trimmed}T00:00:00.000Z`)
+  }
+  const parsed = new Date(trimmed)
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
@@ -27,9 +52,7 @@ function mapTodo(todo: {
   dueOn: Date | null
   status: string
   assigneeId: string
-  assignee: { id: string; name: string; role: 'ADMIN' | 'CS' } | null
   createdById: string
-  createdBy: { id: string; name: string; role: 'ADMIN' | 'CS' } | null
   createdAt: Date
   updatedAt: Date
 }) {
@@ -38,146 +61,159 @@ function mapTodo(todo: {
     title: todo.title,
     notes: todo.notes,
     dueOn: todo.dueOn ? todo.dueOn.toISOString() : null,
-    status: todo.status,
+    status: todo.status as 'OPEN' | 'DONE' | string,
     assigneeId: todo.assigneeId,
-    assignee: todo.assignee,
     createdById: todo.createdById,
-    createdBy: todo.createdBy,
     createdAt: todo.createdAt.toISOString(),
     updatedAt: todo.updatedAt.toISOString(),
   }
 }
 
-async function getSessionOrUnauthorized(): Promise<SessionData> {
-  const session = await getSession()
-  if (!session.isLoggedIn || !session.userId) {
-    throw Object.assign(new Error('Unauthorized'), { status: 401 })
+export async function GET(req: NextRequest) {
+  const cookieStore = await cookies()
+  const session = ensureSession(
+    await getIronSession<SessionData>(cookieStore, sessionOptions),
+  )
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  return session
-}
 
-export async function GET(request: NextRequest) {
-  try {
-    const session = await getSessionOrUnauthorized()
-    const userId = session.userId!
+  const url = new URL(req.url)
+  const scope = parseScope(url.searchParams.get('scope'))
+  const status = parseStatus(url.searchParams.get('status'))
+  const take = parseTake(url.searchParams.get('take'))
+  const cursor = url.searchParams.get('cursor') || undefined
+  const requestedAssigneeId = url.searchParams.get('assigneeId') || undefined
 
-    const url = new URL(request.url)
-    const requestedStatus = (url.searchParams.get('status') || 'OPEN').toUpperCase()
-    const requestedAssignee = url.searchParams.get('assigneeId')
+  const isAdmin = session.role === 'ADMIN'
+  const where: Prisma.TodoWhereInput = {}
+  const filters: Prisma.TodoWhereInput[] = []
 
-    const where: Prisma.TodoWhereInput = {}
-    const selfConditions: Prisma.TodoWhereInput[] = [
-      { assigneeId: userId },
-      { createdById: userId },
+  const statusFilter = status === 'ALL' ? undefined : status
+  if (statusFilter) {
+    where.status = statusFilter
+  }
+
+  if (scope === 'dueSoon') {
+    const now = new Date()
+    const tomorrow = new Date(now)
+    tomorrow.setDate(now.getDate() + 1)
+    const orConditions: Prisma.TodoWhereInput[] = [
+      { assigneeId: session.userId! },
     ]
-
-    let appliedAssignee: string | typeof ALL | typeof SELF = SELF
-
-    if (session.role === 'ADMIN') {
-      if (!requestedAssignee || requestedAssignee === ALL) {
-        appliedAssignee = ALL
-      } else if (requestedAssignee === SELF) {
-        appliedAssignee = userId
-        where.OR = selfConditions
-      } else {
-        appliedAssignee = requestedAssignee
-        where.assigneeId = requestedAssignee
-      }
-    } else {
-      appliedAssignee = userId
-      where.OR = selfConditions
+    // 自分が作成したタスクも拾う
+    orConditions.push({ createdById: session.userId! })
+    filters.push({ OR: orConditions })
+    filters.push({ dueOn: { not: null, lte: tomorrow } })
+  } else if (scope === 'all' && isAdmin) {
+    if (requestedAssigneeId && requestedAssigneeId !== 'all') {
+      filters.push({ assigneeId: requestedAssigneeId })
     }
-
-    let appliedStatus: 'OPEN' | 'DONE' | 'ALL' = 'ALL'
-    if (VALID_STATUSES.has(requestedStatus)) {
-      appliedStatus = requestedStatus as 'OPEN' | 'DONE'
-      where.status = requestedStatus
-    }
-
-    const todos = await prisma.todo.findMany({
-      where,
-      orderBy: [
-        { status: 'asc' },
-        { dueOn: 'asc' },
-        { createdAt: 'desc' },
+  } else {
+    // mine or fallback for non-admins
+    filters.push({
+      OR: [
+        { assigneeId: session.userId! },
+        { createdById: session.userId! },
       ],
-      include: {
-        assignee: { select: { id: true, name: true, role: true } },
-        createdBy: { select: { id: true, name: true, role: true } },
-      },
     })
-
-    let assignees: Array<{ id: string; name: string; role: 'ADMIN' | 'CS' }> | undefined
-    if (session.role === 'ADMIN') {
-      assignees = await prisma.user.findMany({
-        select: { id: true, name: true, role: true },
-        orderBy: { name: 'asc' },
-      })
-    }
-
-    return NextResponse.json({
-      ok: true,
-      items: todos.map(mapTodo),
-      currentUser: { id: userId, role: session.role ?? 'CS' },
-      filters: {
-        assigneeId: appliedAssignee === userId ? SELF : appliedAssignee,
-        status: appliedStatus,
-      },
-      assignees,
-    })
-  } catch (error) {
-    const err = error as { status?: number; message?: string }
-    if (err?.status === 401) {
-      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('[todos:get]', error)
-    return NextResponse.json({ ok: false, error: 'Failed to load todos' }, { status: 500 })
   }
+
+  if (filters.length === 1) {
+    Object.assign(where, filters[0])
+  } else if (filters.length > 1) {
+    where.AND = filters
+  }
+
+  const findArgs: Prisma.TodoFindManyArgs = {
+    where,
+    orderBy: [
+      { updatedAt: 'desc' as const },
+      { createdAt: 'desc' as const },
+      { id: 'desc' as const },
+    ],
+    take,
+    select: {
+      id: true,
+      title: true,
+      notes: true,
+      dueOn: true,
+      status: true,
+      assigneeId: true,
+      createdById: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  }
+
+  if (cursor) {
+    findArgs.skip = 1
+    findArgs.cursor = { id: cursor }
+  }
+
+  const items = await prisma.todo.findMany(findArgs)
+  const nextCursor = items.length === take ? items[items.length - 1].id : null
+
+  return NextResponse.json({
+    items: items.map(mapTodo),
+    nextCursor,
+  })
 }
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = await getSessionOrUnauthorized()
-    const userId = session.userId!
-    const body = (await request.json().catch(() => null)) as Record<string, unknown> | null
-    if (!body || typeof body !== 'object') {
-      return NextResponse.json({ ok: false, error: 'Invalid payload' }, { status: 400 })
-    }
+export async function POST(req: NextRequest) {
+  const cookieStore = await cookies()
+  const session = ensureSession(
+    await getIronSession<SessionData>(cookieStore, sessionOptions),
+  )
 
-    const titleRaw = typeof body.title === 'string' ? body.title.trim() : ''
-    if (!titleRaw) {
-      return NextResponse.json({ ok: false, error: 'title is required' }, { status: 400 })
-    }
-
-    const notesRaw = typeof body.notes === 'string' ? body.notes.trim() : ''
-    const dueOn = normalizeDueOn(body.dueOn)
-
-    let assigneeId = typeof body.assigneeId === 'string' ? body.assigneeId.trim() : ''
-    if (!assigneeId || session.role !== 'ADMIN') {
-      assigneeId = userId
-    }
-
-    const created = await prisma.todo.create({
-      data: {
-        title: titleRaw,
-        notes: notesRaw || null,
-        dueOn,
-        assigneeId,
-        createdById: userId,
-      },
-      include: {
-        assignee: { select: { id: true, name: true, role: true } },
-        createdBy: { select: { id: true, name: true, role: true } },
-      },
-    })
-
-    return NextResponse.json({ ok: true, item: mapTodo(created) }, { status: 201 })
-  } catch (error) {
-    const err = error as { status?: number; message?: string }
-    if (err?.status === 401) {
-      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 })
-    }
-    console.error('[todos:post]', error)
-    return NextResponse.json({ ok: false, error: 'Failed to create todo' }, { status: 500 })
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const body = (await req.json().catch(() => null)) as
+    | {
+        title?: string
+        notes?: string | null
+        dueOn?: string | null
+        assigneeId?: string | null
+      }
+    | null
+
+  const title = body?.title?.trim()
+  if (!title) {
+    return NextResponse.json({ error: 'タイトルは必須です' }, { status: 400 })
+  }
+
+  const notes = body?.notes?.trim() || null
+  const dueOn = normalizeDueOn(body?.dueOn ?? null)
+
+  let assigneeId = body?.assigneeId?.trim() || ''
+  if (!assigneeId || session.role !== 'ADMIN') {
+    assigneeId = session.userId!
+  }
+
+  const created = await prisma.todo.create({
+    data: {
+      title,
+      notes,
+      dueOn,
+      status: 'OPEN',
+      assigneeId,
+      createdById: session.userId!,
+    },
+    select: {
+      id: true,
+      title: true,
+      notes: true,
+      dueOn: true,
+      status: true,
+      assigneeId: true,
+      createdById: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  })
+
+  return NextResponse.json(mapTodo(created), { status: 201 })
 }
