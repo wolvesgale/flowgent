@@ -7,18 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-function safeParseJson(raw: string, contentType: string) {
-  if (!raw) return null;
-  if (contentType.includes('application/json')) {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 export default function BulkAssignClient() {
   const [file, setFile] = useState<File | null>(null);
   const [dryRun, setDryRun] = useState(true);
@@ -48,7 +36,14 @@ export default function BulkAssignClient() {
 
       const contentType = response.headers.get('content-type') || '';
       const raw = await response.text();
-      const payload = safeParseJson(raw, contentType);
+      let payload: Record<string, unknown> | string | null = null;
+
+      try {
+        payload = contentType.includes('application/json') && raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+      } catch {
+        setError('認証が切れている可能性があります。再ログイン後に再実行してください。');
+        return;
+      }
 
       if (response.status === 401) {
         window.location.href = '/login';
@@ -57,18 +52,14 @@ export default function BulkAssignClient() {
 
       if (!response.ok) {
         const message =
-          (payload && typeof payload === 'object' && 'error' in payload && typeof (payload as Record<string, unknown>).error === 'string'
+          payload && typeof payload === 'object' && 'error' in payload && typeof (payload as { error?: unknown }).error === 'string'
             ? (payload as { error: string }).error
-            : undefined) || 'エラーが発生しました。';
+            : 'エラーが発生しました。';
         setError(message);
         return;
       }
 
-      if (payload && typeof payload === 'object') {
-        setResult(payload as Record<string, unknown>);
-      } else {
-        setResult(raw);
-      }
+      setResult(payload ?? raw);
     } catch (err) {
       setError(err instanceof Error ? err.message : '通信エラーが発生しました。');
     } finally {

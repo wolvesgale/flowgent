@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Papa from 'papaparse';
 
 import { prisma } from '@/lib/prisma';
-import { requireAdminOrThrow } from '@/lib/auth';
+import { requireAdminForApi } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
@@ -104,8 +104,10 @@ const CS_ALIAS: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  const authRes = await requireAdminForApi(req);
+  if (authRes) return authRes;
+
   try {
-    await requireAdminOrThrow();
 
     const dryRun = (req.nextUrl.searchParams.get('dryRun') ?? 'false') === 'true';
     const rows = await readBodyAsRows(req);

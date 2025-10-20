@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 import { prisma } from '@/lib/prisma';
-import { requireAdminOrThrow } from '@/lib/auth';
+import { requireAdminForApi } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
@@ -25,9 +25,11 @@ function toCsv(rows: Record<string, unknown>[]) {
   return [headers.join(','), ...body].join('\n') + '\n';
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authRes = await requireAdminForApi(req);
+  if (authRes) return authRes;
+
   try {
-    await requireAdminOrThrow();
 
     const evangelists = await prisma.evangelist.findMany({
       select: {
