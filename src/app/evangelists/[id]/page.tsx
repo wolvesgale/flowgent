@@ -11,19 +11,32 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { 
-  ArrowLeft, 
-  User, 
-  Mail, 
-  Phone, 
-  Building, 
-  Calendar, 
-  Edit, 
-  Save, 
+import {
+  ArrowLeft,
+  User,
+  Mail,
+  Phone,
+  Building,
+  Calendar,
+  Edit,
+  Save,
   X,
   Plus,
   MessageSquare
 } from 'lucide-react'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
+import {
+  MeetingForm,
+  type MeetingRecord,
+  type MeetingSaveResult,
+} from '@/components/evangelists/meeting-form'
 
 interface Evangelist {
   id: string
@@ -103,17 +116,6 @@ const PHASE_OPTIONS = [
 const SELECT_CLEAR_VALUE = '__UNSET__'
 const CS_CLEAR_VALUE = '__UNASSIGNED__'
 
-interface Meeting {
-  id: string
-  evangelistId: number
-  date: string
-  isFirst: boolean
-  summary?: string
-  nextActions?: string
-  contactMethod?: string
-  createdAt: string
-}
-
 const TIER_COLORS = {
   TIER1: 'bg-blue-100 text-blue-800',
   TIER2: 'bg-gray-100 text-gray-800'
@@ -130,7 +132,8 @@ export default function EvangelistDetailPage() {
   const params = useParams()
   const router = useRouter()
   const [evangelist, setEvangelist] = useState<Evangelist | null>(null)
-  const [meetings, setMeetings] = useState<Meeting[]>([])
+  const [meetings, setMeetings] = useState<MeetingRecord[]>([])
+  const [isMeetingSheetOpen, setIsMeetingSheetOpen] = useState(false)
   const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -149,15 +152,6 @@ export default function EvangelistDetailPage() {
     nextAction: '',
     nextActionDueOn: '',
   })
-
-  // 新しい面談記録用の状態
-  const [newMeeting, setNewMeeting] = useState({
-    isFirst: false,
-    summary: '',
-    nextActions: '',
-    contactMethod: ''
-  })
-  const [isAddingMeeting, setIsAddingMeeting] = useState(false)
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -209,7 +203,7 @@ export default function EvangelistDetailPage() {
         credentials: 'include',
       })
       if (meetingsResponse.ok) {
-        const meetingsData = await meetingsResponse.json()
+        const meetingsData = (await meetingsResponse.json()) as MeetingRecord[]
         setMeetings(meetingsData)
       }
     } catch (err) {
@@ -283,39 +277,31 @@ export default function EvangelistDetailPage() {
     }
   }
 
-  const handleAddMeeting = async () => {
-    try {
-      const response = await fetch(`/api/evangelists/${params.id}/meetings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(newMeeting),
-      })
+  const handleMeetingSaved = useCallback((result: MeetingSaveResult) => {
+    const { meeting, evangelist: updatedEvangelist } = result
 
-      if (!response.ok) {
-        throw new Error('面談記録の追加に失敗しました')
+    setMeetings(prev => [meeting, ...prev])
+
+    setEvangelist(prev => {
+      const merged = { ...(prev ?? {}), ...(updatedEvangelist as Partial<Evangelist>) } as Evangelist
+      if (prev && !Object.prototype.hasOwnProperty.call(updatedEvangelist, 'assignedCs')) {
+        merged.assignedCs = prev.assignedCs ?? null
       }
+      return merged
+    })
 
-      const meetingData = await response.json()
-      setMeetings(prev => [meetingData, ...prev])
-      setNewMeeting({
-        isFirst: false,
-        summary: '',
-        nextActions: '',
-        contactMethod: ''
-      })
-      setIsAddingMeeting(false)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '面談記録の追加に失敗しました')
-    }
-  }
+    setEditForm(prev => ({
+      ...prev,
+      nextAction: (updatedEvangelist.nextAction ?? '') as string,
+      nextActionDueOn: updatedEvangelist.nextActionDueOn
+        ? String(updatedEvangelist.nextActionDueOn).slice(0, 10)
+        : '',
+    }))
+  }, [])
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
@@ -325,7 +311,7 @@ export default function EvangelistDetailPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -335,7 +321,7 @@ export default function EvangelistDetailPage() {
 
   if (!evangelist) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <Alert>
           <AlertDescription>EVAが見つかりませんでした</AlertDescription>
         </Alert>
@@ -344,9 +330,9 @@ export default function EvangelistDetailPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
       {/* ヘッダー */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -357,12 +343,12 @@ export default function EvangelistDetailPage() {
             <ArrowLeft className="h-4 w-4" />
             戻る
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold">
-              {evangelist.firstName} {evangelist.lastName}
-            </h1>
-            <p className="text-muted-foreground">{evangelist.email}</p>
-          </div>
+            <div>
+              <h1 className="text-2xl font-bold">
+                {[evangelist.lastName, evangelist.firstName].filter(Boolean).join(' ')}
+              </h1>
+              <p className="text-muted-foreground">{evangelist.email}</p>
+            </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge className={TIER_COLORS[evangelist.tier]}>
@@ -456,7 +442,9 @@ export default function EvangelistDetailPage() {
                       />
                     </div>
                   ) : (
-                    <p className="text-sm">{evangelist.firstName} {evangelist.lastName}</p>
+                    <p className="text-sm">
+                      {[evangelist.lastName, evangelist.firstName].filter(Boolean).join(' ')}
+                    </p>
                   )}
                 </div>
 
@@ -710,85 +698,34 @@ export default function EvangelistDetailPage() {
 
         {/* 面談シートタブ */}
         <TabsContent value="meetings" className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-semibold">面談履歴</h2>
-            <Button
-              onClick={() => setIsAddingMeeting(true)}
-              className="flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              面談記録を追加
-            </Button>
-          </div>
+          <Sheet open={isMeetingSheetOpen} onOpenChange={setIsMeetingSheetOpen}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">面談履歴</h2>
+              <SheetTrigger asChild>
+                <Button className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  面談シート
+                </Button>
+              </SheetTrigger>
+            </div>
 
-          {/* 新しい面談記録の追加フォーム */}
-          {isAddingMeeting && (
-            <Card>
-              <CardHeader>
-                <CardTitle>新しい面談記録</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="isFirst"
-                    checked={newMeeting.isFirst}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewMeeting(prev => ({ ...prev, isFirst: e.target.checked }))}
+            <SheetContent side="right" className="flex h-full w-full flex-col gap-6 overflow-hidden sm:max-w-[560px]">
+              <SheetHeader>
+                <SheetTitle>面談記録</SheetTitle>
+                <SheetDescription>面談内容や次回アクションを記録します。</SheetDescription>
+              </SheetHeader>
+              <div className="flex-1 w-full overflow-y-auto pb-4">
+                {evangelist ? (
+                  <MeetingForm
+                    evangelistId={evangelist.id}
+                    onSaved={handleMeetingSaved}
                   />
-                  <Label htmlFor="isFirst">初回面談</Label>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>連絡方法</Label>
-                  <Input
-                    value={newMeeting.contactMethod}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewMeeting(prev => ({ ...prev, contactMethod: e.target.value }))}
-                    placeholder="電話、メール、対面など"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>面談サマリー</Label>
-                  <Textarea
-                    value={newMeeting.summary}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewMeeting(prev => ({ ...prev, summary: e.target.value }))}
-                    placeholder="面談の内容をまとめてください"
-                    rows={4}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>次回アクション</Label>
-                  <Textarea
-                    value={newMeeting.nextActions}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewMeeting(prev => ({ ...prev, nextActions: e.target.value }))}
-                    placeholder="次回までに行うアクションを記載"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <Button onClick={handleAddMeeting}>
-                    保存
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setIsAddingMeeting(false)
-                      setNewMeeting({
-                        isFirst: false,
-                        summary: '',
-                        nextActions: '',
-                        contactMethod: ''
-                      })
-                    }}
-                  >
-                    キャンセル
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                ) : (
+                  <p className="text-sm text-muted-foreground">エヴァンジェリスト情報を読み込んでいます...</p>
+                )}
+              </div>
+            </SheetContent>
+          </Sheet>
 
           {/* 面談履歴一覧 */}
           <div className="space-y-4">
