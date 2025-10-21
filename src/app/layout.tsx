@@ -16,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
-      <body className="antialiased min-h-screen">
+      <body className="antialiased min-h-screen theme-refined">
         <Header />
         <MainNav />
         <main className="p-4 md:p-6">
