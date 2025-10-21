@@ -1,25 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getIron } from '@/lib/session';
+import { cookies } from 'next/headers'
+import { getIronSession } from 'iron-session'
+import { NextResponse } from 'next/server'
 
-export const runtime = 'nodejs';
+import type { SessionData } from '@/lib/session'
 
-export async function POST(request: NextRequest) {
-  try {
-    const response = NextResponse.json(
-      { message: 'Logged out successfully' },
-      { status: 200 }
-    );
+export async function GET() {
+  const session = await getIronSession<SessionData>(await cookies(), {
+    password: process.env.SESSION_PASSWORD!,
+    cookieName: 'flowgent-session',
+  })
+  session.destroy()
 
-    const session = await getIron(request, response);
-    await session.destroy();
-    await session.save();
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
-    return response;
-  } catch (error) {
-    console.error('Logout error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+  return NextResponse.redirect(new URL('/login', baseUrl))
 }
