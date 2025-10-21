@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { SheetClose } from "@/components/ui/sheet"
 
 export type MeetingRecord = {
   id: string
@@ -291,14 +292,16 @@ export function MeetingForm({ evangelistId, onSaved, mode = "inline", onSubmitte
             リセット
           </Button>
           {mode === "sheet" && (
-            <Button
-              type="button"
-              variant="ghost"
-              className="btn--ghost"
-              onClick={() => onSubmitted?.()}
-            >
-              閉じる
-            </Button>
+            <SheetClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                className="btn--ghost"
+                onClick={() => onSubmitted?.()}
+              >
+                閉じる
+              </Button>
+            </SheetClose>
           )}
           <Button
             type="submit"
