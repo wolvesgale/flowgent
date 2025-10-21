@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,16 +23,8 @@ import {
   Plus,
   MessageSquare
 } from 'lucide-react'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet'
-import {
-  MeetingForm,
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import MeetingForm, {
   type MeetingRecord,
   type MeetingSaveResult,
 } from '@/components/evangelists/meeting-form'
@@ -133,7 +124,7 @@ export default function EvangelistDetailPage() {
   const router = useRouter()
   const [evangelist, setEvangelist] = useState<Evangelist | null>(null)
   const [meetings, setMeetings] = useState<MeetingRecord[]>([])
-  const [isMeetingSheetOpen, setIsMeetingSheetOpen] = useState(false)
+  const [isMobileFormOpen, setIsMobileFormOpen] = useState(false)
   const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -301,7 +292,7 @@ export default function EvangelistDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto w-full max-w-6xl px-4 py-8">
+      <div className="app-shell py-6">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
@@ -311,7 +302,7 @@ export default function EvangelistDetailPage() {
 
   if (error) {
     return (
-      <div className="mx-auto w-full max-w-6xl px-4 py-8">
+      <div className="app-shell py-6">
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -321,7 +312,7 @@ export default function EvangelistDetailPage() {
 
   if (!evangelist) {
     return (
-      <div className="mx-auto w-full max-w-6xl px-4 py-8">
+      <div className="app-shell py-6">
         <Alert>
           <AlertDescription>EVAが見つかりませんでした</AlertDescription>
         </Alert>
@@ -330,7 +321,7 @@ export default function EvangelistDetailPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8">
+    <div className="app-shell space-y-6 py-6">
       {/* ヘッダー */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -408,16 +399,8 @@ export default function EvangelistDetailPage() {
         </div>
       </div>
 
-      {/* タブコンテンツ */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="overview">概要</TabsTrigger>
-          <TabsTrigger value="meetings">面談シート</TabsTrigger>
-        </TabsList>
-
-        {/* 概要タブ */}
-        <TabsContent value="overview" className="space-y-6">
-          <Card>
+      <section className="space-y-6">
+        <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
@@ -694,41 +677,23 @@ export default function EvangelistDetailPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+      </section>
 
-        {/* 面談シートタブ */}
-        <TabsContent value="meetings" className="space-y-6">
-          <Sheet open={isMeetingSheetOpen} onOpenChange={setIsMeetingSheetOpen}>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">面談履歴</h2>
-              <SheetTrigger asChild>
-                <Button className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  面談シート
-                </Button>
-              </SheetTrigger>
-            </div>
-
-            <SheetContent side="right" className="flex h-full w-full flex-col gap-6 overflow-hidden sm:max-w-[560px]">
-              <SheetHeader>
-                <SheetTitle>面談記録</SheetTitle>
-                <SheetDescription>面談内容や次回アクションを記録します。</SheetDescription>
-              </SheetHeader>
-              <div className="flex-1 w-full overflow-y-auto pb-4">
-                {evangelist ? (
-                  <MeetingForm
-                    evangelistId={evangelist.id}
-                    onSaved={handleMeetingSaved}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">エヴァンジェリスト情報を読み込んでいます...</p>
-                )}
-              </div>
-            </SheetContent>
-          </Sheet>
-
-          {/* 面談履歴一覧 */}
-          <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <section className="card p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">面談履歴</h2>
+            <Button
+              className="btn lg:hidden"
+              onClick={() => setIsMobileFormOpen(true)}
+              size="sm"
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              面談記録を追加
+            </Button>
+          </div>
+          <div className="mt-4">
+            <div className="space-y-4">
             {meetings.length === 0 ? (
               <Card>
                 <CardContent className="py-8 text-center text-muted-foreground">
@@ -771,8 +736,43 @@ export default function EvangelistDetailPage() {
               ))
             )}
           </div>
-        </TabsContent>
-      </Tabs>
+          </div>
+        </section>
+
+        <aside className="hidden lg:block">
+          <div className="card h-full overflow-hidden">
+            {evangelist ? (
+              <MeetingForm
+                evangelistId={evangelist.id}
+                onSaved={handleMeetingSaved}
+                mode="inline"
+              />
+            ) : (
+              <p className="p-4 text-sm text-muted-foreground">エヴァンジェリスト情報を読み込んでいます...</p>
+            )}
+          </div>
+        </aside>
+      </div>
+
+      <Sheet open={isMobileFormOpen} onOpenChange={setIsMobileFormOpen}>
+        <SheetContent side="bottom" className="h-[85vh] overflow-hidden p-0">
+          <div className="border-b border-line px-4 py-3">
+            <h3 className="text-base font-semibold">面談記録を追加</h3>
+          </div>
+          <div className="h-full">
+            {evangelist ? (
+              <MeetingForm
+                evangelistId={evangelist.id}
+                onSaved={handleMeetingSaved}
+                mode="sheet"
+                onSubmitted={() => setIsMobileFormOpen(false)}
+              />
+            ) : (
+              <p className="p-4 text-sm text-muted-foreground">エヴァンジェリスト情報を読み込んでいます...</p>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

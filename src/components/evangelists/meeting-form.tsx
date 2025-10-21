@@ -55,12 +55,16 @@ const defaultMeetingState = {
   nextActionDueOn: "",
 }
 
+type MeetingFormMode = "inline" | "sheet"
+
 type MeetingFormProps = {
   evangelistId: string
   onSaved?: (result: MeetingSaveResult) => void
+  mode?: MeetingFormMode
+  onSubmitted?: () => void
 }
 
-export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
+export function MeetingForm({ evangelistId, onSaved, mode = "inline", onSubmitted }: MeetingFormProps) {
   const [meeting, setMeeting] = useState(defaultMeetingState)
   const [isSaving, setIsSaving] = useState(false)
   const [requiredIntroductions, setRequiredIntroductions] = useState<RequiredIntroduction[]>([])
@@ -144,6 +148,7 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
         toast.success("面談記録を保存しました")
         setMeeting(defaultMeetingState)
         onSaved?.({ meeting: createdMeeting, evangelist })
+        onSubmitted?.()
       } catch (error) {
         console.error("Failed to save meeting", error)
         toast.error(error instanceof Error ? error.message : "面談記録の保存に失敗しました")
@@ -151,7 +156,7 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
         setIsSaving(false)
       }
     },
-    [evangelistId, meeting, onSaved],
+    [evangelistId, meeting, onSaved, onSubmitted],
   )
 
   const handleReset = useCallback(() => {
@@ -207,9 +212,8 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
   }, [hasRequiredIntroductions, requiredIntroError, requiredIntroLoading, requiredIntroductions])
 
   return (
-    <form className="mx-auto flex h-full w-full max-w-2xl flex-col" onSubmit={onSubmit}>
-      <div className="flex h-full flex-col">
-        <div className="flex-1 space-y-4 overflow-y-auto pr-1 max-h-[calc(100vh-220px)]">
+    <form className="flex h-full w-full flex-col" onSubmit={onSubmit}>
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4 pt-4">
           <div className="rounded-lg border border-amber-300 bg-amber-100/60 p-4">
             <h3 className="text-sm font-semibold text-amber-900">紹介必須イノベータ</h3>
             {requiredIntroContent}
@@ -274,7 +278,8 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
             />
           </div>
         </div>
-        <div className="sticky bottom-0 mt-4 flex justify-end gap-2 border-t border-slate-200 bg-white/80 px-1 py-3 backdrop-blur sm:px-2">
+      <div className="border-t border-line bg-white/90 px-4 py-3">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             type="button"
             variant="outline"
@@ -284,6 +289,16 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
           >
             リセット
           </Button>
+          {mode === "sheet" && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="btn--ghost"
+              onClick={() => onSubmitted?.()}
+            >
+              閉じる
+            </Button>
+          )}
           <Button
             type="submit"
             disabled={isSaving}
@@ -296,3 +311,5 @@ export function MeetingForm({ evangelistId, onSaved }: MeetingFormProps) {
     </form>
   )
 }
+
+export default MeetingForm
