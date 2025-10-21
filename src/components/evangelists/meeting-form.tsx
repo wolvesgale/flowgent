@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -65,8 +66,9 @@ type MeetingFormProps = {
 }
 
 export function MeetingForm({ evangelistId, onSaved, mode = "inline", onSubmitted }: MeetingFormProps) {
+  const router = useRouter()
   const [meeting, setMeeting] = useState(defaultMeetingState)
-  const [isSaving, setIsSaving] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [requiredIntroductions, setRequiredIntroductions] = useState<RequiredIntroduction[]>([])
   const [requiredIntroError, setRequiredIntroError] = useState<string | null>(null)
   const [requiredIntroLoading, setRequiredIntroLoading] = useState(false)
@@ -105,59 +107,58 @@ export function MeetingForm({ evangelistId, onSaved, mode = "inline", onSubmitte
 
   const hasRequiredIntroductions = requiredIntroductions.length > 0
 
-  const onSubmit = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault()
-      if (!evangelistId) return
-      const payload = {
-        isInitial: meeting.isFirst,
-        contactMethod: meeting.contactMethod.trim() || undefined,
-        summary: meeting.summary.trim() || undefined,
-        nextAction: meeting.nextAction.trim() || undefined,
-        nextActionDueOn: meeting.nextActionDueOn.trim() || undefined,
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!evangelistId || submitting) return
+
+    const payload = {
+      isInitial: meeting.isFirst,
+      contactMethod: meeting.contactMethod.trim() || undefined,
+      summary: meeting.summary.trim() || undefined,
+      nextAction: meeting.nextAction.trim() || undefined,
+      nextActionDueOn: meeting.nextActionDueOn.trim() || undefined,
+    }
+
+    try {
+      setSubmitting(true)
+      const response = await fetch(`/api/evangelists/${evangelistId}/meetings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      })
+
+      const contentType = response.headers.get("content-type") || ""
+      const rawBody = await response.text()
+      const parsed = contentType.includes("application/json") && rawBody ? JSON.parse(rawBody) : null
+
+      if (response.status === 401) {
+        window.location.href = "/login"
+        return
       }
 
-      try {
-        setIsSaving(true)
-        const response = await fetch(`/api/evangelists/${evangelistId}/meetings`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        })
-
-        const contentType = response.headers.get("content-type") || ""
-        const rawBody = await response.text()
-        const parsed = contentType.includes("application/json") && rawBody ? JSON.parse(rawBody) : null
-
-        if (response.status === 401) {
-          window.location.href = "/login"
-          return
-        }
-
-        if (!response.ok || !parsed?.ok) {
-          const message = parsed?.error || "面談記録の保存に失敗しました"
-          throw new Error(message)
-        }
-
-        const { meeting: createdMeeting, evangelist } = parsed as {
-          meeting: MeetingRecord
-          evangelist: SavedEvangelistPayload
-        }
-
-        toast.success("面談記録を保存しました")
-        setMeeting(defaultMeetingState)
-        onSaved?.({ meeting: createdMeeting, evangelist })
-        onSubmitted?.()
-      } catch (error) {
-        console.error("Failed to save meeting", error)
-        toast.error(error instanceof Error ? error.message : "面談記録の保存に失敗しました")
-      } finally {
-        setIsSaving(false)
+      if (!response.ok || !parsed?.ok) {
+        const message = parsed?.error || "面談記録の保存に失敗しました"
+        throw new Error(message)
       }
-    },
-    [evangelistId, meeting, onSaved, onSubmitted],
-  )
+
+      const { meeting: createdMeeting, evangelist } = parsed as {
+        meeting: MeetingRecord
+        evangelist: SavedEvangelistPayload
+      }
+
+      toast.success("面談記録を保存しました")
+      setMeeting(defaultMeetingState)
+      onSaved?.({ meeting: createdMeeting, evangelist })
+      router.refresh()
+      onSubmitted?.()
+    } catch (error) {
+      console.error("Failed to save meeting", error)
+      toast.error(error instanceof Error ? error.message : "面談記録の保存に失敗しました")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const handleReset = useCallback(() => {
     setMeeting(defaultMeetingState)
@@ -212,7 +213,7 @@ export function MeetingForm({ evangelistId, onSaved, mode = "inline", onSubmitte
   }, [hasRequiredIntroductions, requiredIntroError, requiredIntroLoading, requiredIntroductions])
 
   return (
-    <form className="flex h-full w-full flex-col" onSubmit={onSubmit}>
+    <form className="flex h-full w-full flex-col" onSubmit={handleSubmit}>
       <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4 pt-4">
           <div className="rounded-lg border border-amber-300 bg-amber-100/60 p-4">
             <h3 className="text-sm font-semibold text-amber-900">紹介必須イノベータ</h3>
@@ -278,13 +279,13 @@ export function MeetingForm({ evangelistId, onSaved, mode = "inline", onSubmitte
             />
           </div>
         </div>
-      <div className="border-t border-line bg-white/90 px-4 py-3">
+      <div className="border-t border-line bg-white/90 px-4 py-3 sticky bottom-0">
         <div className="flex flex-wrap justify-end gap-2">
           <Button
             type="button"
             variant="outline"
             onClick={handleReset}
-            disabled={isSaving}
+            disabled={submitting}
             className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             リセット
@@ -301,10 +302,10 @@ export function MeetingForm({ evangelistId, onSaved, mode = "inline", onSubmitte
           )}
           <Button
             type="submit"
-            disabled={isSaving}
+            disabled={submitting}
             className="bg-brand text-white hover:bg-brand-600 disabled:opacity-50"
           >
-            {isSaving ? "保存中..." : "保存"}
+            {submitting ? "保存中..." : "保存"}
           </Button>
         </div>
       </div>

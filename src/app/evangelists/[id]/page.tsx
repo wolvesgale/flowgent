@@ -20,10 +20,16 @@ import {
   Edit,
   Save,
   X,
-  Plus,
   MessageSquare
 } from 'lucide-react'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+} from '@/components/ui/sheet'
 import MeetingForm, {
   type MeetingRecord,
   type MeetingSaveResult,
@@ -124,7 +130,7 @@ export default function EvangelistDetailPage() {
   const router = useRouter()
   const [evangelist, setEvangelist] = useState<Evangelist | null>(null)
   const [meetings, setMeetings] = useState<MeetingRecord[]>([])
-  const [isMobileFormOpen, setIsMobileFormOpen] = useState(false)
+  const [openForm, setOpenForm] = useState(false)
   const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -683,13 +689,8 @@ export default function EvangelistDetailPage() {
         <section className="card p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">面談履歴</h2>
-            <Button
-              className="btn lg:hidden"
-              onClick={() => setIsMobileFormOpen(true)}
-              size="sm"
-            >
-              <Plus className="mr-1 h-4 w-4" />
-              面談記録を追加
+            <Button className="lg:hidden" onClick={() => setOpenForm(true)} size="sm">
+              + 面談記録を追加
             </Button>
           </div>
           <div className="mt-4">
@@ -754,23 +755,25 @@ export default function EvangelistDetailPage() {
         </aside>
       </div>
 
-      <Sheet open={isMobileFormOpen} onOpenChange={setIsMobileFormOpen}>
-        <SheetContent side="bottom" className="h-[85vh] overflow-hidden p-0">
-          <div className="border-b border-line px-4 py-3">
-            <h3 className="text-base font-semibold">面談記録を追加</h3>
-          </div>
-          <div className="h-full">
+      <Sheet open={openForm} onOpenChange={setOpenForm}>
+        <SheetContent side="bottom" className="h-[85vh] p-0">
+          <SheetHeader className="border-b px-4 py-3">
+            <SheetTitle>面談記録の追加</SheetTitle>
+            <SheetDescription className="sr-only">面談記録を新規作成します。</SheetDescription>
+          </SheetHeader>
+          <div className="h-[calc(100%-56px-56px)] overflow-auto">
             {evangelist ? (
               <MeetingForm
                 evangelistId={evangelist.id}
                 onSaved={handleMeetingSaved}
                 mode="sheet"
-                onSubmitted={() => setIsMobileFormOpen(false)}
+                onSubmitted={() => setOpenForm(false)}
               />
             ) : (
               <p className="p-4 text-sm text-muted-foreground">エヴァンジェリスト情報を読み込んでいます...</p>
             )}
           </div>
+          <SheetFooter className="border-t px-4 py-3 lg:hidden" />
         </SheetContent>
       </Sheet>
     </div>
