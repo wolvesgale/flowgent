@@ -73,9 +73,9 @@ export default function BulkAssignClient() {
   };
 
   return (
-    <Card className="w-full">
+    <Card className="card w-full">
       <CardHeader>
-        <CardTitle className="text-xl">CSV一括反映（管理者のみ）</CardTitle>
+        <CardTitle className="titleRow text-base md:text-lg">CSV一括反映（管理者のみ）</CardTitle>
         <p className="text-sm text-slate-600">担当・Tier を CSV で一括更新します。まずはドライランで確認してください。</p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -101,7 +101,7 @@ export default function BulkAssignClient() {
           ドライラン（件数のみ・更新なし）
         </label>
 
-        <Button onClick={handleSubmit} disabled={loading} className="w-full md:w-auto">
+        <Button onClick={handleSubmit} disabled={loading} className="btn bg-brand text-white hover:bg-brand-600 w-full md:w-auto">
           {loading ? '処理中…' : 'アップロードして反映'}
         </Button>
 

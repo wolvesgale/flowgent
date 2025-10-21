@@ -78,3 +78,166 @@ div[role="listbox"] {
   background: #ffffff !important;
   color: #0f172a !important;
 }
+
+/* ===== Refined theme skin (opt-in via body.theme-refined) ===== */
+.theme-refined .app-shell {
+  width: 100%;
+  max-width: 72rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 768px) {
+  .theme-refined .app-shell {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+.theme-refined .card {
+  background-color: #ffffff;
+  border: 1px solid #e6e8f0;
+  border-radius: 1.25rem;
+  box-shadow: 0 8px 24px rgba(20, 24, 40, 0.06);
+}
+
+.theme-refined .subtle {
+  background-color: #f7f8fb;
+}
+
+.theme-refined .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.theme-refined .titleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+@media (min-width: 768px) {
+  .theme-refined .titleRow {
+    font-size: 1.25rem;
+  }
+}
+
+.theme-refined .titleRow .icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  color: #4153f4;
+}
+
+.theme-refined input[type="text"],
+.theme-refined input[type="email"],
+.theme-refined input[type="date"],
+.theme-refined select,
+.theme-refined textarea {
+  border-radius: 0.75rem;
+  border: 1px solid #e6e8f0;
+  background-color: #ffffff;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.theme-refined input[type="text"]:focus,
+.theme-refined input[type="email"]:focus,
+.theme-refined input[type="date"]:focus,
+.theme-refined select:focus,
+.theme-refined textarea:focus {
+  border-color: #5668ff;
+  box-shadow: 0 0 0 0.25rem rgba(86, 104, 255, 0.15);
+  outline: none;
+}
+
+.theme-refined .btn {
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 14px rgba(20, 24, 40, 0.05);
+}
+
+.theme-refined .btn--ghost {
+  border: 1px solid #e6e8f0;
+  background-color: #ffffff;
+  box-shadow: none;
+}
+
+.theme-refined .btn--ghost:hover {
+  background-color: #f7f8fb;
+}
+
+.theme-refined .seg {
+  display: inline-flex;
+  gap: 0.5rem;
+  border-radius: 1rem;
+  border: 1px solid #e6e8f0;
+  background-color: #f7f8fb;
+  padding: 0.25rem;
+}
+
+.theme-refined .seg button {
+  border-radius: 0.75rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.theme-refined .seg .is-active {
+  background-color: #ffffff;
+  box-shadow: 0 4px 14px rgba(20, 24, 40, 0.05);
+}
+
+.theme-refined table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.theme-refined thead th {
+  border-bottom: 1px solid #e6e8f0;
+  background-color: rgba(247, 248, 251, 0.6);
+  text-align: left;
+  font-weight: 500;
+  color: #475569;
+}
+
+.theme-refined tbody tr {
+  border-bottom: 1px solid #e6e8f0;
+  transition: background-color 0.2s ease;
+}
+
+.theme-refined tbody tr:hover {
+  background-color: #f7f8fb;
+}
+
+.theme-refined td,
+.theme-refined th {
+  padding: 0.5rem 0.75rem;
+}
+
+.theme-refined .info-bar {
+  border: 1px solid #e0eaff;
+  background-color: #f7f8fb;
+  border-radius: 1.25rem;
+  box-shadow: 0 8px 24px rgba(20, 24, 40, 0.06);
+}
+
+.theme-refined .info-bar strong {
+  color: #1e293b;
+}
+
+.theme-refined .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid #e6e8f0;
+  background-color: #ffffff;
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+}

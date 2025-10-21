@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { CalendarClock, CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react'
+import { CalendarClock, CheckCircle2, ClipboardList, Filter, Loader2, Plus, Trash2 } from 'lucide-react'
 
 import { useTodos, useTodosDueTomorrow, type TodoItem } from '@/lib/useTodos'
 
@@ -383,16 +383,18 @@ export default function TodosPage() {
   )
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-slate-900">CS ToDo</h1>
-        <p className="text-slate-500">明日期限のネクストアクションと、担当者ごとのToDoを確認・管理できます。</p>
+    <div className="app-shell space-y-6 py-8">
+      <div className="space-y-2">
+        <div className="titleRow">
+          <ClipboardList className="icon" /> CS ToDo
+        </div>
+        <p className="text-sm text-slate-500 md:text-base">明日期限のネクストアクションと、担当者ごとのToDoを確認・管理できます。</p>
       </div>
 
-      <Card className="rounded-xl border border-[var(--fg-border)] bg-[var(--fg-card)] shadow-lg">
+      <Card className="card">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-[20px] font-semibold text-slate-800">
-            <CalendarClock className="h-5 w-5 text-brand" /> 明日が期限のネクストアクション
+          <CardTitle className="titleRow text-base md:text-lg">
+            <CalendarClock className="icon" /> 明日が期限のネクストアクション
           </CardTitle>
           <CardDescription className="text-sm text-slate-500">
             明日までに対応が必要なネクストアクションを確認し、完了済みにできます。
@@ -400,13 +402,15 @@ export default function TodosPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {isAdmin && (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <Label className="text-sm text-slate-600">対象CS</Label>
+            <div className="toolbar justify-between rounded-xl bg-surface-muted p-3">
+              <div className="titleRow text-sm font-medium text-slate-600">
+                <Filter className="icon" /> 対象CS
+              </div>
               <Select value={selectedTomorrowCs} onValueChange={(value) => setSelectedTomorrowCs(value)}>
-                <SelectTrigger className="w-full border border-slate-300 bg-white text-slate-900 sm:w-60">
+                <SelectTrigger className="w-full sm:w-60">
                   <SelectValue placeholder="対象を選択" />
                 </SelectTrigger>
-                <SelectContent className="border border-slate-300 bg-white text-slate-900">
+                <SelectContent>
                   <SelectItem value="all">全員</SelectItem>
                   <SelectItem value="me">自分</SelectItem>
                   {csAssignees.map((user) => (
@@ -428,7 +432,7 @@ export default function TodosPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50 text-slate-700">
+                <TableRow>
                   <TableHead>タイトル</TableHead>
                   <TableHead>期日</TableHead>
                   <TableHead>担当</TableHead>
@@ -438,7 +442,7 @@ export default function TodosPage() {
               </TableHeader>
               <TableBody>
                 {tomorrowTodos.map((item) => (
-                  <TableRow key={item.id} className="even:bg-slate-50/50">
+                  <TableRow key={item.id}>
                     <TableCell className="font-medium text-slate-800">{item.title}</TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="bg-brand/10 text-brand">
@@ -454,7 +458,7 @@ export default function TodosPage() {
                     <TableCell className="text-right">
                       <Button
                         size="sm"
-                        className="bg-brand text-white hover:bg-brand-600"
+                        className="btn bg-brand text-white hover:bg-brand-600"
                         onClick={() => void handleToggleStatus(item, 'DONE')}
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4" /> 完了にする
@@ -468,22 +472,22 @@ export default function TodosPage() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-xl border border-[var(--fg-border)] bg-[var(--fg-card)] shadow-lg">
+      <Card className="card">
         <CardHeader className="pb-3">
-          <CardTitle className="text-[20px] font-semibold text-slate-800">マイToDo</CardTitle>
+          <CardTitle className="titleRow text-base md:text-lg">マイToDo</CardTitle>
           <CardDescription className="text-sm text-slate-500">
             担当のToDoを作成・完了・削除できます。管理者はCSを選んで配布できます。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="toolbar justify-between rounded-xl bg-surface-muted">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               {isAdmin && (
                 <Select value={assigneeFilter} onValueChange={(value) => setAssigneeFilter(value)}>
-                  <SelectTrigger className="w-full border border-slate-300 bg-white text-slate-900 sm:w-56">
+                  <SelectTrigger className="w-full sm:w-56">
                     <SelectValue placeholder="担当者" />
                   </SelectTrigger>
-                  <SelectContent className="border border-slate-300 bg-white text-slate-900">
+                  <SelectContent>
                     <SelectItem value="all">全員</SelectItem>
                     <SelectItem value="me">自分</SelectItem>
                     {csAssignees.map((user) => (
@@ -496,10 +500,10 @@ export default function TodosPage() {
               )}
 
               <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
-                <SelectTrigger className="w-full border border-slate-300 bg-white text-slate-900 sm:w-48">
+                <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="ステータス" />
                 </SelectTrigger>
-                <SelectContent className="border border-slate-300 bg-white text-slate-900">
+                <SelectContent>
                   <SelectItem value="OPEN">未完了</SelectItem>
                   <SelectItem value="DONE">完了済み</SelectItem>
                   <SelectItem value="ALL">すべて</SelectItem>
@@ -507,7 +511,7 @@ export default function TodosPage() {
               </Select>
             </div>
 
-            <Button onClick={() => setCreateOpen(true)} className="bg-brand text-white shadow-xs hover:bg-brand-600">
+            <Button onClick={() => setCreateOpen(true)} className="btn bg-brand text-white hover:bg-brand-600">
               <Plus className="mr-2 h-4 w-4" /> 新規ToDo
             </Button>
           </div>
@@ -521,7 +525,7 @@ export default function TodosPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-50 text-slate-700">
+                <TableRow>
                   <TableHead>タイトル</TableHead>
                   <TableHead>期日</TableHead>
                   <TableHead>メモ</TableHead>
@@ -531,7 +535,7 @@ export default function TodosPage() {
               </TableHeader>
               <TableBody>
                 {todos.map((todo) => (
-                  <TableRow key={todo.id} className="even:bg-slate-50/50">
+                  <TableRow key={todo.id}>
                     <TableCell className="font-medium text-slate-800">{todo.title}</TableCell>
                     <TableCell>{formatJstDate(todo.dueOn)}</TableCell>
                     <TableCell className="max-w-md text-slate-700">
@@ -542,7 +546,7 @@ export default function TodosPage() {
                       {todo.status === 'OPEN' ? (
                         <Button
                           size="sm"
-                          className="bg-brand text-white hover:bg-brand-600"
+                          className="btn bg-brand text-white hover:bg-brand-600"
                           onClick={() => void handleToggleStatus(todo, 'DONE')}
                         >
                           完了
@@ -551,13 +555,13 @@ export default function TodosPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                          className="btn btn--ghost"
                           onClick={() => void handleToggleStatus(todo, 'OPEN')}
                         >
                           再開
                         </Button>
                       )}
-                      <Button size="sm" variant="destructive" onClick={() => void handleDeleteTodo(todo.id)}>
+                      <Button size="sm" variant="destructive" className="btn" onClick={() => void handleDeleteTodo(todo.id)}>
                         <Trash2 className="mr-1 h-4 w-4" /> 削除
                       </Button>
                     </TableCell>
@@ -570,9 +574,9 @@ export default function TodosPage() {
       </Card>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[80vh] overflow-y-auto rounded-xl sm:max-w-xl">
+        <DialogContent className="card max-h-[80vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle className="text-[20px] font-semibold text-slate-800">ToDoを追加</DialogTitle>
+            <DialogTitle className="titleRow text-base md:text-lg">ToDoを追加</DialogTitle>
           </DialogHeader>
 
           <div className="mx-auto w-full max-w-xl space-y-4">
@@ -583,7 +587,7 @@ export default function TodosPage() {
                 value={createForm.title}
                 onChange={(event) => setCreateForm((prev) => ({ ...prev, title: event.target.value }))}
                 placeholder="タスク名"
-                className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+                className="placeholder:text-slate-400"
                 required
               />
             </div>
@@ -596,7 +600,7 @@ export default function TodosPage() {
                 onChange={(event) => setCreateForm((prev) => ({ ...prev, notes: event.target.value }))}
                 placeholder="補足情報があれば入力してください"
                 rows={3}
-                className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+                className="placeholder:text-slate-400"
               />
             </div>
 
@@ -607,7 +611,6 @@ export default function TodosPage() {
                 type="date"
                 value={createForm.dueOn}
                 onChange={(event) => setCreateForm((prev) => ({ ...prev, dueOn: event.target.value }))}
-                className="border border-slate-300 bg-white text-slate-900"
               />
             </div>
 
@@ -618,10 +621,10 @@ export default function TodosPage() {
                   value={createForm.assigneeId}
                   onValueChange={(value) => setCreateForm((prev) => ({ ...prev, assigneeId: value }))}
                 >
-                  <SelectTrigger className="border border-slate-300 bg-white text-slate-900">
+                  <SelectTrigger>
                     <SelectValue placeholder="担当者を選択" />
                   </SelectTrigger>
-                  <SelectContent className="border border-slate-300 bg-white text-slate-900">
+                  <SelectContent>
                     <SelectItem value={SELF_ASSIGNEE}>自分</SelectItem>
                     {csAssignees.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
@@ -635,14 +638,10 @@ export default function TodosPage() {
           </div>
 
           <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-            <Button
-              variant="outline"
-              onClick={() => setCreateOpen(false)}
-              className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-            >
+            <Button variant="outline" className="btn btn--ghost" onClick={() => setCreateOpen(false)}>
               キャンセル
             </Button>
-            <Button className="bg-brand text-white hover:bg-brand-600" onClick={() => void handleCreateSubmit()}>
+            <Button className="btn bg-brand text-white hover:bg-brand-600" onClick={() => void handleCreateSubmit()}>
               作成
             </Button>
           </DialogFooter>

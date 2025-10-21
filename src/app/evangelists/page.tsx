@@ -773,7 +773,7 @@ export default function EvangelistsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => openEditDialog(evangelist)}
-                            className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                            className="btn btn--ghost"
                           >
                             <Pencil className="mr-1 h-3.5 w-3.5" />
                             編集
@@ -782,14 +782,16 @@ export default function EvangelistsPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                              className="btn btn--ghost"
+                              aria-label="面談記録"
                             >
-                              詳細
+                              面談記録
                             </Button>
                           </Link>
                           <Button
                             variant="destructive"
                             size="sm"
+                            className="btn"
                             onClick={() => handleDelete(evangelist.id)}
                           >
                             <Trash2 className="mr-1 h-3.5 w-3.5" />
