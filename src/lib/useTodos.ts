@@ -36,10 +36,10 @@ export type TodoListResponse = {
 }
 
 type UseTodosParams = {
-  scope: 'mine' | 'dueSoon' | 'all'
+  scope: 'mine' | 'dueSoon' | 'dueTomorrow' | 'all'
   status?: 'OPEN' | 'DONE' | 'ALL'
   take?: number
-  assigneeId?: string | null
+  assigneeId?: string | 'all' | null
 }
 
 function buildKey(params: UseTodosParams) {
@@ -78,3 +78,13 @@ export function mutateTodosKey(key: string, data?: TodoListResponse | null, reva
 }
 
 export type TodosMutate = KeyedMutator<TodoListResponse>
+
+export function useTodosDueTomorrow(assigneeId?: string | 'all') {
+  const params: UseTodosParams = {
+    scope: 'dueTomorrow',
+    status: 'OPEN',
+    take: 100,
+    assigneeId: assigneeId ?? undefined,
+  }
+  return useTodos(params)
+}

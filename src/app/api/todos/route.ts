@@ -4,6 +4,7 @@ import { getIronSession } from 'iron-session'
 
 import { prisma } from '@/lib/prisma'
 import { sessionOptions, type SessionData } from '@/lib/session'
+import { jstTomorrowRangeUTC } from '@/lib/date-range'
 import type { Prisma } from '@prisma/client'
 
 function ensureSession(session: SessionData | undefined | null) {
@@ -13,10 +14,11 @@ function ensureSession(session: SessionData | undefined | null) {
   return session
 }
 
-function parseScope(raw: string | null): 'mine' | 'dueSoon' | 'all' {
+function parseScope(raw: string | null): 'mine' | 'dueSoon' | 'dueTomorrow' | 'all' {
   if (!raw) return 'mine'
   const value = raw.toLowerCase()
   if (value === 'duesoon') return 'dueSoon'
+  if (value === 'duetomorrow') return 'dueTomorrow'
   if (value === 'all') return 'all'
   return 'mine'
 }
@@ -87,32 +89,37 @@ export async function GET(req: NextRequest) {
   const requestedAssigneeId = url.searchParams.get('assigneeId') || undefined
 
   const isAdmin = session.role === 'ADMIN'
-  const where: Prisma.TodoWhereInput = {}
-  const filters: Prisma.TodoWhereInput[] = []
+  const andConditions: Prisma.TodoWhereInput[] = []
 
-  const statusFilter = status === 'ALL' ? undefined : status
-  if (statusFilter) {
-    where.status = statusFilter
+  if (scope !== 'dueTomorrow' && status !== 'ALL') {
+    andConditions.push({ status })
   }
 
-  if (scope === 'dueSoon') {
-    const now = new Date()
-    const tomorrow = new Date(now)
-    tomorrow.setDate(now.getDate() + 1)
-    const orConditions: Prisma.TodoWhereInput[] = [
-      { assigneeId: session.userId! },
-    ]
-    // 自分が作成したタスクも拾う
-    orConditions.push({ createdById: session.userId! })
-    filters.push({ OR: orConditions })
-    filters.push({ dueOn: { not: null, lte: tomorrow } })
+  if (scope === 'dueTomorrow') {
+    const { start, end } = jstTomorrowRangeUTC(new Date())
+    andConditions.push({ dueOn: { gte: start, lt: end } })
+    andConditions.push({ status: 'OPEN' })
+    if (requestedAssigneeId && requestedAssigneeId !== 'all') {
+      andConditions.push({ assigneeId: requestedAssigneeId })
+    } else if (!isAdmin) {
+      andConditions.push({ assigneeId: session.userId! })
+    }
+  } else if (scope === 'dueSoon') {
+    const { end } = jstTomorrowRangeUTC(new Date())
+    andConditions.push({ dueOn: { not: null, lte: end } })
+    andConditions.push({ status: 'OPEN' })
+    andConditions.push({
+      OR: [
+        { assigneeId: session.userId! },
+        { createdById: session.userId! },
+      ],
+    })
   } else if (scope === 'all' && isAdmin) {
     if (requestedAssigneeId && requestedAssigneeId !== 'all') {
-      filters.push({ assigneeId: requestedAssigneeId })
+      andConditions.push({ assigneeId: requestedAssigneeId })
     }
   } else {
-    // mine or fallback for non-admins
-    filters.push({
+    andConditions.push({
       OR: [
         { assigneeId: session.userId! },
         { createdById: session.userId! },
@@ -120,19 +127,24 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  if (filters.length === 1) {
-    Object.assign(where, filters[0])
-  } else if (filters.length > 1) {
-    where.AND = filters
-  }
+  const where: Prisma.TodoWhereInput = andConditions.length
+    ? { AND: andConditions }
+    : {}
 
   const findArgs: Prisma.TodoFindManyArgs = {
     where,
-    orderBy: [
-      { updatedAt: 'desc' as const },
-      { createdAt: 'desc' as const },
-      { id: 'desc' as const },
-    ],
+    orderBy:
+      scope === 'dueTomorrow'
+        ? [
+            { dueOn: 'asc' as const },
+            { updatedAt: 'desc' as const },
+            { id: 'desc' as const },
+          ]
+        : [
+            { updatedAt: 'desc' as const },
+            { createdAt: 'desc' as const },
+            { id: 'desc' as const },
+          ],
     take,
     select: {
       id: true,

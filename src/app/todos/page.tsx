@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,10 +14,8 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { CalendarClock, CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react'
 
-import { useTodos, type TodoItem } from '@/lib/useTodos'
+import { useTodos, useTodosDueTomorrow, type TodoItem } from '@/lib/useTodos'
 
-const MS_PER_DAY = 86_400_000
-const JST_OFFSET = 9 * 60 * 60 * 1000
 const SELF_ASSIGNEE = '__SELF__'
 
 const dateFormatter = new Intl.DateTimeFormat('ja-JP', {
@@ -27,21 +24,6 @@ const dateFormatter = new Intl.DateTimeFormat('ja-JP', {
   month: '2-digit',
   day: '2-digit',
 })
-
-function getTomorrowRangeUtc() {
-  const now = Date.now()
-  const startOfTodayUtc = Math.floor((now + JST_OFFSET) / MS_PER_DAY) * MS_PER_DAY - JST_OFFSET
-  const startOfTomorrowUtc = startOfTodayUtc + MS_PER_DAY
-  return { start: startOfTomorrowUtc, end: startOfTomorrowUtc + MS_PER_DAY }
-}
-
-function isDueTomorrow(value: string | null | undefined) {
-  if (!value) return false
-  const timestamp = new Date(value).getTime()
-  if (Number.isNaN(timestamp)) return false
-  const { start, end } = getTomorrowRangeUtc()
-  return timestamp >= start && timestamp < end
-}
 
 function formatJstDate(value: string | null | undefined) {
   if (!value) return '—'
@@ -73,15 +55,6 @@ type UserSummary = {
   role: 'ADMIN' | 'CS'
 }
 
-type EvangelistSummary = {
-  id: string
-  firstName?: string | null
-  lastName?: string | null
-  displayName?: string | null
-  nextAction?: string | null
-  nextActionDueOn?: string | null
-}
-
 export default function TodosPage() {
   const [currentUser, setCurrentUser] = useState<UserSummary | null>(null)
   const [loadingUser, setLoadingUser] = useState(true)
@@ -89,8 +62,6 @@ export default function TodosPage() {
   const [assigneeFilter, setAssigneeFilter] = useState<'me' | 'all' | string>('me')
   const [statusFilter, setStatusFilter] = useState<'OPEN' | 'DONE' | 'ALL'>('OPEN')
   const [selectedTomorrowCs, setSelectedTomorrowCs] = useState<'me' | 'all' | string>('me')
-  const [tomorrowItems, setTomorrowItems] = useState<EvangelistSummary[]>([])
-  const [tomorrowLoading, setTomorrowLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState({
     title: '',
@@ -124,6 +95,19 @@ export default function TodosPage() {
     take: 100,
     assigneeId: computedAssigneeId ?? undefined,
   })
+
+  const effectiveTomorrowAssignee = useMemo(() => {
+    if (!isAdmin) return undefined
+    if (selectedTomorrowCs === 'all') return 'all'
+    if (selectedTomorrowCs === 'me') return currentUser?.id ?? undefined
+    return selectedTomorrowCs
+  }, [currentUser, isAdmin, selectedTomorrowCs])
+
+  const {
+    items: tomorrowTodos,
+    isLoading: tomorrowLoading,
+    mutate: mutateDueTomorrow,
+  } = useTodosDueTomorrow(effectiveTomorrowAssignee)
 
   useEffect(() => {
     let cancelled = false
@@ -193,54 +177,6 @@ export default function TodosPage() {
   }, [isAdmin, selectedTomorrowCs])
 
   useEffect(() => {
-    if (!currentUser) return
-    let cancelled = false
-    const load = async () => {
-      try {
-        setTomorrowLoading(true)
-        const params = new URLSearchParams({ limit: '100' })
-        if (isAdmin) {
-          if (selectedTomorrowCs !== 'all') {
-            const target = selectedTomorrowCs === 'me' ? currentUser.id : selectedTomorrowCs
-            if (target) params.set('assignedCsId', target)
-          }
-        }
-        const { response, data } = await requestJson(`/api/evangelists?${params.toString()}`)
-        if (!response.ok || !Array.isArray(data?.items)) {
-          throw new Error(data?.error || 'failed')
-        }
-        if (cancelled) return
-        const filtered = (data.items as EvangelistSummary[]).filter((item) =>
-          isDueTomorrow(item.nextActionDueOn),
-        )
-        setTomorrowItems(
-          filtered.map((item) => {
-            const fallbackName = [item.lastName, item.firstName].filter(Boolean).join(' ').trim()
-            return {
-              ...item,
-              displayName: item.displayName || fallbackName || '氏名未設定',
-            }
-          }),
-        )
-      } catch (error) {
-        console.error('[todos:tomorrow]', error)
-        if (!cancelled) {
-          toast.error('ネクストアクションの取得に失敗しました')
-          setTomorrowItems([])
-        }
-      } finally {
-        if (!cancelled) {
-          setTomorrowLoading(false)
-        }
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [currentUser, isAdmin, selectedTomorrowCs])
-
-  useEffect(() => {
     if (!todosError) return
     console.error('[todos:list]', todosError)
     toast.error('ToDoの取得に失敗しました')
@@ -258,27 +194,6 @@ export default function TodosPage() {
     }
     return entries
   }, [assignees, currentUser])
-
-  const handleCompleteAction = useCallback(
-    async (evangelistId: string) => {
-      try {
-        const { response, data } = await requestJson(`/api/evangelists/${evangelistId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nextAction: null, nextActionDueOn: null }),
-        })
-        if (!response.ok || data?.error) {
-          throw new Error(data?.error || 'failed')
-        }
-        toast.success('ネクストアクションを完了しました')
-        setTomorrowItems((prev) => prev.filter((item) => item.id !== evangelistId))
-      } catch (error) {
-        console.error('[todos:complete]', error)
-        toast.error('更新に失敗しました')
-      }
-    },
-    [],
-  )
 
   const handleCreateSubmit = useCallback(async () => {
     if (!currentUser) return
@@ -351,6 +266,7 @@ export default function TodosPage() {
       setCreateOpen(false)
       setCreateForm({ title: '', notes: '', dueOn: '', assigneeId: SELF_ASSIGNEE })
       void mutateTodos()
+      void mutateDueTomorrow()
     } catch (error) {
       console.error('[todos:create]', error)
       mutateTodos(
@@ -364,8 +280,9 @@ export default function TodosPage() {
         { revalidate: false },
       )
       toast.error('ToDoの作成に失敗しました')
+      void mutateDueTomorrow()
     }
-  }, [createForm, currentUser, isAdmin, mutateTodos])
+  }, [createForm, currentUser, isAdmin, mutateDueTomorrow, mutateTodos])
 
   const handleToggleStatus = useCallback(
     async (todo: TodoItem, nextStatus: 'OPEN' | 'DONE') => {
@@ -400,6 +317,7 @@ export default function TodosPage() {
         }
         toast.success(nextStatus === 'DONE' ? '完了にしました' : '未完了に戻しました')
         void mutateTodos()
+        void mutateDueTomorrow()
       } catch (error) {
         console.error('[todos:update]', error)
         mutateTodos(
@@ -417,9 +335,10 @@ export default function TodosPage() {
           { revalidate: false },
         )
         toast.error('更新に失敗しました')
+        void mutateDueTomorrow()
       }
     },
-    [mutateTodos],
+    [mutateDueTomorrow, mutateTodos],
   )
 
   const handleDeleteTodo = useCallback(
@@ -449,6 +368,7 @@ export default function TodosPage() {
         }
         toast.success('削除しました')
         void mutateTodos()
+        void mutateDueTomorrow()
       } catch (error) {
         console.error('[todos:delete]', error)
         mutateTodos(
@@ -456,9 +376,10 @@ export default function TodosPage() {
           { revalidate: true },
         )
         toast.error('削除に失敗しました')
+        void mutateDueTomorrow()
       }
     },
-    [mutateTodos, todos],
+    [mutateDueTomorrow, mutateTodos, todos],
   )
 
   return (
@@ -502,39 +423,39 @@ export default function TodosPage() {
             <div className="flex items-center justify-center gap-2 py-10 text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" /> 読み込み中...
             </div>
-          ) : tomorrowItems.length === 0 ? (
+          ) : tomorrowTodos.length === 0 ? (
             <div className="py-10 text-center text-slate-500">対象のネクストアクションはありません</div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50 text-slate-700">
-                  <TableHead>氏名</TableHead>
-                  <TableHead>ネクストアクション</TableHead>
+                  <TableHead>タイトル</TableHead>
                   <TableHead>期日</TableHead>
+                  <TableHead>担当</TableHead>
+                  <TableHead>メモ</TableHead>
                   <TableHead className="w-32 text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {tomorrowItems.map((item) => (
+                {tomorrowTodos.map((item) => (
                   <TableRow key={item.id} className="even:bg-slate-50/50">
-                    <TableCell>
-                      <Link href={`/evangelists/${item.id}`} className="text-brand underline">
-                        {item.displayName}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="max-w-md text-slate-700">
-                      {item.nextAction ? <span>{item.nextAction}</span> : <span className="text-slate-500">—</span>}
-                    </TableCell>
+                    <TableCell className="font-medium text-slate-800">{item.title}</TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="bg-brand/10 text-brand">
-                        {formatJstDate(item.nextActionDueOn)}
+                        {formatJstDate(item.dueOn)}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-700">
+                      {userNameMap.get(item.assigneeId) ?? '—'}
+                    </TableCell>
+                    <TableCell className="max-w-sm text-slate-700">
+                      {item.notes ? item.notes : <span className="text-slate-500">—</span>}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
                         size="sm"
                         className="bg-brand text-white hover:bg-brand-600"
-                        onClick={() => void handleCompleteAction(item.id)}
+                        onClick={() => void handleToggleStatus(item, 'DONE')}
                       >
                         <CheckCircle2 className="mr-2 h-4 w-4" /> 完了にする
                       </Button>
