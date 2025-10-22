@@ -1,6 +1,5 @@
 'use client'
 
-import type { ReactNode } from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -16,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Search, ArrowUpDown, X, Pencil, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import OverlaySheet from '@/components/ui/overlay-sheet'
+import PageSizeSelect from './PageSizeSelect'
 
 const STRENGTH_LABELS = {
   HR: '人事',
@@ -173,13 +173,9 @@ const normalizePageSize = (value: string | null): PageSizeOption => {
 
 interface EvangelistsPageClientProps {
   initialPageSize: PageSizeOption
-  pageSizeSelector: ReactNode
 }
 
-export default function EvangelistsPageClient({
-  initialPageSize,
-  pageSizeSelector,
-}: EvangelistsPageClientProps) {
+export default function EvangelistsPageClient({ initialPageSize }: EvangelistsPageClientProps) {
   const searchParams = useSearchParams()
   const [evangelists, setEvangelists] = useState<Evangelist[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -219,7 +215,13 @@ export default function EvangelistsPageClient({
 
   useEffect(() => {
     const normalized = normalizePageSize(searchParams.get('pageSize'))
-    setItemsPerPage(prev => (prev === normalized ? prev : normalized))
+    setItemsPerPage(prev => {
+      if (prev !== normalized) {
+        setCurrentPage(1)
+        return normalized
+      }
+      return prev
+    })
   }, [searchParams])
 
   const fetchUsers = useCallback(async () => {
@@ -647,7 +649,17 @@ export default function EvangelistsPageClient({
         </CardHeader>
         <CardContent>
           <div className="mb-4 flex flex-wrap items-center justify-end gap-2 text-sm text-slate-600">
-            {pageSizeSelector}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-600">表示件数</span>
+              <PageSizeSelect
+                value={itemsPerPage}
+                onChange={(value) => {
+                  const normalized = normalizePageSize(String(value))
+                  setItemsPerPage(normalized)
+                  setCurrentPage(1)
+                }}
+              />
+            </div>
           </div>
           {/* 検索・フィルタ */}
           <div className="mb-6 space-y-4">
