@@ -1,49 +1,48 @@
 'use client'
 
+import type { ChangeEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+const OPTIONS = [30, 50, 100] as const
 
-const PAGE_SIZE_OPTIONS = ['30', '50', '100'] as const
+type PageSizeValue = (typeof OPTIONS)[number]
 
-type PageSizeValue = (typeof PAGE_SIZE_OPTIONS)[number]
+type Props = {
+  value: PageSizeValue
+  onChange: (value: PageSizeValue) => void
+}
 
-export default function PageSizeSelect() {
+export default function PageSizeSelect({ value, onChange }: Props) {
   const router = useRouter()
-  const sp = useSearchParams()
-  const raw = sp.get('pageSize') ?? '30'
-  const pageSize = PAGE_SIZE_OPTIONS.includes(raw as PageSizeValue)
-    ? (raw as PageSizeValue)
-    : '30'
+  const searchParams = useSearchParams()
 
-  function updateSize(size: string) {
-    const params = new URLSearchParams(sp.toString())
-    params.set('pageSize', size)
+  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextValue = Number(event.target.value)
+    const normalized = OPTIONS.includes(nextValue as PageSizeValue)
+      ? (nextValue as PageSizeValue)
+      : 30
+
+    onChange(normalized)
+
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('pageSize', String(normalized))
     params.set('page', '1')
-    router.push(`/evangelists?${params.toString()}`)
+
+    const query = params.toString()
+    router.replace(query ? `?${query}` : '?')
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-sm text-slate-600">表示件数</span>
-      <Select value={pageSize} onValueChange={updateSize}>
-        <SelectTrigger className="w-[96px]">
-          <SelectValue placeholder="30" />
-        </SelectTrigger>
-        <SelectContent>
-          {PAGE_SIZE_OPTIONS.map(option => (
-            <SelectItem key={option} value={option}>
-              {option}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <select
+      value={String(value)}
+      onChange={handleChange}
+      className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+    >
+      {OPTIONS.map(option => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
   )
 }

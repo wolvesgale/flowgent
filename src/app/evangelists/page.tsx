@@ -1,31 +1,23 @@
 import { Suspense } from 'react'
 
 import EvangelistsPageClient from './_components/EvangelistsPageClient'
-import PageSizeSelect from './_components/PageSizeSelect'
 
-const PAGE_SIZE_OPTIONS = [30, 50, 100] as const
+export const dynamic = 'force-dynamic'
 
-type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number]
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const sp = await searchParams
 
-type PageProps = {
-  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
-}
-
-export default async function EvangelistsPage({ searchParams }: PageProps) {
-  const resolved = (await searchParams) ?? {}
-  const raw = resolved.pageSize
-  const value = Array.isArray(raw) ? raw[0] : raw
-  const parsed = Number.parseInt(value ?? '30', 10)
-  const take = (PAGE_SIZE_OPTIONS.find(option => option === parsed) ?? 30) as PageSizeOption
+  const raw = Array.isArray(sp.pageSize) ? sp.pageSize[0] : sp.pageSize
+  const parsed = Number(raw)
+  const initialPageSize = [30, 50, 100].includes(parsed) ? parsed : 30
 
   return (
-    <EvangelistsPageClient
-      initialPageSize={take}
-      pageSizeSelector={
-        <Suspense fallback={<div className="text-sm text-slate-500">…</div>}>
-          <PageSizeSelect />
-        </Suspense>
-      }
-    />
+    <Suspense fallback={<div className="p-4 text-sm text-slate-600">読み込み中…</div>}>
+      <EvangelistsPageClient initialPageSize={initialPageSize} />
+    </Suspense>
   )
 }
