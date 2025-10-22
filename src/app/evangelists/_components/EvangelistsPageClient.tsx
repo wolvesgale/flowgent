@@ -1,8 +1,9 @@
-import { Suspense } from 'react'
+'use client'
 
+import type { ReactNode } from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -14,13 +15,112 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Search, ArrowUpDown, X, Pencil, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
+import OverlaySheet from '@/components/ui/overlay-sheet'
 
-const PAGE_SIZE_OPTIONS = [30, 50, 100] as const
+const STRENGTH_LABELS = {
+  HR: '人事',
+  IT: 'IT',
+  ACCOUNTING: '会計',
+  ADVERTISING: '広告',
+  MANAGEMENT: '経営',
+  SALES: '営業',
+  MANUFACTURING: '製造',
+  MEDICAL: '医療',
+  FINANCE: '金融',
+} as const
 
-type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number]
+const CONTACT_LABELS = {
+  FACEBOOK: 'Facebook',
+  LINE: 'LINE',
+  EMAIL: 'メール',
+  PHONE: '電話',
+  SLACK: 'Slack',
+} as const
 
-type PageProps = {
-  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+const MANAGEMENT_PHASE_LABELS = {
+  INQUIRY: '問い合わせ',
+  FIRST_MEETING: '初回面談',
+  REGISTERED: '登録',
+  LIST_PROVIDED: 'リスト提供/突合',
+  INNOVATOR_REVIEW: 'イノベータ確認',
+  INTRODUCTION_STARTED: '紹介開始',
+  MEETING_SCHEDULED: '商談設定',
+  FIRST_RESULT: '初回実績',
+  CONTINUED_PROPOSAL: '継続提案',
+} as const
+
+type StrengthKey = keyof typeof STRENGTH_LABELS
+type ContactKey = keyof typeof CONTACT_LABELS
+type ManagementPhaseKey = keyof typeof MANAGEMENT_PHASE_LABELS
+
+interface Evangelist {
+  id: string
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+  strength?: StrengthKey | null
+  contactMethod?: ContactKey | null
+  managementPhase?: ManagementPhaseKey | null
+  listProvided?: boolean | null
+  nextAction?: string | null
+  nextActionDueOn?: string | null
+  notes?: string | null
+  tier: 'TIER1' | 'TIER2'
+  assignedCsId?: string | null
+  assignedCs?: {
+    id: string
+    name: string
+  } | null
+  createdAt: string
+  _count: {
+    meetings: number
+  }
+}
+
+interface User {
+  id: string
+  name: string
+  role: 'ADMIN' | 'CS'
+}
+
+interface EvangelistListSuccessResponse {
+  ok: true
+  items: Evangelist[]
+  total: number
+  page: number
+  limit: number
+}
+
+interface EvangelistListErrorResponse {
+  ok?: false
+  error?: string
+  message?: string
+}
+
+interface EvangelistCreateSuccessResponse {
+  ok: true
+  item: Evangelist
+}
+
+const isEvangelistListResponse = (
+  value: unknown,
+): value is EvangelistListSuccessResponse => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+
+  if (record.ok !== true) {
+    return false
+  }
+
+  return (
+    Array.isArray(record.items) &&
+    typeof record.total === 'number' &&
+    typeof record.page === 'number' &&
+    typeof record.limit === 'number'
+  )
 }
 
 const isEvangelistCreateSuccessResponse = (
@@ -37,9 +137,14 @@ const isEvangelistCreateSuccessResponse = (
 const extractErrorMessage = (value: unknown, fallback: string): string => {
   if (value && typeof value === 'object') {
     const record = value as EvangelistListErrorResponse
-    if (typeof record.error === 'string' && record.error) return record.error
-    if (typeof record.message === 'string' && record.message) return record.message
+    if (typeof record.error === 'string' && record.error) {
+      return record.error
+    }
+    if (typeof record.message === 'string' && record.message) {
+      return record.message
+    }
   }
+
   return fallback
 }
 
@@ -66,8 +171,15 @@ const normalizePageSize = (value: string | null): PageSizeOption => {
   return (match ?? DEFAULT_PAGE_SIZE) as PageSizeOption
 }
 
-export default function EvangelistsPage() {
-  const router = useRouter()
+interface EvangelistsPageClientProps {
+  initialPageSize: PageSizeOption
+  pageSizeSelector: ReactNode
+}
+
+export default function EvangelistsPageClient({
+  initialPageSize,
+  pageSizeSelector,
+}: EvangelistsPageClientProps) {
   const searchParams = useSearchParams()
   const [evangelists, setEvangelists] = useState<Evangelist[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -80,12 +192,11 @@ export default function EvangelistsPage() {
   const [staleFilter, setStaleFilter] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState<PageSizeOption>(() =>
-    normalizePageSize(searchParams.get('pageSize')),
-  )
+  const [itemsPerPage, setItemsPerPage] = useState<PageSizeOption>(initialPageSize)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [selectedEvangelist, setSelectedEvangelist] = useState<Evangelist | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [editSubmitting, setEditSubmitting] = useState(false)
   const [editForm, setEditForm] = useState<EditFormState>({
     contactMethod: '',
     strength: '',
@@ -261,6 +372,12 @@ export default function EvangelistsPage() {
       setSortOrder('asc')
     }
   }
+
+  const closeEdit = useCallback(() => {
+    setIsEditOpen(false)
+    setSelectedEvangelist(null)
+    setEditSubmitting(false)
+  }, [])
 
   const handleAssign = async (evangelistId: string, newAssignee: string) => {
     const normalizedAssignee = newAssignee === CS_CLEAR_VALUE ? '' : newAssignee
@@ -447,21 +564,14 @@ export default function EvangelistsPage() {
 
   const hasActiveFilters = searchTerm || tierFilter !== 'ALL' || assignedCsFilter || staleFilter
 
-  const handlePageSizeChange = (value: string) => {
-    const normalized = normalizePageSize(value)
-    if (normalized === itemsPerPage) return
-    setItemsPerPage(normalized)
-    setCurrentPage(1)
-    const params = new URLSearchParams(searchParams.toString())
-    params.set('pageSize', normalized.toString())
-    params.set('page', '1')
-    router.push(`/evangelists?${params.toString()}`)
-  }
-
-  const handleEditSubmit = async () => {
+  const handleEditSubmit = async (event?: React.FormEvent<HTMLFormElement>) => {
+    if (event) {
+      event.preventDefault()
+    }
     if (!selectedEvangelist) return
 
     try {
+      setEditSubmitting(true)
       const payload = {
         contactMethod: editForm.contactMethod || null,
         strength: editForm.strength || null,
@@ -499,13 +609,13 @@ export default function EvangelistsPage() {
             : evangelist,
         ),
       )
-
-      setSelectedEvangelist(updated)
-      setIsEditOpen(false)
+      closeEdit()
       toast.success('EVA情報を更新しました')
     } catch (error) {
       console.error('Failed to update evangelist:', error)
       toast.error('EVA情報の更新に失敗しました')
+    } finally {
+      setEditSubmitting(false)
     }
   }
 
@@ -537,19 +647,7 @@ export default function EvangelistsPage() {
         </CardHeader>
         <CardContent>
           <div className="mb-4 flex flex-wrap items-center justify-end gap-2 text-sm text-slate-600">
-            <span>表示件数</span>
-            <Select value={String(itemsPerPage)} onValueChange={handlePageSizeChange}>
-              <SelectTrigger className="w-[96px]">
-                <SelectValue placeholder="30" />
-              </SelectTrigger>
-              <SelectContent>
-                {PAGE_SIZE_OPTIONS.map(option => (
-                  <SelectItem key={option} value={String(option)}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {pageSizeSelector}
           </div>
           {/* 検索・フィルタ */}
           <div className="mb-6 space-y-4">
@@ -888,178 +986,174 @@ export default function EvangelistsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <OverlaySheet
         open={isEditOpen}
-        onOpenChange={(open) => {
-          setIsEditOpen(open)
-          if (!open) setSelectedEvangelist(null)
-        }}
+        onClose={closeEdit}
+        title="エヴァンジェリスト情報を編集"
+        description="連絡手段・強み・管理フェーズ等を変更できます"
       >
-        <DialogContent
-          aria-describedby="edit-desc"
-          className="max-h-[80vh] overflow-y-auto rounded-xl sm:max-w-2xl"
-        >
-          <DialogHeader>
-            <DialogTitle className="text-[20px] font-semibold text-slate-800">
-              エヴァンジェリスト情報を編集
-            </DialogTitle>
-            <p id="edit-desc" className="sr-only">
-              連絡手段・強み・管理フェーズ等を変更できます
-            </p>
-          </DialogHeader>
-          {selectedEvangelist && (
-            <div className="mx-auto flex w-full max-w-2xl flex-col space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">
-                  {selectedEvangelist.firstName} {selectedEvangelist.lastName}
-                </p>
-              </div>
+        {selectedEvangelist ? (
+          <form onSubmit={handleEditSubmit} className="flex min-h-full flex-col space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {[selectedEvangelist.firstName, selectedEvangelist.lastName].filter(Boolean).join(' ')}
+              </p>
+            </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>連絡手段</Label>
-                  <Select
-                    value={editForm.contactMethod ? editForm.contactMethod : SELECT_CLEAR_VALUE}
-                    onValueChange={(value) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        contactMethod: value === SELECT_CLEAR_VALUE ? '' : (value as ContactKey),
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
-                      <SelectValue placeholder="未設定" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
-                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
-                      {Object.entries(CONTACT_LABELS).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>強み</Label>
-                  <Select
-                    value={editForm.strength ? editForm.strength : SELECT_CLEAR_VALUE}
-                    onValueChange={(value) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        strength: value === SELECT_CLEAR_VALUE ? '' : (value as StrengthKey),
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="bg白 text-slate-900 border-slate-300 placeholder:text-slate-400">
-                      <SelectValue placeholder="未設定" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
-                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
-                      {Object.entries(STRENGTH_LABELS).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>管理フェーズ</Label>
-                  <Select
-                    value={editForm.managementPhase ? editForm.managementPhase : SELECT_CLEAR_VALUE}
-                    onValueChange={(value) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        managementPhase: value === SELECT_CLEAR_VALUE ? '' : (value as ManagementPhaseKey),
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
-                      <SelectValue placeholder="未設定" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
-                      <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
-                      {Object.entries(MANAGEMENT_PHASE_LABELS).map(([key, label]) => (
-                        <SelectItem key={key} value={key}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>リスト提供</Label>
-                  <Select
-                    value={editForm.listProvided ?? ''}
-                    onValueChange={(value) =>
-                      setEditForm((prev) => ({ ...prev, listProvided: value as 'true' | 'false' }))
-                    }
-                  >
-                    <SelectTrigger className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white text-slate-900 border-slate-300 placeholder:text-slate-400">
-                      <SelectItem value="true">済</SelectItem>
-                      <SelectItem value="false">未</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>連絡手段</Label>
+                <Select
+                  value={editForm.contactMethod ? editForm.contactMethod : SELECT_CLEAR_VALUE}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      contactMethod: value === SELECT_CLEAR_VALUE ? '' : (value as ContactKey),
+                    }))
+                  }
+                >
+                  <SelectTrigger className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400">
+                    <SelectValue placeholder="未設定" />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400">
+                    <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
+                    {Object.entries(CONTACT_LABELS).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
-                <Label>ネクストアクション</Label>
+                <Label>強み</Label>
+                <Select
+                  value={editForm.strength ? editForm.strength : SELECT_CLEAR_VALUE}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      strength: value === SELECT_CLEAR_VALUE ? '' : (value as StrengthKey),
+                    }))
+                  }
+                >
+                  <SelectTrigger className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400">
+                    <SelectValue placeholder="未設定" />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400">
+                    <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
+                    {Object.entries(STRENGTH_LABELS).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>管理フェーズ</Label>
+                <Select
+                  value={editForm.managementPhase ? editForm.managementPhase : SELECT_CLEAR_VALUE}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      managementPhase: value === SELECT_CLEAR_VALUE ? '' : (value as ManagementPhaseKey),
+                    }))
+                  }
+                >
+                  <SelectTrigger className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400">
+                    <SelectValue placeholder="未設定" />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400">
+                    <SelectItem value={SELECT_CLEAR_VALUE}>未設定</SelectItem>
+                    {Object.entries(MANAGEMENT_PHASE_LABELS).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>リスト提供</Label>
+                <Select
+                  value={editForm.listProvided ?? ''}
+                  onValueChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, listProvided: value as 'true' | 'false' }))
+                  }
+                >
+                  <SelectTrigger className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-slate-300 bg-white text-slate-900 placeholder:text-slate-400">
+                    <SelectItem value="true">済</SelectItem>
+                    <SelectItem value="false">未</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>ネクストアクション</Label>
+              <Textarea
+                value={editForm.nextAction}
+                onChange={(e) => setEditForm((prev) => ({ ...prev, nextAction: e.target.value }))}
+                className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>NA期日</Label>
+                <Input
+                  type="date"
+                  value={editForm.nextActionDueOn}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, nextActionDueOn: e.target.value }))}
+                  className="border border-slate-300 bg-white text-slate-900"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>メモ</Label>
                 <Textarea
-                  value={editForm.nextAction}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, nextAction: e.target.value }))}
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
                   className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
                   rows={3}
                 />
               </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>NA期日</Label>
-                  <Input
-                    type="date"
-                    value={editForm.nextActionDueOn}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, nextActionDueOn: e.target.value }))}
-                    className="border border-slate-300 bg-white text-slate-900"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>メモ</Label>
-                  <Textarea
-                    value={editForm.notes}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
-                    className="border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-                    rows={3}
-                  />
-                </div>
-              </div>
             </div>
-          )}
-          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-center">
-            <Button
-              variant="ghost"
-              onClick={() => setIsEditOpen(false)}
-              className="text-slate-600 hover:bg-slate-100"
-            >
-              キャンセル
-            </Button>
-            <Button
-              onClick={handleEditSubmit}
-              disabled={!selectedEvangelist}
-              className="bg-brand text-white hover:bg-brand-600 disabled:opacity-50"
-            >
-              保存
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+            <div className="sticky bottom-0 mt-auto flex items-center justify-end gap-2 border-t bg-white p-3">
+              <Button variant="outline" type="button" onClick={closeEdit} className="border-slate-300">
+                キャンセル
+              </Button>
+              <Button
+                type="submit"
+                className="bg-brand text-white hover:bg-brand-600 disabled:opacity-50"
+                disabled={editSubmitting || !selectedEvangelist}
+              >
+                {editSubmitting ? '保存中…' : '保存'}
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <p className="text-sm text-slate-600">編集対象が選択されていません。</p>
+        )}
+      </OverlaySheet>
     </div>
   )
+}
+
+function useDebouncedValue<T>(value: T, delay: number) {
+  const [debounced, setDebounced] = useState(value)
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timeout)
+  }, [value, delay])
+
+  return debounced
 }
